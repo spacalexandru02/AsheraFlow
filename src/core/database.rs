@@ -1,15 +1,20 @@
 use std::fs::{self, File};
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::io::Write;
+use std::path::PathBuf;
 use sha1::{Digest, Sha1};
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
-use crate::core::blob::Blob;
 use crate::errors::error::Error;
 
 pub struct Database {
     pathname: PathBuf,
     temp_chars: Vec<char>,
+}
+
+pub trait GitObject {
+    fn get_type(&self) -> &str;
+    fn to_bytes(&self) -> Vec<u8>;
+    fn set_oid(&mut self, oid: String);
 }
 
 impl Database {
@@ -25,12 +30,12 @@ impl Database {
         }
     }
 
-    pub fn store(&mut self, object: &mut Blob) -> Result<(), Error> {
+    pub fn store(&mut self, object: &mut impl GitObject) -> Result<(), Error> {
         let content = object.to_bytes();
         let header = format!("{} {}\0", object.get_type(), content.len());
         let mut full_content = Vec::new();
         full_content.extend_from_slice(header.as_bytes());
-        full_content.extend_from_slice(content);
+        full_content.extend_from_slice(&content);
 
         let oid = Self::calculate_oid(&full_content);
         object.set_oid(oid.clone());

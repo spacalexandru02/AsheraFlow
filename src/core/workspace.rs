@@ -7,7 +7,7 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    const IGNORE: [&'static str; 3] = [".", "..", ".git"];
+    const IGNORE: [&'static str; 3] = [".", "..", ".ash"];
 
     pub fn new(root_path: &Path) -> Self {
         Workspace {
@@ -24,7 +24,10 @@ impl Workspace {
             .filter_map(|entry| {
                 let entry = entry.ok()?;
                 let file_name = entry.file_name().into_string().ok()?;
-                if !Self::IGNORE.contains(&file_name.as_str()) {
+                let file_path = self.root_path.join(&file_name);
+
+                // Ignore directories and special files
+                if !Self::IGNORE.contains(&file_name.as_str()) && file_path.is_file() {
                     Some(file_name)
                 } else {
                     None
@@ -37,6 +40,9 @@ impl Workspace {
 
     pub fn read_file(&self, path: &str) -> Result<Vec<u8>, Error> {
         let file_path = self.root_path.join(path);
+        if !file_path.is_file() {
+            return Err(Error::Generic(format!("Path '{}' is not a file", file_path.display())));
+        }
         fs::read(&file_path).map_err(|e| {
             Error::Generic(format!("Failed to read file '{}': {}", file_path.display(), e))
         })

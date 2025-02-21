@@ -1,7 +1,23 @@
+use super::database::GitObject;
+
 #[derive(Debug)]
 pub struct Blob {
     oid: Option<String>,
     data: Vec<u8>,
+}
+
+impl GitObject for Blob {
+    fn get_type(&self) -> &str {
+        "blob"
+    }
+
+    fn to_bytes(&self) -> Vec<u8> {
+        self.data.clone()
+    }
+
+    fn set_oid(&mut self, oid: String) {
+        self.oid = Some(oid);
+    }
 }
 
 impl Blob {
