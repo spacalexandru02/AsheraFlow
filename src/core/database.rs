@@ -44,6 +44,7 @@ impl Database {
         Ok(())
     }
 
+
     fn calculate_oid(content: &[u8]) -> String {
         let mut hasher = Sha1::new();
         hasher.update(content);
