@@ -34,4 +34,11 @@ impl Workspace {
 
         Ok(files)
     }
+
+    pub fn read_file(&self, path: &str) -> Result<Vec<u8>, Error> {
+        let file_path = self.root_path.join(path);
+        fs::read(&file_path).map_err(|e| {
+            Error::Generic(format!("Failed to read file '{}': {}", file_path.display(), e))
+        })
+    }
 }
