@@ -1,6 +1,4 @@
 use crate::core::author::Author;
-use crate::errors::error::Error;
-use std::fmt;
 
 use super::database::GitObject;
 
@@ -35,26 +33,25 @@ impl Commit {
         }
     }
 
-    pub fn set_oid(&mut self, oid: String) {
-        self.oid = Some(oid);
-    }
-
     pub fn get_oid(&self) -> Option<&String> {
         self.oid.as_ref()
     }
 
-    pub fn get_type(&self) -> &str {
-        "commit"
-    }
-
     pub fn to_bytes(&self) -> Vec<u8> {
+        let timestamp = self.author.timestamp.timestamp();
+        let author_line = format!(
+            "{} <{}> {} +0000",
+            self.author.name, self.author.email, timestamp
+        );
+
         let lines = vec![
             format!("tree {}", self.tree),
-            format!("author {}", self.author),
-            format!("committer {}", self.author),
+            format!("author {}", author_line),
+            format!("committer {}", author_line),
             String::new(),
             self.message.clone(),
         ];
+
         lines.join("\n").into_bytes()
     }
 }

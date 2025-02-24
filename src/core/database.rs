@@ -30,20 +30,28 @@ impl Database {
         }
     }
 
+    pub fn exists(&self, oid: &str) -> bool {
+        self.pathname.join(&oid[0..2]).join(&oid[2..]).exists()
+    }
+
+
     pub fn store(&mut self, object: &mut impl GitObject) -> Result<(), Error> {
         let content = object.to_bytes();
         let header = format!("{} {}\0", object.get_type(), content.len());
-        let mut full_content = Vec::new();
-        full_content.extend_from_slice(header.as_bytes());
-        full_content.extend_from_slice(&content);
+        let mut full_content = header.as_bytes().to_vec();
+        full_content.extend(content);
 
         let oid = Self::calculate_oid(&full_content);
-        object.set_oid(oid.clone());
+
+        // Verifică dacă obiectul există deja
+        if self.exists(&oid) {
+            return Ok(());
+        }
 
         self.write_object(&oid, &full_content)?;
+        object.set_oid(oid);
         Ok(())
     }
-
 
     fn calculate_oid(content: &[u8]) -> String {
         let mut hasher = Sha1::new();
@@ -67,7 +75,7 @@ impl Database {
 
         let mut file = File::create(&temp_path)?;
 
-        // Compress the content using Zlib
+        // Comprimă conținutul folosind Zlib
         let mut encoder = ZlibEncoder::new(Vec::new(), Compression::best());
         encoder.write_all(content)?;
         let compressed = encoder.finish()?;

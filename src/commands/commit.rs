@@ -10,6 +10,7 @@ use crate::core::tree::Tree;
 use crate::core::author::Author;
 use crate::core::commit::Commit;
 use crate::errors::error::Error;
+use std::collections::HashSet;
 
 pub struct CommitCommand;
 
@@ -22,23 +23,28 @@ impl CommitCommand {
         let workspace = Workspace::new(root_path);
         let mut database = Database::new(db_path);
 
-        // Create blobs for all files
+        // Crează un set pentru a evita duplicatele
+        let mut unique_files = HashSet::new();
+
+        // Creează blob-uri pentru toate fișierele
         let entries: Vec<Entry> = workspace
             .list_files()?
             .into_iter()
+            .filter(|path| unique_files.insert(path.clone())) // Evită duplicatele
             .map(|path| {
                 let data = workspace.read_file(&path)?;
                 let mut blob = Blob::new(data);
                 database.store(&mut blob)?;
-                Ok(Entry::new(path, blob.get_oid().unwrap().clone()))
+                let mode = "100644"; // Sau altă valoare corespunzătoare
+                Ok(Entry::new(path.to_string_lossy().to_string(), blob.get_oid().unwrap().clone(), mode))
             })
             .collect::<Result<Vec<Entry>, Error>>()?;
 
-        // Create and store the tree
-        let mut tree = Tree::new(entries);
+        // Creează și stochează arborele
+        let mut tree = Tree::new(entries)?;
         database.store(&mut tree)?;
 
-        // Create and store the commit
+        // Creează și stochează commit-ul
         let name = env::var("GIT_AUTHOR_NAME").map_err(|_| {
             Error::Generic("GIT_AUTHOR_NAME environment variable is not set".to_string())
         })?;
@@ -49,7 +55,7 @@ impl CommitCommand {
         let mut commit = Commit::new(tree.get_oid().unwrap().clone(), author, message.to_string());
         database.store(&mut commit)?;
 
-        // Update HEAD
+        // Actualizează HEAD
         let head_path = git_path.join("HEAD");
         let mut head_file = OpenOptions::new()
             .write(true)

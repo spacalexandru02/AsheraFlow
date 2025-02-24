@@ -1,11 +1,11 @@
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Utc};
 use std::fmt;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Author {
-    name: String,
-    email: String,
-    time: DateTime<Local>,
+    pub name: String,
+    pub email: String,
+    pub timestamp: DateTime<Utc>,
 }
 
 impl Author {
@@ -13,14 +13,19 @@ impl Author {
         Author {
             name,
             email,
-            time: Local::now(),
+            timestamp: Utc::now(),
         }
     }
 }
 
 impl fmt::Display for Author {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let timestamp = self.time.format("%s %z");
-        write!(f, "{} <{}> {}", self.name, self.email, timestamp)
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{} <{}> {} +0000",
+            self.name,
+            self.email,
+            self.timestamp.timestamp()
+        )
     }
 }
