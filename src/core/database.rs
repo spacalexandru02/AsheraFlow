@@ -34,7 +34,6 @@ impl Database {
         self.pathname.join(&oid[0..2]).join(&oid[2..]).exists()
     }
 
-
     pub fn store(&mut self, object: &mut impl GitObject) -> Result<(), Error> {
         let content = object.to_bytes();
         let header = format!("{} {}\0", object.get_type(), content.len());
@@ -42,14 +41,14 @@ impl Database {
         full_content.extend(content);
 
         let oid = Self::calculate_oid(&full_content);
-
-        // Verifică dacă obiectul există deja
-        if self.exists(&oid) {
-            return Ok(());
+        
+        if !self.exists(&oid) {
+            self.write_object(&oid, &full_content)?;
         }
 
-        self.write_object(&oid, &full_content)?;
-        object.set_oid(oid);
+        // Asigurați-vă că `set_oid` este apelat întotdeauna
+        object.set_oid(oid.clone());
+
         Ok(())
     }
 
@@ -62,6 +61,12 @@ impl Database {
 
     fn write_object(&self, oid: &str, content: &[u8]) -> Result<(), Error> {
         let object_path = self.pathname.join(&oid[0..2]).join(&oid[2..]);
+        
+        // Return early if object exists
+        if object_path.exists() {
+            return Ok(());
+        }
+        
         let dirname = object_path.parent().ok_or_else(|| {
             Error::Generic(format!("Invalid object path: {}", object_path.display()))
         })?;
@@ -75,7 +80,7 @@ impl Database {
 
         let mut file = File::create(&temp_path)?;
 
-        // Comprimă conținutul folosind Zlib
+        // Compress and write
         let mut encoder = ZlibEncoder::new(Vec::new(), Compression::best());
         encoder.write_all(content)?;
         let compressed = encoder.finish()?;

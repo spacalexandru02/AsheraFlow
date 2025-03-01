@@ -6,3 +6,5 @@ pub mod tree;
 pub mod entry;
 pub mod commit;
 pub mod author;
+pub mod refs;
+pub mod lockfile;

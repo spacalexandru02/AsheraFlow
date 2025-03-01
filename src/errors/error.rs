@@ -3,6 +3,8 @@ use std::io;
 use std::path::StripPrefixError;
 use globset::Error as GlobsetError;
 
+use crate::core::lockfile::LockError;
+
 #[derive(Debug)]
 pub enum Error {
     PathResolution(String),
@@ -11,7 +13,10 @@ pub enum Error {
     Generic(String),
     IO(io::Error),
     Globset(GlobsetError), // Variantă cu un câmp de tip `GlobsetError`
+    Lock(String), // Simple variant for lock errors
 }
+
+
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -22,6 +27,8 @@ impl fmt::Display for Error {
             Error::Generic(msg) => write!(f, "Error: {}", msg),
             Error::IO(err) => write!(f, "IO error: {}", err),
             Error::Globset(err) => write!(f, "Globset error: {}", err), // Folosește câmpul `err`
+            Error::Lock(msg) => write!(f, "Lock error: {}", msg),
+            Error::Lock(msg) => write!(f, "Lock error: {}", msg),
         }
     }
 }
@@ -45,3 +52,10 @@ impl From<GlobsetError> for Error {
         Error::Globset(err) // Pasează `err` ca argument pentru `Globset`
     }
 }
+
+impl From<LockError> for Error {
+    fn from(error: LockError) -> Self {
+        Error::Lock(format!("{:?}", error)) // Convert LockError into your custom Error type
+    }
+}
+
