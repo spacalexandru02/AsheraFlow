@@ -12,11 +12,9 @@ pub enum Error {
     InvalidPath(String),
     Generic(String),
     IO(io::Error),
-    Globset(GlobsetError), // Variantă cu un câmp de tip `GlobsetError`
-    Lock(String), // Simple variant for lock errors
+    GlobError(String), // Changed from Globset to a simple String
+    Lock(String),
 }
-
-
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -26,8 +24,7 @@ impl fmt::Display for Error {
             Error::InvalidPath(msg) => write!(f, "Invalid path: {}", msg),
             Error::Generic(msg) => write!(f, "Error: {}", msg),
             Error::IO(err) => write!(f, "IO error: {}", err),
-            Error::Globset(err) => write!(f, "Globset error: {}", err), // Folosește câmpul `err`
-            Error::Lock(msg) => write!(f, "Lock error: {}", msg),
+            Error::GlobError(msg) => write!(f, "Glob pattern error: {}", msg),
             Error::Lock(msg) => write!(f, "Lock error: {}", msg),
         }
     }
@@ -49,13 +46,12 @@ impl From<StripPrefixError> for Error {
 
 impl From<GlobsetError> for Error {
     fn from(err: GlobsetError) -> Self {
-        Error::Globset(err) // Pasează `err` ca argument pentru `Globset`
+        Error::GlobError(format!("{}", err)) // Convert to string representation
     }
 }
 
 impl From<LockError> for Error {
     fn from(error: LockError) -> Self {
-        Error::Lock(format!("{:?}", error)) // Convert LockError into your custom Error type
+        Error::Lock(format!("{:?}", error))
     }
 }
-

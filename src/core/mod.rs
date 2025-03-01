@@ -8,3 +8,4 @@ pub mod commit;
 pub mod author;
 pub mod refs;
 pub mod lockfile;
+pub mod index;

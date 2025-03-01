@@ -26,12 +26,14 @@ impl Workspace {
                 if line.is_empty() || line.starts_with('#') {
                     continue;
                 }
-                let glob = Glob::new(line)?; // Folosește `?` pentru a converti automat
+                let glob = Glob::new(line)
+                    .map_err(|e| Error::GlobError(format!("Invalid glob pattern '{}': {}", line, e)))?;
                 builder.add(glob);
             }
         }
     
-        Ok(builder.build()?) // Conversie automată a `globset::Error` în `Error`
+        builder.build()
+            .map_err(|e| Error::GlobError(format!("Failed to build glob set: {}", e)))
     }
     // Listare recursivă cu ignorare
     pub fn list_files(&self) -> Result<Vec<PathBuf>, Error> {
@@ -75,5 +77,17 @@ impl Workspace {
     pub fn read_file(&self, path: &Path) -> Result<Vec<u8>, Error> {
         let file_path = self.root_path.join(path);
         fs::read(&file_path).map_err(Into::into)
+    }
+    
+    // New function to get file metadata
+    pub fn stat_file(&self, path: &Path) -> Result<fs::Metadata, Error> {
+        let file_path = self.root_path.join(path);
+        fs::metadata(&file_path).map_err(Into::into)
+    }
+    
+    // New function to check if path exists
+    pub fn path_exists(&self, path: &Path) -> Result<bool, Error> {
+        let file_path = self.root_path.join(path);
+        Ok(file_path.exists())
     }
 }

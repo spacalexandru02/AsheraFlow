@@ -2,6 +2,7 @@
 pub enum Command {
     Init { path: String },
     Commit { message: String },
+    Add { path: String },
     Unknown { name: String },
 }
 

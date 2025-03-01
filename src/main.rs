@@ -5,6 +5,7 @@ use cli::args::Command;
 use cli::parser::CliParser;
 use commands::commit::CommitCommand;
 use commands::init::InitCommand;
+use commands::add::AddCommand;
 
 mod cli;
 mod commands;
@@ -25,6 +26,7 @@ fn handle_command(cli_args: CliArgs) {
     match cli_args.command {
         Command::Init { path } => handle_init_command(&path),
         Command::Commit { message } => handle_commit_command(&message),
+        Command::Add { path } => handle_add_command(&path),
         Command::Unknown { name } => exit_with_error(&format!("'{}' is not a ash command", name)),
     }
 }
@@ -43,10 +45,17 @@ fn handle_init_command(path: &str) {
     }
 }
 
+fn handle_add_command(path: &str) {
+    match AddCommand::execute(path) {
+        Ok(_) => process::exit(0),
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
+    }
+}
+
 fn exit_with_error(message: &str) -> ! {
     eprintln!("{}", message);
     if message.contains("Usage") {
         eprintln!("{}", CliParser::format_help());
     }
     process::exit(1);
-}   
+}
