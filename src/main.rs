@@ -3,6 +3,7 @@ use std::process;
 use cli::args::CliArgs;
 use cli::args::Command;
 use cli::parser::CliParser;
+use commands::commit::CommitCommand;
 use commands::init::InitCommand;
 
 mod cli;
@@ -23,7 +24,15 @@ fn main() {
 fn handle_command(cli_args: CliArgs) {
     match cli_args.command {
         Command::Init { path } => handle_init_command(&path),
+        Command::Commit { message } => handle_commit_command(&message),
         Command::Unknown { name } => exit_with_error(&format!("'{}' is not a ash command", name)),
+    }
+}
+
+fn handle_commit_command(message: &str) {
+    match CommitCommand::execute(message) {
+        Ok(_) => process::exit(0),
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
     }
 }
 
