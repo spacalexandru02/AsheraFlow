@@ -2,7 +2,7 @@
 pub enum Command {
     Init { path: String },
     Commit { message: String },
-    Add { path: String },
+    Add { paths: Vec<String> },
     Unknown { name: String },
 }
 

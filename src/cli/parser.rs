@@ -32,7 +32,7 @@ impl CliParser {
                 }
                 CliArgs {
                     command: Command::Add {
-                        path: args[2].to_owned(),
+                        paths: args[2..].to_vec(),
                     },
                 }
             },
@@ -51,7 +51,7 @@ impl CliParser {
             "Commands:",
             "  init [path]    Initialize a new repository",
             "  commit <message>  Commit changes to the repository",
-            "  add <path>     Add file contents to the index"
+            "  add <paths...>     Add file contents to the index"
         )
     }
 }

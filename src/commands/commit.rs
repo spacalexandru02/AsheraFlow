@@ -1,15 +1,14 @@
 use std::env;
 use std::path::Path;
+
+use crate::core::database::author::Author;
+use crate::core::database::commit::Commit;
+use crate::core::database::database::Database;
+use crate::core::database::entry::Entry;
+use crate::core::database::tree::Tree;
+use crate::core::index::index::Index;
 use crate::core::refs::Refs;
-use crate::core::workspace::Workspace;
-use crate::core::database::Database;
-use crate::core::blob::Blob;
-use crate::core::entry::Entry;
-use crate::core::tree::Tree;
-use crate::core::author::Author;
-use crate::core::commit::Commit;
 use crate::errors::error::Error;
-use std::collections::HashSet;
 
 pub struct CommitCommand;
 
@@ -19,35 +18,38 @@ impl CommitCommand {
         let git_path = root_path.join(".ash");
         let db_path = git_path.join("objects");
 
-        let workspace = Workspace::new(root_path);
         let mut database = Database::new(db_path);
+        let mut index = Index::new(git_path.join("index"));
         let refs = Refs::new(&git_path);
+        
+        // Load the index (read-only)
+        index.load()?;
+        
+        // Get the parent commit OID
         let parent = refs.read_head()?;
-
-        // Crează un set pentru a evita duplicatele
-        let mut unique_files = HashSet::new();
-
-        // Creează blob-uri pentru toate fișierele
-        let entries: Vec<Entry> = workspace
-            .list_files()?
-            .into_iter()
-            .filter(|path| unique_files.insert(path.clone())) // Evită duplicatele
-            .map(|path| {
-                let data = workspace.read_file(&path)?;
-                let mut blob = Blob::new(data);
-                database.store(&mut blob)?;
-                let mode = "100644"; // Sau altă valoare corespunzătoare
-                Ok(Entry::new(path.to_string_lossy().to_string(), blob.get_oid().unwrap().clone(), mode))
+        
+        // Convert index entries to database entries
+        let database_entries: Vec<Entry> = index.each_entry()
+            .map(|index_entry| {
+                Entry::new(
+                    index_entry.path.clone(),
+                    index_entry.oid.clone(),
+                    &index_entry.mode_octal()
+                )
             })
-            .collect::<Result<Vec<Entry>, Error>>()?;
+            .collect();
+        
+        // Build tree from index entries
+        let mut root = Tree::build(database_entries.iter())?;
+        
+        // Store all trees
+        root.traverse(|tree| database.store(tree))?;
+        
+        // Get the root tree OID
+        let tree_oid = root.get_oid()
+            .ok_or(Error::Generic("Tree OID not set after storage".into()))?; 
 
-        // Creează și stochează arborele
-        let mut tree = Tree::new(entries)?;
-        database.store(&mut tree)?;
-        let tree_oid = tree.get_oid()
-    .ok_or(Error::Generic("Tree OID not set after storage".into()))?; 
-
-        // Creează și stochează commit-ul
+        // Create and store the commit
         let name = env::var("GIT_AUTHOR_NAME").map_err(|_| {
             Error::Generic("GIT_AUTHOR_NAME environment variable is not set".to_string())
         })?;
@@ -64,17 +66,16 @@ impl CommitCommand {
         database.store(&mut commit)?;
 
         let commit_oid = commit.get_oid()
-    .ok_or(Error::Generic("Commit OID not set after storage".into()))?;
+            .ok_or(Error::Generic("Commit OID not set after storage".into()))?;
 
-        // Actualizează HEAD
+        // Update HEAD
         refs.update_head(commit_oid)?;
 
-        // Afișează mesajul
+        // Print commit message
         let is_root = if parent.is_none() { "(root-commit) " } else { "" };
         let first_line = message.lines().next().unwrap_or("");
         println!("[{}{}] {}", is_root, commit.get_oid().unwrap(), first_line);
 
-        println!("[(root-commit) {}] {}", commit.get_oid().unwrap(), message.lines().next().unwrap_or(""));
         Ok(())
     }
 }

@@ -1,8 +1,6 @@
 use std::fmt;
 use std::io;
 use std::path::StripPrefixError;
-use globset::Error as GlobsetError;
-
 use crate::core::lockfile::LockError;
 
 #[derive(Debug)]
@@ -12,7 +10,7 @@ pub enum Error {
     InvalidPath(String),
     Generic(String),
     IO(io::Error),
-    GlobError(String), // Changed from Globset to a simple String
+    Pattern(String),  // For pattern matching errors
     Lock(String),
 }
 
@@ -24,7 +22,7 @@ impl fmt::Display for Error {
             Error::InvalidPath(msg) => write!(f, "Invalid path: {}", msg),
             Error::Generic(msg) => write!(f, "Error: {}", msg),
             Error::IO(err) => write!(f, "IO error: {}", err),
-            Error::GlobError(msg) => write!(f, "Glob pattern error: {}", msg),
+            Error::Pattern(msg) => write!(f, "Pattern error: {}", msg),
             Error::Lock(msg) => write!(f, "Lock error: {}", msg),
         }
     }
@@ -44,9 +42,9 @@ impl From<StripPrefixError> for Error {
     }
 }
 
-impl From<GlobsetError> for Error {
-    fn from(err: GlobsetError) -> Self {
-        Error::GlobError(format!("{}", err)) // Convert to string representation
+impl From<regex::Error> for Error {
+    fn from(err: regex::Error) -> Self {
+        Error::Pattern(format!("Invalid pattern: {}", err))
     }
 }
 
