@@ -25,7 +25,17 @@ impl CliParser {
                         message: args[2].to_owned(),
                     },
                 }
-            }
+            },
+            "add" => {
+                if args.len() < 3 {
+                    return Err(Error::Generic("File path is required for add command".to_string()));
+                }
+                CliArgs {
+                    command: Command::Add {
+                        paths: args[2..].to_vec(),
+                    },
+                }
+            },
             _ => CliArgs {
                 command: Command::Unknown { name: command },
             },
@@ -36,11 +46,12 @@ impl CliParser {
 
     pub fn format_help() -> String {
         format!(
-            "{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}",
             "Usage: ash <command> [options]",
             "Commands:",
             "  init [path]    Initialize a new repository",
-            "  commit <message>  Commit changes to the repository"
+            "  commit <message>  Commit changes to the repository",
+            "  add <paths...>     Add file contents to the index"
         )
     }
 }

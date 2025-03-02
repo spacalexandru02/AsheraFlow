@@ -42,8 +42,8 @@ impl Refs {
         lockfile.write(&format!("{}\n", oid))
             .map_err(|e| Error::Generic(format!("Write error: {:?}", e)))?;
         
-        // Commit changes
-        lockfile.commit()
+        // Commit changes using the non-consuming method
+        lockfile.commit_ref()
             .map_err(|e| Error::Generic(format!("Commit error: {:?}", e)))?;
         
         Ok(())

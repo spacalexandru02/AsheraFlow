@@ -1,8 +1,6 @@
 use std::fmt;
 use std::io;
 use std::path::StripPrefixError;
-use globset::Error as GlobsetError;
-
 use crate::core::lockfile::LockError;
 
 #[derive(Debug)]
@@ -12,11 +10,9 @@ pub enum Error {
     InvalidPath(String),
     Generic(String),
     IO(io::Error),
-    Globset(GlobsetError), // Variantă cu un câmp de tip `GlobsetError`
-    Lock(String), // Simple variant for lock errors
+    Pattern(String),  // For pattern matching errors
+    Lock(String),
 }
-
-
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -26,8 +22,7 @@ impl fmt::Display for Error {
             Error::InvalidPath(msg) => write!(f, "Invalid path: {}", msg),
             Error::Generic(msg) => write!(f, "Error: {}", msg),
             Error::IO(err) => write!(f, "IO error: {}", err),
-            Error::Globset(err) => write!(f, "Globset error: {}", err), // Folosește câmpul `err`
-            Error::Lock(msg) => write!(f, "Lock error: {}", msg),
+            Error::Pattern(msg) => write!(f, "Pattern error: {}", msg),
             Error::Lock(msg) => write!(f, "Lock error: {}", msg),
         }
     }
@@ -47,15 +42,14 @@ impl From<StripPrefixError> for Error {
     }
 }
 
-impl From<GlobsetError> for Error {
-    fn from(err: GlobsetError) -> Self {
-        Error::Globset(err) // Pasează `err` ca argument pentru `Globset`
+impl From<regex::Error> for Error {
+    fn from(err: regex::Error) -> Self {
+        Error::Pattern(format!("Invalid pattern: {}", err))
     }
 }
 
 impl From<LockError> for Error {
     fn from(error: LockError) -> Self {
-        Error::Lock(format!("{:?}", error)) // Convert LockError into your custom Error type
+        Error::Lock(format!("{:?}", error))
     }
 }
-

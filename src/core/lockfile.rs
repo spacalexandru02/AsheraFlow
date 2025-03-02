@@ -68,6 +68,37 @@ impl Lockfile {
         Ok(())
     }
 
+    // Close and remove the lock file
+    pub fn rollback(&mut self) -> Result<(), LockError> {
+        if self.lock.is_none() {
+            return Err(LockError::StaleLock("Not holding lock on file".into()));
+        }
+        
+        let lock = self.lock.take().unwrap();
+        drop(lock);
+        
+        match fs::remove_file(&self.lock_path) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(LockError::StaleLock(e.to_string())),
+        }
+    }
+
+    // Modified to take a reference to self and not consume it
+    pub fn commit_ref(&mut self) -> Result<(), LockError> {
+        let lock = self.lock.take().ok_or_else(|| {
+            LockError::StaleLock("Not holding lock on file".into())
+        })?;
+
+        // Închide fișierul înainte de rename (necesar pe Windows)
+        drop(lock);
+        
+        fs::rename(&self.lock_path, &self.file_path)
+            .map_err(|e| LockError::StaleLock(e.to_string()))?;
+        
+        Ok(())
+    }
+
+    // Original method that consumes self
     pub fn commit(mut self) -> Result<(), LockError> {
         let lock = self.lock.take().ok_or_else(|| {
             LockError::StaleLock("Not holding lock on file".into())

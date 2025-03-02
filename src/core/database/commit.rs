@@ -1,6 +1,4 @@
-use crate::core::author::Author;
-
-use super::database::GitObject;
+use super::{author::Author, database::GitObject};
 
 pub struct Commit {
     oid: Option<String>,
