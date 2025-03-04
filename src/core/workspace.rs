@@ -1,7 +1,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use crate::errors::error::Error;
 use std::collections::HashSet;
+use regex::Regex;
+use crate::errors::error::Error;
 
 pub struct Workspace {
     root_path: PathBuf,
@@ -160,7 +161,7 @@ impl Workspace {
                 .replace(".", "\\.")
                 .replace("*", ".*");
             
-            if let Ok(re) = regex::Regex::new(&format!("^{}$", regex_pattern)) {
+            if let Ok(re) = Regex::new(&format!("^{}$", regex_pattern)) {
                 return re.is_match(path);
             }
         }

@@ -11,6 +11,7 @@ pub struct Tree {
     entries: HashMap<String, TreeEntry>,
 }
 
+#[derive(Debug)]
 pub enum TreeEntry {
     Blob(String, u32), // oid, mode
     Tree(Box<Tree>),

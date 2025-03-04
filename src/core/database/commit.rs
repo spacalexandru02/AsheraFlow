@@ -1,82 +1,64 @@
-use std::env;
-use std::path::Path;
-use crate::core::refs::Refs;
-use crate::core::workspace::Workspace;
-use crate::core::database::Database;
-use crate::core::index::Index;
-use crate::core::database::entry::Entry as DatabaseEntry;
-use crate::core::tree::Tree;
-use crate::core::author::Author;
-use crate::core::commit::Commit;
-use crate::errors::error::Error;
+use super::{author::Author, database::GitObject};
 
-pub struct CommitCommand;
+pub struct Commit {
+    oid: Option<String>,
+    parent: Option<String>,
+    tree: String,
+    author: Author,
+    message: String,
+}
 
-impl CommitCommand {
-    pub fn execute(message: &str) -> Result<(), Error> {
-        let root_path = Path::new(".");
-        let git_path = root_path.join(".ash");
-        let db_path = git_path.join("objects");
+impl GitObject for Commit {
+    fn get_type(&self) -> &str {
+        "commit"
+    }
 
-        let _workspace = Workspace::new(root_path);
-        let mut database = Database::new(db_path);
-        let mut index = Index::new(git_path.join("index"));
-        let refs = Refs::new(&git_path);
-        
-        // Load the index (read-only)
-        index.load()?;
-        
-        // Get the parent commit OID
-        let parent = refs.read_head()?;
-        
-        // Convert index entries to database entries
-        let database_entries: Vec<DatabaseEntry> = index.each_entry()
-            .map(|index_entry| {
-                DatabaseEntry::new(
-                    index_entry.path.clone(),
-                    index_entry.oid.clone(),
-                    &index_entry.mode_octal()
-                )
-            })
-            .collect();
-        
-        // Build tree from index entries
-        let mut root = Tree::build(database_entries.iter())?;
-        
-        // Store all trees
-        root.traverse(|tree| database.store(tree))?;
-        
-        // Get the root tree OID
-        let tree_oid = root.get_oid()
-            .ok_or(Error::Generic("Tree OID not set after storage".into()))?; 
+    fn to_bytes(&self) -> Vec<u8> {
+        self.to_bytes()
+    }
 
-        // Create and store the commit
-        let name = env::var("GIT_AUTHOR_NAME").map_err(|_| {
-            Error::Generic("GIT_AUTHOR_NAME environment variable is not set".to_string())
-        })?;
-        let email = env::var("GIT_AUTHOR_EMAIL").map_err(|_| {
-            Error::Generic("GIT_AUTHOR_EMAIL environment variable is not set".to_string())
-        })?;
-        let author = Author::new(name, email);
-        let mut commit = Commit::new(
-            parent.clone(),
-            tree_oid.clone(),
+    fn set_oid(&mut self, oid: String) {
+        self.oid = Some(oid);
+    }
+}
+
+impl Commit {
+    pub fn new(parent: Option<String>, tree: String, author: Author, message: String) -> Self {
+        Commit {
+            oid: None,
+            parent,
+            tree,
             author,
-            message.to_string()
+            message,
+        }
+    }
+
+    pub fn get_oid(&self) -> Option<&String> {
+        self.oid.as_ref()
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let timestamp = self.author.timestamp.timestamp();
+        let author_line = format!(
+            "{} <{}> {} +0000", 
+            self.author.name, 
+            self.author.email, 
+            timestamp
         );
-        database.store(&mut commit)?;
-
-        let commit_oid = commit.get_oid()
-            .ok_or(Error::Generic("Commit OID not set after storage".into()))?;
-
-        // Update HEAD
-        refs.update_head(commit_oid)?;
-
-        // Print commit message
-        let is_root = if parent.is_none() { "(root-commit) " } else { "" };
-        let first_line = message.lines().next().unwrap_or("");
-        println!("[{}{}] {}", is_root, commit.get_oid().unwrap(), first_line);
-
-        Ok(())
+    
+        let mut lines = Vec::with_capacity(5);
+        
+        lines.push(format!("tree {}", self.tree));
+        lines.push(format!("author {}", author_line));
+        lines.push(format!("committer {}", author_line));
+    
+        if let Some(parent) = &self.parent {
+            lines.push(format!("parent {}", parent));
+        }
+    
+        lines.push(String::new()); // Empty line before message
+        lines.push(self.message.clone());
+    
+        lines.join("\n").into_bytes()
     }
 }
