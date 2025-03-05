@@ -1,7 +1,6 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use crate::errors::error::Error;
 
 #[derive(Debug)]
 pub enum LockError {

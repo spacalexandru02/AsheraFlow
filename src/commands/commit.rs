@@ -1,14 +1,6 @@
-use std::env;
-use std::path::Path;
+use std::{env::{self, VarError}, path::Path};
 
-use crate::core::database::author::Author;
-use crate::core::database::commit::Commit;
-use crate::core::database::database::Database;
-use crate::core::database::entry::Entry;
-use crate::core::database::tree::Tree;
-use crate::core::index::index::Index;
-use crate::core::refs::Refs;
-use crate::errors::error::Error;
+use crate::{core::{database::{author::Author, commit::Commit, database::Database, entry::Entry, tree::Tree}, index::index::Index, refs::Refs, workspace::Workspace}, errors::error::Error};
 
 pub struct CommitCommand;
 
@@ -18,6 +10,7 @@ impl CommitCommand {
         let git_path = root_path.join(".ash");
         let db_path = git_path.join("objects");
 
+        let _workspace = Workspace::new(root_path);
         let mut database = Database::new(db_path);
         let mut index = Index::new(git_path.join("index"));
         let refs = Refs::new(&git_path);
