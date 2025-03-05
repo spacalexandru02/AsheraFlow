@@ -25,47 +25,47 @@ impl AddCommand {
         }
         
         let mut added_count = 0;
+    
+    for path_str in paths {
+        let path = PathBuf::from(path_str);
+        println!("Processing path: {:?}", path);
         
-        for path_str in paths {
-            let path = PathBuf::from(path_str);
-            println!("Processing path: {:?}", path);
+        // Verifică dacă calea există
+        let exists = if path.is_absolute() {
+            path.exists()
+        } else {
+            workspace.path_exists(&path)?
+        };
+        
+        if !exists {
+            println!("warning: '{}' did not match any files", path_str);
+            continue;
+        }
+        
+        // Obține lista de fișiere (recursiv pentru directoare)
+        let file_paths = workspace.list_files_from(&path)?;
+        println!("Found {} files to add", file_paths.len());
             
-            // Check if path exists (as absolute or relative to workspace)
-            let exists = if path.is_absolute() {
-                path.exists()
-            } else {
-                workspace.path_exists(&path)?
-            };
+        for file_path in &file_paths {
+            println!("Adding file: {:?}", file_path);
             
-            if !exists {
-                println!("warning: '{}' did not match any files", path_str);
-                continue;
-            }
+            // Citește conținutul fișierului
+            let data = workspace.read_file(file_path)?;
             
-            // Handle directories by listing files recursively
-            let file_paths = workspace.list_files_from(&path)?;
-            println!("Found {} files to add", file_paths.len());
+            // Obține metadatele fișierului
+            let stat = workspace.stat_file(file_path)?;
             
-            for file_path in &file_paths {
-                println!("Adding file: {:?}", file_path);
-                
-                // Read file data
-                let data = workspace.read_file(file_path)?;
-                
-                // Get file metadata
-                let stat = workspace.stat_file(file_path)?;
-                
-                // Create blob and store it
-                let mut blob = Blob::new(data);
-                database.store(&mut blob)?;
-                
-                // Get OID
-                let oid = blob.get_oid()
-                    .ok_or_else(|| Error::Generic("Blob OID not set after storage".into()))?;
-                
-                // Add to index
-                index.add(file_path, oid, &stat)?;
-                added_count += 1;
+            // Creează și stochează blob-ul
+            let mut blob = Blob::new(data);
+            database.store(&mut blob)?;
+            
+            // Obține OID-ul (hash-ul SHA-1)
+            let oid = blob.get_oid()
+                .ok_or_else(|| Error::Generic("Blob OID not set after storage".into()))?;
+            
+            // Adaugă în index
+            index.add(file_path, oid, &stat)?;
+            added_count += 1;
             }
         }
         
@@ -78,11 +78,15 @@ impl AddCommand {
                     } else {
                         println!("Added {} files to index", added_count);
                     }
+                    
+                    // Rulează verificarea completă de integritate
+                    match database.verify_repository_integrity(&root_path) {
+                        Ok(_) => println!("Verificarea integrității a trecut cu succes."),
+                        Err(e) => println!("⚠️ Verificarea integrității a eșuat: {}", e)
+                    }
                 },
                 false => return Err(Error::Generic("Failed to update index".into())),
             }
-        } else {
-            println!("No files added");
         }
         
         Ok(())

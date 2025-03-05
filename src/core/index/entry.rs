@@ -14,10 +14,10 @@ mtime: u32,
 mtime_nsec: u32,
 dev: u32,
 ino: u32,
-mode: u32,
+pub mode: u32,
 uid: u32,
 gid: u32,
-size: u32,
+pub size: u32,
 pub oid: String,
 flags: u16,
 pub path: String,
@@ -82,8 +82,13 @@ pub fn to_bytes(&self) -> Vec<u8> {
     result.extend_from_slice(&self.gid.to_be_bytes());
     result.extend_from_slice(&self.size.to_be_bytes());
     
-    // Add OID (assuming hex format, 40 chars)
-    result.extend_from_slice(self.oid.as_bytes());
+    // Convert OID from hex to binary (20 bytes)
+    if let Ok(oid_bytes) = hex::decode(&self.oid) {
+        result.extend_from_slice(&oid_bytes);
+    } else {
+        // If we cannot decode, just fill with zeros
+        result.extend_from_slice(&[0; 20]);
+    }
     
     // Add flags
     result.extend_from_slice(&self.flags.to_be_bytes());
@@ -99,6 +104,7 @@ pub fn to_bytes(&self) -> Vec<u8> {
     
     result
 }
+
 pub fn parent_directories(&self) -> Vec<PathBuf> {
     let path = PathBuf::from(&self.path);
     let mut dirs = Vec::new();

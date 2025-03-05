@@ -17,12 +17,25 @@ impl CliParser {
                 },
             },
             "commit" => {
-                if args.len() < 3 {
-                    return Err(Error::Generic("Commit message is required".to_string()));
+                let mut message = String::new();
+                let mut i = 2;
+                while i < args.len() {
+                    if args[i] == "--message" || args[i] == "-m" {
+                        if i + 1 < args.len() {
+                            message = args[i + 1].to_owned();
+                            break;
+                        }
+                    }
+                    i += 1;
                 }
+                
+                if message.is_empty() {
+                    return Err(Error::Generic("Commit message is required. Use --message <msg> or -m <msg>".to_string()));
+                }
+                
                 CliArgs {
                     command: Command::Commit {
-                        message: args[2].to_owned(),
+                        message,
                     },
                 }
             },

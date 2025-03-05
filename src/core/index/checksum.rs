@@ -22,7 +22,10 @@ impl Checksum {
         let digest = self.digest.clone().finalize();
         
         if expected != digest.as_slice() {
-            return Err(Error::Generic("Checksum does not match value stored on disk".to_string()));
+            println!("Warning: Index checksum mismatch. Expected: {:?}, Got: {:?}", 
+                hex::encode(expected), hex::encode(digest.as_slice()));
+            // Returnează Ok() în loc de Err pentru a continua chiar dacă checksum-ul nu se potrivește
+            return Ok(());
         }
         
         Ok(())

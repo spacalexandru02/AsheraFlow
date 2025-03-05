@@ -111,4 +111,14 @@ impl Lockfile {
         
         Ok(())
     }
+
+    pub fn write_bytes(&mut self, data: &[u8]) -> Result<(), LockError> {
+        let lock = self.lock.as_mut().ok_or_else(|| {
+            LockError::StaleLock("Not holding lock on file".into())
+        })?;
+        
+        lock.write_all(data)
+            .map_err(|e| LockError::StaleLock(e.to_string()))?;
+        Ok(())
+    }
 }
