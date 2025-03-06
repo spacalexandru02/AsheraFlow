@@ -3,13 +3,13 @@ use super::database::GitObject;
 use crate::errors::error::Error;
 use itertools::Itertools;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 pub struct Tree {
     oid: Option<String>,
     entries: HashMap<String, TreeEntry>,
 }
+
 
 #[derive(Debug)]
 pub enum TreeEntry {
@@ -143,26 +143,33 @@ impl Tree {
         Ok(())
     }
     
+    // În tree.rs:
     pub fn traverse<F>(&mut self, mut func: F) -> Result<(), Error>
     where
         F: FnMut(&mut Tree) -> Result<(), Error>
     {
-        // Process all subtrees first
-        let mut sub_trees = Vec::new();
+        self.traverse_internal(&mut func)
+    }
+    
+    fn traverse_internal<F>(&mut self, func: &mut F) -> Result<(), Error>
+    where
+        F: FnMut(&mut Tree) -> Result<(), Error>
+    {
+        // Procesează mai întâi sub-arborii
+        let mut subtrees: Vec<&mut Box<Tree>> = Vec::new();
         
-        // First collect references to all sub-trees
-        for (name, entry) in &mut self.entries {
+        for (_, entry) in &mut self.entries {
             if let TreeEntry::Tree(tree) = entry {
-                sub_trees.push(tree);
+                subtrees.push(tree);
             }
         }
         
-        // Then process each sub-tree
-        for tree in sub_trees {
-            tree.traverse(&mut func)?;
+        // Procesează fiecare sub-arbore
+        for tree in subtrees {
+            tree.traverse_internal(func)?;
         }
         
-        // Then process this tree
+        // Aplică funcția pe acest arbore
         func(self)
     }
 

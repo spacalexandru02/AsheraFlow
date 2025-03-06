@@ -1,10 +1,10 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
 pub struct Entry {
-    name: String,
-    oid: String,
-    mode: String,
+    pub name: String,
+    pub oid: String,
+    pub mode: String,
 }
 
 impl Entry {

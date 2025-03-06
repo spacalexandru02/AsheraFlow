@@ -7,7 +7,7 @@ use flate2::Compression;
 use crate::errors::error::Error;
 
 pub struct Database {
-    pathname: PathBuf,
+    pub pathname: PathBuf,
     temp_chars: Vec<char>,
 }
 
@@ -18,6 +18,7 @@ pub trait GitObject {
 }
 
 impl Database {
+
     pub fn new(pathname: PathBuf) -> Self {
         let temp_chars: Vec<char> = ('a'..='z')
             .chain('A'..='Z')
@@ -99,4 +100,5 @@ impl Database {
             .collect();
         format!("tmp_obj_{}", name)
     }
+
 }

@@ -3,6 +3,7 @@ use std::fs::{self, File};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
+use crate::core::database::database::Database;
 use crate::errors::error::Error;
 use crate::core::lockfile::Lockfile;
 use crate::core::index::entry::Entry;
@@ -15,7 +16,7 @@ const HEADER_SIZE: usize = 12;
 
 pub struct Index {
     pathname: PathBuf,
-    entries: HashMap<String, Entry>,
+    pub entries: HashMap<String, Entry>,
     keys: BTreeSet<String>,
     lockfile: Lockfile,
     changed: bool,
@@ -73,21 +74,32 @@ impl Index {
     // Load the index without acquiring a lock (for read-only operations)
     pub fn load(&mut self) -> Result<(), Error> {
         self.clear();
-        
-        // Try to open the index file
-        let file = match File::open(&self.pathname) {
-            Ok(file) => file,
-            Err(e) => {
-                if e.kind() == io::ErrorKind::NotFound {
-                    // It's ok if the index doesn't exist yet
-                    return Ok(());
-                }
-                return Err(Error::IO(e));
+    
+    // Try to open the index file
+    let file = match File::open(&self.pathname) {
+        Ok(file) => file,
+        Err(e) => {
+            if e.kind() == io::ErrorKind::NotFound {
+                // It's ok if the index doesn't exist yet
+                return Ok(());
             }
-        };
-        
-        let mut reader = file;
-        let mut checksum = Checksum::new();
+            return Err(Error::IO(e));
+        }
+    };
+    
+    // Verifică dimensiunea fișierului
+    let file_size = match file.metadata() {
+        Ok(metadata) => metadata.len(),
+        Err(e) => return Err(Error::IO(e)),
+    };
+    
+    if file_size < HEADER_SIZE as u64 {
+        println!("Warning: Index file too small ({} bytes), initializing new index", file_size);
+        return Ok(());
+    }
+    
+    let mut reader = file;
+    let mut checksum = Checksum::new();
         
         // Read header
         let mut header_data = vec![0; HEADER_SIZE];
@@ -131,22 +143,39 @@ impl Index {
         for _ in 0..count {
             // Read the minimum entry size first
             let mut entry_data = vec![0; ENTRY_MIN_SIZE];
-            reader.read_exact(&mut entry_data)?;
+            match reader.read_exact(&mut entry_data) {
+                Ok(_) => {},
+                Err(e) => {
+                    println!("Warning: Could not read entry data: {}", e);
+                    return Ok(());  // Abandon reading but don't fail
+                }
+            }
             checksum.update(&entry_data);
             
-            // Keep reading 8-byte blocks until we find a null terminator
-            while entry_data[entry_data.len() - 1] != 0 {
+            // Keep reading 8-byte blocks until we find a null terminator or EOF
+            let mut reached_end = false;
+            while !reached_end && entry_data[entry_data.len() - 1] != 0 {
                 let mut block = vec![0; ENTRY_BLOCK];
-                reader.read_exact(&mut block)?;
-                checksum.update(&block);
-                entry_data.extend_from_slice(&block);
+                match reader.read_exact(&mut block) {
+                    Ok(_) => {
+                        checksum.update(&block);
+                        entry_data.extend_from_slice(&block);
+                    },
+                    Err(_) => {
+                        reached_end = true;
+                    }
+                }
+            }
+            
+            if reached_end {
+                break;  // Stop reading entries if we hit EOF
             }
             
             // Parse the entry
-            let entry = Entry::parse(&entry_data)?;
-            
-            // Store the entry
-            self.store_entry(entry);
+            match Entry::parse(&entry_data) {
+                Ok(entry) => self.store_entry(entry),
+                Err(e) => println!("Warning: Could not parse entry: {}", e)
+            }
         }
         
         Ok(())
@@ -160,6 +189,8 @@ impl Index {
             return Ok(false);
         }
         
+        println!("Writing index updates with {} entries", self.entries.len());
+        
         // Initialize checksum
         let mut checksum = Checksum::new();
         
@@ -170,11 +201,14 @@ impl Index {
         header.extend_from_slice(&VERSION.to_be_bytes());
         header.extend_from_slice(&entry_count.to_be_bytes());
         
+        // Debug header
+        println!("Header bytes: {}", hex_format(&header));
+        
         // Update checksum with header
         checksum.update(&header);
         
-        // Write header to lockfile
-        self.lockfile.write(&String::from_utf8_lossy(&header))
+        // Write header to lockfile using write_bytes instead of write
+        self.lockfile.write_bytes(&header)
             .map_err(|e| Error::Generic(format!("Write error: {:?}", e)))?;
         
         // Write entries in sorted order
@@ -182,19 +216,31 @@ impl Index {
             let entry = &self.entries[key];
             let bytes = entry.to_bytes();
             
+            // Debug entry
+            println!("Entry for path: {}", entry.path);
+            println!("  OID: {}", entry.oid);
+            println!("  Mode: {}", entry.mode);
+            println!("  Size: {} bytes", entry.size);
+            println!("  Serialized bytes length: {} bytes", bytes.len());
+            println!("  First 64 bytes: {}", hex_format(&bytes[0..64.min(bytes.len())]));
+            if bytes.len() > 64 {
+                println!("  ... and {} more bytes", bytes.len() - 64);
+            }
+            
             // Update checksum with entry data
             checksum.update(&bytes);
             
             // Write entry data to lockfile
-            self.lockfile.write(&String::from_utf8_lossy(&bytes))
+            self.lockfile.write_bytes(&bytes)
                 .map_err(|e| Error::Generic(format!("Write error: {:?}", e)))?;
         }
         
         // Get the final checksum
         let digest = checksum.finalize();
+        println!("Calculated checksum: {}", hex::encode(&digest));
         
         // Write checksum
-        self.lockfile.write(&String::from_utf8_lossy(&digest))
+        self.lockfile.write_bytes(&digest)
             .map_err(|e| Error::Generic(format!("Write error: {:?}", e)))?;
         
         // Commit the changes
@@ -204,6 +250,109 @@ impl Index {
         // Reset the changed flag
         self.changed = false;
         
+        println!("Index updated successfully");
+        
         Ok(true)
     }
+    
+    // Helper function to format bytes as hex for debugging
+    
+
+    pub fn verify(&self, database: &Database) -> Result<(), Error> {
+        println!("Verificare index: {}", self.pathname.display());
+        
+        // Deschide fișierul index
+        let file = match File::open(&self.pathname) {
+            Ok(f) => f,
+            Err(e) => {
+                return Err(Error::Generic(format!("Nu s-a putut deschide indexul: {}", e)));
+            }
+        };
+        
+        let mut reader = file;
+        let mut checksum = Checksum::new();
+        
+        // Citește header-ul
+        let mut header_data = vec![0; HEADER_SIZE];
+        reader.read_exact(&mut header_data)?;
+        checksum.update(&header_data);
+        
+        // Parsează header-ul
+        let signature = String::from_utf8_lossy(&header_data[0..4]).to_string();
+        let version = u32::from_be_bytes([header_data[4], header_data[5], header_data[6], header_data[7]]);
+        let count = u32::from_be_bytes([header_data[8], header_data[9], header_data[10], header_data[11]]);
+        
+        println!("Signature: {}, Version: {}, Entry count: {}", signature, version, count);
+        
+        // Citește și verifică intrările
+        const ENTRY_MIN_SIZE: usize = 64;
+        const ENTRY_BLOCK: usize = 8;
+        
+        let mut entries = Vec::new();
+        let mut entry_count = 0;
+        
+        for _ in 0..count {
+            let mut entry_data = vec![0; ENTRY_MIN_SIZE];
+            reader.read_exact(&mut entry_data)?;
+            checksum.update(&entry_data);
+            
+            // Citește restul intrării până la terminatorul null
+            while entry_data[entry_data.len() - 1] != 0 {
+                let mut block = vec![0; ENTRY_BLOCK];
+                reader.read_exact(&mut block)?;
+                checksum.update(&block);
+                entry_data.extend_from_slice(&block);
+            }
+            
+            // Parsează intrarea
+            match Entry::parse(&entry_data) {
+                Ok(entry) => {
+                    println!("Entry {}: path={}, oid={}", entry_count, entry.path, entry.oid);
+                    
+                    // Verifică dacă OID-ul există în baza de date
+                    if database.exists(&entry.oid) {
+                        println!("  ✓ OID există în baza de date");
+                    } else {
+                        println!("  ✗ OID nu există în baza de date");
+                    }
+                    
+                    entries.push(entry);
+                    entry_count += 1;
+                },
+                Err(e) => {
+                    println!("Eroare la parsarea intrării: {}", e);
+                }
+            }
+        }
+        
+        // Verifică checksum-ul
+        let mut stored_checksum = vec![0; CHECKSUM_SIZE];
+        reader.read_exact(&mut stored_checksum)?;
+        
+        let calculated_checksum = checksum.finalize();
+        println!("Stored checksum: {}", hex::encode(&stored_checksum));
+        println!("Calculated checksum: {}", hex::encode(&calculated_checksum));
+        
+        if stored_checksum == calculated_checksum {
+            println!("✓ Checksum corect");
+        } else {
+            println!("✗ Checksum incorect");
+        }
+        
+        Ok(())
+    }
+
+    
+    
+}
+
+pub fn hex_format(bytes: &[u8]) -> String {
+    let mut output = String::new();
+    for (i, byte) in bytes.iter().enumerate() {
+        output.push_str(&format!("{:02x}", byte));
+        if i % 2 == 1 {
+            output.push(' ');
+        }
+    }
+    output
 }

@@ -1,7 +1,6 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use crate::errors::error::Error;
 
 #[derive(Debug)]
 pub enum LockError {
@@ -110,6 +109,16 @@ impl Lockfile {
         fs::rename(&self.lock_path, &self.file_path)
             .map_err(|e| LockError::StaleLock(e.to_string()))?;
         
+        Ok(())
+    }
+
+    pub fn write_bytes(&mut self, data: &[u8]) -> Result<(), LockError> {
+        let lock = self.lock.as_mut().ok_or_else(|| {
+            LockError::StaleLock("Not holding lock on file".into())
+        })?;
+        
+        lock.write_all(data)
+            .map_err(|e| LockError::StaleLock(e.to_string()))?;
         Ok(())
     }
 }

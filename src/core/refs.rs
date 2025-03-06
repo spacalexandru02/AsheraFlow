@@ -1,5 +1,5 @@
-use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
+use std::fs::File;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use crate::errors::error::Error;
 
