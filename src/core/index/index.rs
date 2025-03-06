@@ -189,8 +189,6 @@ impl Index {
             return Ok(false);
         }
         
-        println!("Writing index updates with {} entries", self.entries.len());
-        
         // Initialize checksum
         let mut checksum = Checksum::new();
         
@@ -201,8 +199,6 @@ impl Index {
         header.extend_from_slice(&VERSION.to_be_bytes());
         header.extend_from_slice(&entry_count.to_be_bytes());
         
-        // Debug header
-        println!("Header bytes: {}", hex_format(&header));
         
         // Update checksum with header
         checksum.update(&header);
@@ -216,17 +212,6 @@ impl Index {
             let entry = &self.entries[key];
             let bytes = entry.to_bytes();
             
-            // Debug entry
-            println!("Entry for path: {}", entry.path);
-            println!("  OID: {}", entry.oid);
-            println!("  Mode: {}", entry.mode);
-            println!("  Size: {} bytes", entry.size);
-            println!("  Serialized bytes length: {} bytes", bytes.len());
-            println!("  First 64 bytes: {}", hex_format(&bytes[0..64.min(bytes.len())]));
-            if bytes.len() > 64 {
-                println!("  ... and {} more bytes", bytes.len() - 64);
-            }
-            
             // Update checksum with entry data
             checksum.update(&bytes);
             
@@ -237,7 +222,6 @@ impl Index {
         
         // Get the final checksum
         let digest = checksum.finalize();
-        println!("Calculated checksum: {}", hex::encode(&digest));
         
         // Write checksum
         self.lockfile.write_bytes(&digest)
@@ -249,8 +233,6 @@ impl Index {
         
         // Reset the changed flag
         self.changed = false;
-        
-        println!("Index updated successfully");
         
         Ok(true)
     }

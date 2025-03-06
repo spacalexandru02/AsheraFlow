@@ -28,7 +28,6 @@ impl AddCommand {
     
     for path_str in paths {
         let path = PathBuf::from(path_str);
-        println!("Processing path: {:?}", path);
         
         // Verifică dacă calea există
         let exists = if path.is_absolute() {
@@ -44,11 +43,8 @@ impl AddCommand {
         
         // Obține lista de fișiere (recursiv pentru directoare)
         let file_paths = workspace.list_files_from(&path)?;
-        println!("Found {} files to add", file_paths.len());
             
         for file_path in &file_paths {
-            println!("Adding file: {:?}", file_path);
-            
             // Citește conținutul fișierului
             let data = workspace.read_file(file_path)?;
             
