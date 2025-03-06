@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use sha1::{Digest, Sha1};
 use flate2::read::ZlibDecoder;
 
-use crate::core::database::Database;
-use crate::core::index::Index;
+use crate::core::database::database::Database;
+use crate::core::index::index::Index;
 use crate::core::workspace::Workspace;
 use crate::core::refs::Refs;
 use crate::errors::error::Error;
@@ -414,7 +414,7 @@ impl IntegrityChecker {
     }
     
     /// Verifică un lanț de commit-uri până la o anumită adâncime
-    fn verify_commit_chain(&self, start_oid: &str, depth: usize) {
+    fn verify_commit_chain(&mut self, start_oid: &str, depth: usize) {
         if depth == 0 {
             println!("   ℹ️ Adâncime maximă atinsă în verificarea lanțului de commit-uri");
             return;
@@ -436,7 +436,7 @@ impl IntegrityChecker {
     }
     
     /// Verifică conținutul unui obiect
-    fn verify_object_content(&self, oid: &str) -> Result<(), Error> {
+    fn verify_object_content(&mut self, oid: &str) -> Result<(), Error> {
         let object_path = self.database.pathname.join(&oid[0..2]).join(&oid[2..]);
         let file = File::open(&object_path)?;
         

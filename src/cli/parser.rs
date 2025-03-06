@@ -49,6 +49,9 @@ impl CliParser {
                     },
                 }
             },
+            "validate" => CliArgs {
+                command: Command::Validate,
+            },
             _ => CliArgs {
                 command: Command::Unknown { name: command },
             },
@@ -59,12 +62,13 @@ impl CliParser {
 
     pub fn format_help() -> String {
         format!(
-            "{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}",
             "Usage: ash <command> [options]",
             "Commands:",
-            "  init [path]    Initialize a new repository",
+            "  init [path]       Initialize a new repository",
             "  commit <message>  Commit changes to the repository",
-            "  add <paths...>     Add file contents to the index"
+            "  add <paths...>    Add file contents to the index",
+            "  validate          Validate repository health and integrity"
         )
     }
 }

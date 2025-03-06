@@ -60,27 +60,48 @@ impl Workspace {
         
         // Check if path exists
         if !abs_start_path.exists() {
-            return Ok(Vec::new());
+            return Err(Error::InvalidPath(format!(
+                "Path '{}' does not exist", abs_start_path.display()
+            )));
         }
         
         if abs_start_path.is_dir() {
             // For directories, we need to recursively list files
-            for entry in fs::read_dir(&abs_start_path)? {
-                let entry = entry?;
-                let entry_path = entry.path();
-                
-                if entry_path.is_dir() {
-                    // Recursively process subdirectories
-                    let mut sub_files = self.list_files_from(&entry_path)?;
-                    files.append(&mut sub_files);
-                } else {
-                    // For files, check if they should be ignored
-                    if let Ok(rel_path) = entry_path.strip_prefix(&self.root_path) {
-                        let rel_path_str = rel_path.to_string_lossy().to_string();
-                        if !self.matches_any_pattern(&rel_path_str, &ignore_patterns) {
-                            files.push(rel_path.to_path_buf());
+            match fs::read_dir(&abs_start_path) {
+                Ok(entries) => {
+                    for entry_result in entries {
+                        match entry_result {
+                            Ok(entry) => {
+                                let entry_path = entry.path();
+                                
+                                if entry_path.is_dir() {
+                                    // Recursively process subdirectories
+                                    match self.list_files_from(&entry_path) {
+                                        Ok(sub_files) => files.extend(sub_files),
+                                        Err(Error::InvalidPath(_)) => continue, // Skip invalid subdirectories
+                                        Err(e) => return Err(e),
+                                    }
+                                } else {
+                                    // For files, check if they should be ignored
+                                    if let Ok(rel_path) = entry_path.strip_prefix(&self.root_path) {
+                                        let rel_path_str = rel_path.to_string_lossy().to_string();
+                                        if !self.matches_any_pattern(&rel_path_str, &ignore_patterns) {
+                                            files.push(rel_path.to_path_buf());
+                                        }
+                                    }
+                                }
+                            },
+                            Err(e) => return Err(Error::IO(e)),
                         }
                     }
+                },
+                Err(e) => {
+                    if e.kind() == std::io::ErrorKind::PermissionDenied {
+                        return Err(Error::Generic(format!(
+                            "open('{}'): Permission denied", abs_start_path.display()
+                        )));
+                    }
+                    return Err(Error::IO(e));
                 }
             }
         } else {
@@ -102,31 +123,48 @@ impl Workspace {
         files: &mut Vec<PathBuf>,
         ignore_patterns: &HashSet<String>,
     ) -> Result<(), Error> {
-        for entry in fs::read_dir(path)? {
-            let entry = entry?;
-            let entry_path = entry.path();
-            
-            // Get the path relative to the root for pattern matching
-            let relative_path = match entry_path.strip_prefix(&self.root_path) {
-                Ok(rel_path) => rel_path,
-                Err(_) => continue, // Skip if we can't get relative path
-            };
-            
-            // Convert to string for pattern matching
-            let rel_path_str = relative_path.to_string_lossy().to_string();
-            
-            // Check if this path should be ignored
-            if self.matches_any_pattern(&rel_path_str, ignore_patterns) {
-                continue;
-            }
-            
-            if entry_path.is_dir() {
-                self.list_files_recursive(&entry_path, files, ignore_patterns)?;
-            } else {
-                files.push(relative_path.to_path_buf());
+        match fs::read_dir(path) {
+            Ok(entries) => {
+                for entry_result in entries {
+                    match entry_result {
+                        Ok(entry) => {
+                            let entry_path = entry.path();
+                            
+                            // Get the path relative to the root for pattern matching
+                            let relative_path = match entry_path.strip_prefix(&self.root_path) {
+                                Ok(rel_path) => rel_path,
+                                Err(_) => continue, // Skip if we can't get relative path
+                            };
+                            
+                            // Convert to string for pattern matching
+                            let rel_path_str = relative_path.to_string_lossy().to_string();
+                            
+                            // Check if this path should be ignored
+                            if self.matches_any_pattern(&rel_path_str, ignore_patterns) {
+                                continue;
+                            }
+                            
+                            if entry_path.is_dir() {
+                                self.list_files_recursive(&entry_path, files, ignore_patterns)?;
+                            } else {
+                                files.push(relative_path.to_path_buf());
+                            }
+                        },
+                        Err(e) => return Err(Error::IO(e)),
+                    }
+                }
+                Ok(())
+            },
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    Err(Error::Generic(format!(
+                        "open('{}'): Permission denied", path.display()
+                    )))
+                } else {
+                    Err(Error::IO(e))
+                }
             }
         }
-        Ok(())
     }
     
     // Check if a path matches any ignore pattern
@@ -171,16 +209,36 @@ impl Workspace {
 
     pub fn read_file(&self, path: &Path) -> Result<Vec<u8>, Error> {
         let file_path = self.root_path.join(path);
-        fs::read(&file_path).map_err(Into::into)
+        match fs::read(&file_path) {
+            Ok(data) => Ok(data),
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    Err(Error::Generic(format!(
+                        "open('{}'): Permission denied", path.display()
+                    )))
+                } else {
+                    Err(Error::IO(e))
+                }
+            }
+        }
     }
     
     // Get file metadata
     pub fn stat_file(&self, path: &Path) -> Result<fs::Metadata, Error> {
         let file_path = self.root_path.join(path);
-        fs::metadata(&file_path).map_err(Into::into)
+        match fs::metadata(&file_path) {
+            Ok(metadata) => Ok(metadata),
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    Err(Error::Generic(format!(
+                        "stat('{}'): Permission denied", path.display()
+                    )))
+                } else {
+                    Err(Error::IO(e))
+                }
+            }
+        }
     }
-    
-    // Check if path exists
     pub fn path_exists(&self, path: &Path) -> Result<bool, Error> {
         let file_path = self.root_path.join(path);
         Ok(file_path.exists())

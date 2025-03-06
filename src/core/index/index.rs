@@ -2,8 +2,6 @@ use std::collections::{HashMap, BTreeSet};
 use std::fs::{self, File};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-
-use crate::core::database::database::Database;
 use crate::errors::error::Error;
 use crate::core::lockfile::Lockfile;
 use crate::core::index::entry::Entry;
@@ -236,105 +234,150 @@ impl Index {
         
         Ok(true)
     }
-    
-    // Helper function to format bytes as hex for debugging
-    
 
-    pub fn verify(&self, database: &Database) -> Result<(), Error> {
-        println!("Verificare index: {}", self.pathname.display());
+
+    pub fn rollback(&mut self) -> Result<(), Error> {
+        self.changed = false;
+        self.lockfile.rollback()
+            .map_err(|e| Error::Lock(format!("Failed to release lock: {:?}", e)))
+    }
+    
+    pub fn verify_integrity(&self) -> Result<bool, Error> {
+        let file_path = &self.pathname;
         
-        // Deschide fișierul index
-        let file = match File::open(&self.pathname) {
+        if !file_path.exists() {
+            // An empty index is valid
+            return Ok(true);
+        }
+        
+        let file = match File::open(file_path) {
             Ok(f) => f,
-            Err(e) => {
-                return Err(Error::Generic(format!("Nu s-a putut deschide indexul: {}", e)));
-            }
+            Err(e) => return Err(Error::IO(e)),
         };
         
         let mut reader = file;
         let mut checksum = Checksum::new();
         
-        // Citește header-ul
+        // Read and verify the header
         let mut header_data = vec![0; HEADER_SIZE];
-        reader.read_exact(&mut header_data)?;
-        checksum.update(&header_data);
+        match reader.read_exact(&mut header_data) {
+            Ok(_) => checksum.update(&header_data),
+            Err(e) => return Err(Error::IO(e)),
+        }
         
-        // Parsează header-ul
+        // Parse header
         let signature = String::from_utf8_lossy(&header_data[0..4]).to_string();
+        if signature != HEADER_FORMAT {
+            return Err(Error::Generic(format!(
+                "Invalid index signature: expected '{}', got '{}'",
+                HEADER_FORMAT, signature
+            )));
+        }
+        
         let version = u32::from_be_bytes([header_data[4], header_data[5], header_data[6], header_data[7]]);
+        if version != VERSION {
+            return Err(Error::Generic(format!(
+                "Unsupported index version: expected {}, got {}",
+                VERSION, version
+            )));
+        }
+        
         let count = u32::from_be_bytes([header_data[8], header_data[9], header_data[10], header_data[11]]);
         
-        println!("Signature: {}, Version: {}, Entry count: {}", signature, version, count);
+        // Read the entries
+        let mut metadata = fs::metadata(file_path)?;
+        let expected_size = HEADER_SIZE as u64 + (count as u64 * 62) + CHECKSUM_SIZE as u64;
         
-        // Citește și verifică intrările
-        const ENTRY_MIN_SIZE: usize = 64;
-        const ENTRY_BLOCK: usize = 8;
-        
-        let mut entries = Vec::new();
-        let mut entry_count = 0;
-        
-        for _ in 0..count {
-            let mut entry_data = vec![0; ENTRY_MIN_SIZE];
-            reader.read_exact(&mut entry_data)?;
-            checksum.update(&entry_data);
-            
-            // Citește restul intrării până la terminatorul null
-            while entry_data[entry_data.len() - 1] != 0 {
-                let mut block = vec![0; ENTRY_BLOCK];
-                reader.read_exact(&mut block)?;
-                checksum.update(&block);
-                entry_data.extend_from_slice(&block);
-            }
-            
-            // Parsează intrarea
-            match Entry::parse(&entry_data) {
-                Ok(entry) => {
-                    println!("Entry {}: path={}, oid={}", entry_count, entry.path, entry.oid);
-                    
-                    // Verifică dacă OID-ul există în baza de date
-                    if database.exists(&entry.oid) {
-                        println!("  ✓ OID există în baza de date");
-                    } else {
-                        println!("  ✗ OID nu există în baza de date");
-                    }
-                    
-                    entries.push(entry);
-                    entry_count += 1;
-                },
-                Err(e) => {
-                    println!("Eroare la parsarea intrării: {}", e);
-                }
-            }
+        if metadata.len() < expected_size {
+            return Err(Error::Generic(format!(
+                "Index file too small: expected at least {} bytes, got {} bytes",
+                expected_size, metadata.len()
+            )));
         }
         
-        // Verifică checksum-ul
+        // Skip the entries (we're just validating the checksum)
+        let mut buffer = vec![0; metadata.len() as usize - HEADER_SIZE - CHECKSUM_SIZE];
+        match reader.read_exact(&mut buffer) {
+            Ok(_) => checksum.update(&buffer),
+            Err(e) => return Err(Error::IO(e)),
+        }
+        
+        // Verify the checksum
         let mut stored_checksum = vec![0; CHECKSUM_SIZE];
-        reader.read_exact(&mut stored_checksum)?;
+        match reader.read_exact(&mut stored_checksum) {
+            Ok(_) => {},
+            Err(e) => return Err(Error::IO(e)),
+        }
         
         let calculated_checksum = checksum.finalize();
-        println!("Stored checksum: {}", hex::encode(&stored_checksum));
-        println!("Calculated checksum: {}", hex::encode(&calculated_checksum));
         
-        if stored_checksum == calculated_checksum {
-            println!("✓ Checksum corect");
-        } else {
-            println!("✗ Checksum incorect");
+        if stored_checksum != calculated_checksum {
+            return Err(Error::Generic(format!(
+                "Index checksum mismatch. Index file may be corrupted."
+            )));
         }
         
-        Ok(())
+        Ok(true)
     }
-
     
-    
-}
-
-pub fn hex_format(bytes: &[u8]) -> String {
-    let mut output = String::new();
-    for (i, byte) in bytes.iter().enumerate() {
-        output.push_str(&format!("{:02x}", byte));
-        if i % 2 == 1 {
-            output.push(' ');
+    // Method to repair index if possible
+    pub fn repair(&mut self) -> Result<bool, Error> {
+        // Try to load the current index
+        match self.load() {
+            Ok(_) => {
+                // If we can load it, it's probably fine, just rewrite it
+                self.changed = true;
+                self.write_updates()?;
+                Ok(true)
+            },
+            Err(_) => {
+                // If we can't load it, clear and recreate it
+                self.clear();
+                self.changed = true;
+                
+                // First ensure we have a lock
+                self.lockfile.hold_for_update()
+                    .map_err(|e| Error::Generic(format!("Lock error: {:?}", e)))?;
+                
+                // Write a clean index
+                self.write_updates()?;
+                
+                Ok(false)
+            }
         }
     }
-    output
+    
+    // Method to check for and remove stale locks
+    pub fn check_stale_locks(&self) -> Result<bool, Error> {
+        let lock_path = self.pathname.with_extension("lock");
+        
+        if lock_path.exists() {
+            // Check if the lock file is stale (e.g., more than 1 hour old)
+            if let Ok(metadata) = fs::metadata(&lock_path) {
+                if let Ok(modified) = metadata.modified() {
+                    let now = std::time::SystemTime::now();
+                    if let Ok(duration) = now.duration_since(modified) {
+                        if duration.as_secs() > 3600 {
+                            // Lock is more than an hour old, probably stale
+                            match fs::remove_file(&lock_path) {
+                                Ok(_) => {
+                                    println!("Removed stale lock file: {}", lock_path.display());
+                                    return Ok(true);
+                                },
+                                Err(e) => {
+                                    return Err(Error::IO(e));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Lock exists but doesn't appear stale
+            return Ok(false);
+        }
+        
+        // No lock file exists
+        Ok(false)
+    }
 }

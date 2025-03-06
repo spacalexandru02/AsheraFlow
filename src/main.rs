@@ -6,12 +6,14 @@ use cli::parser::CliParser;
 use commands::commit::CommitCommand;
 use commands::init::InitCommand;
 use commands::add::AddCommand;
+use commands::validate::ValidateCommand;
 
 mod cli;
 mod commands;
 mod validators;
 mod errors;
 mod core;
+mod tests;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -27,6 +29,7 @@ fn handle_command(cli_args: CliArgs) {
         Command::Init { path } => handle_init_command(&path),
         Command::Commit { message } => handle_commit_command(&message),
         Command::Add { paths } => handle_add_command(&paths),
+        Command::Validate => handle_validate_command(),
         Command::Unknown { name } => exit_with_error(&format!("'{}' is not a ash command", name)),
     }
 }
@@ -47,6 +50,13 @@ fn handle_init_command(path: &str) {
 
 fn handle_add_command(paths: &[String]) {
     match AddCommand::execute(paths) {
+        Ok(_) => process::exit(0),
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
+    }
+}
+
+fn handle_validate_command() {
+    match ValidateCommand::execute() {
         Ok(_) => process::exit(0),
         Err(e) => exit_with_error(&format!("fatal: {}", e)),
     }

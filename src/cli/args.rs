@@ -3,6 +3,7 @@ pub enum Command {
     Init { path: String },
     Commit { message: String },
     Add { paths: Vec<String> },
+    Validate,
     Unknown { name: String },
 }
 
