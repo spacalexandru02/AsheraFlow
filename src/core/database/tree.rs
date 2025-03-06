@@ -3,7 +3,6 @@ use super::database::GitObject;
 use crate::errors::error::Error;
 use itertools::Itertools;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 pub struct Tree {

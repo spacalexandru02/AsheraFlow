@@ -1,4 +1,4 @@
-use std::{env::{self, VarError}, path::Path};
+use std::{env, path::Path};
 
 use crate::{core::{database::{author::Author, commit::Commit, database::Database, entry::Entry, tree::Tree}, index::index::Index, refs::Refs, workspace::Workspace}, errors::error::Error};
 
@@ -93,31 +93,6 @@ impl CommitCommand {
         let is_root = if parent.is_none() { "(root-commit) " } else { "" };
         let first_line = message.lines().next().unwrap_or("");
         println!("[{}{}] {}", is_root, commit.get_oid().unwrap(), first_line);
-
-        // După ce ai făcut un commit, verifică-l
-if let Some(commit_oid) = commit.get_oid() {
-    println!("\nVerificare commit creat:");
-    match Commit::verify(&database, commit_oid) {
-        Ok(result) => {
-            println!("\nRezultatul verificării:");
-            println!("Commit: {}", result.commit_oid);
-            println!("Tree: {}", result.tree_oid);
-            if let Some(parent) = result.parent_oid {
-                println!("Parent: {}", parent);
-            }
-            println!("Autor: {}", result.author);
-            println!("Mesaj: {}", result.message);
-            println!("Conține {} entries în tree", result.tree_entries.len());
-            
-            println!("\nVerificare reușită!");
-        },
-        Err(e) => {
-            println!("❌ Eroare la verificarea commit-ului: {}", e);
-        }
-    }
-} else {
-    println!("❌ Nu s-a putut obține OID-ul commit-ului");
-}
 
         Ok(())
     }

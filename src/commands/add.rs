@@ -78,12 +78,6 @@ impl AddCommand {
                     } else {
                         println!("Added {} files to index", added_count);
                     }
-                    
-                    // Rulează verificarea completă de integritate
-                    match database.verify_repository_integrity(&root_path) {
-                        Ok(_) => println!("Verificarea integrității a trecut cu succes."),
-                        Err(e) => println!("⚠️ Verificarea integrității a eșuat: {}", e)
-                    }
                 },
                 false => return Err(Error::Generic("Failed to update index".into())),
             }

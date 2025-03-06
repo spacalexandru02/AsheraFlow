@@ -1,8 +1,7 @@
 use std::collections::{HashMap, BTreeSet};
 use std::fs::{self, File};
-use std::io::{self, Read, Write, Seek, SeekFrom};
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-use sha1::{Digest, Sha1};
 
 use crate::core::database::database::Database;
 use crate::errors::error::Error;
