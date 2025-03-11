@@ -1,8 +1,10 @@
+// Actualizare pentru src/core/database/tree.rs
 use crate::core::database::entry::Entry;
 use super::database::GitObject;
 use crate::errors::error::Error;
 use itertools::Itertools;
 use std::collections::HashMap;
+use std::any::Any;
 
 #[derive(Debug)]
 pub struct Tree {
@@ -66,6 +68,10 @@ impl GitObject for Tree {
     fn set_oid(&mut self, oid: String) {
         self.oid = Some(oid);
     }
+    
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 impl Tree {
@@ -74,6 +80,10 @@ impl Tree {
             oid: None,
             entries: HashMap::new(),
         }
+    }
+    
+    pub fn get_entries(&self) -> &HashMap<String, TreeEntry> {
+        &self.entries
     }
     
     pub fn build<'a, I>(entries: I) -> Result<Self, Error>
@@ -140,6 +150,7 @@ impl Tree {
             TreeEntry::Blob(entry.get_oid().to_string(), entry.get_mode().parse().unwrap_or(REGULAR_MODE))
         );
         
+        
         Ok(())
     }
     
@@ -175,5 +186,73 @@ impl Tree {
 
     pub fn get_oid(&self) -> Option<&String> {
         self.oid.as_ref()
+    }
+    
+    /// Parsează un tree dintr-un șir de bytes
+    pub fn parse(data: &[u8]) -> Result<Self, Error> {
+        let mut tree = Tree::new();
+        let mut pos = 0;
+        
+        while pos < data.len() {
+            // Găsește primul spațiu pentru a obține modul
+            let mode_end = data[pos..].iter().position(|&b| b == b' ')
+                .ok_or_else(|| Error::Generic("Invalid tree format: missing space after mode".to_string()))?;
+            
+            // Parsează modul ca octal
+            let mode_str = std::str::from_utf8(&data[pos..pos+mode_end])
+                .map_err(|_| Error::Generic("Invalid UTF-8 in mode".to_string()))?;
+            
+            let mode = u32::from_str_radix(mode_str, 8)
+                .map_err(|_| Error::Generic(format!("Invalid mode: {}", mode_str)))?;
+            
+            pos += mode_end + 1;
+            
+            // Găsește nul terminator pentru nume
+            let name_end = data[pos..].iter().position(|&b| b == 0)
+                .ok_or_else(|| Error::Generic("Invalid tree format: missing null terminator after name".to_string()))?;
+            
+            // Extrage numele
+            let name = std::str::from_utf8(&data[pos..pos+name_end])
+                .map_err(|_| Error::Generic("Invalid UTF-8 in name".to_string()))?;
+            
+            pos += name_end + 1;
+            
+            // Asigură-te că avem suficiente bytes pentru OID (20)
+            if pos + 20 > data.len() {
+                return Err(Error::Generic("Invalid tree format: truncated SHA-1".to_string()));
+            }
+            
+            // Extrage OID-ul ca hex string
+            let oid = hex::encode(&data[pos..pos+20]);
+            pos += 20;
+            
+            // Adaugă intrarea în tree
+            if mode == TREE_MODE {
+                // Dacă modul este pentru un tree, vom avea nevoie de funcționalitate 
+                // pentru a încărca recursiv trees - pentru simplificare, adăugăm doar OID-ul
+                let mut subtree = Tree::new();
+                subtree.set_oid(oid.clone());
+                tree.entries.insert(name.to_string(), TreeEntry::Tree(Box::new(subtree)));
+            } else {
+                // Pentru blob-uri, adăugăm direct OID-ul și modul
+                tree.entries.insert(name.to_string(), TreeEntry::Blob(oid, mode));
+            }
+        }
+        
+        Ok(tree)
+    }
+
+    pub fn insert_entry(&mut self, name: String, entry: TreeEntry) {
+        self.entries.insert(name, entry);
+    }
+    
+    // Dacă e nevoie și de o metodă pentru a obține o intrare după nume
+    pub fn get_entry(&self, name: &str) -> Option<&TreeEntry> {
+        self.entries.get(name)
+    }
+    
+    // Dacă e nevoie și de acces mutabil la o intrare
+    pub fn get_entry_mut(&mut self, name: &str) -> Option<&mut TreeEntry> {
+        self.entries.get_mut(name)
     }
 }

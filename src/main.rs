@@ -6,6 +6,7 @@ use cli::parser::CliParser;
 use commands::commit::CommitCommand;
 use commands::init::InitCommand;
 use commands::add::AddCommand;
+use commands::status::StatusCommand;
 use commands::validate::ValidateCommand;
 
 mod cli;
@@ -29,6 +30,7 @@ fn handle_command(cli_args: CliArgs) {
         Command::Init { path } => handle_init_command(&path),
         Command::Commit { message } => handle_commit_command(&message),
         Command::Add { paths } => handle_add_command(&paths),
+        Command::Status { porcelain } => handle_status_command(porcelain),
         Command::Validate => handle_validate_command(),
         Command::Unknown { name } => exit_with_error(&format!("'{}' is not a ash command", name)),
     }
@@ -50,6 +52,13 @@ fn handle_init_command(path: &str) {
 
 fn handle_add_command(paths: &[String]) {
     match AddCommand::execute(paths) {
+        Ok(_) => process::exit(0),
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
+    }
+}
+
+fn handle_status_command(porcelain: bool) {
+    match StatusCommand::execute(porcelain) {
         Ok(_) => process::exit(0),
         Err(e) => exit_with_error(&format!("fatal: {}", e)),
     }

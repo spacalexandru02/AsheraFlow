@@ -1,6 +1,8 @@
+// Actualizare pentru src/core/database/blob.rs
 use super::database::GitObject;
+use std::any::Any;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Blob {
     oid: Option<String>,
     data: Vec<u8>,
@@ -18,6 +20,10 @@ impl GitObject for Blob {
     fn set_oid(&mut self, oid: String) {
         self.oid = Some(oid);
     }
+    
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 impl Blob {
@@ -25,8 +31,12 @@ impl Blob {
         Blob { oid: None, data }
     }
 
-
     pub fn get_oid(&self) -> Option<&String> {
         self.oid.as_ref()
+    }
+    
+    /// Parsează un blob dintr-un șir de bytes
+    pub fn parse(data: &[u8]) -> Self {
+        Blob::new(data.to_vec())
     }
 }

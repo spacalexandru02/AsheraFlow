@@ -1,3 +1,4 @@
+// src/core/index/index.rs
 use std::collections::{HashMap, BTreeSet};
 use std::fs::{self, File};
 use std::io::{self, Read};
@@ -17,7 +18,7 @@ pub struct Index {
     pub entries: HashMap<String, Entry>,
     keys: BTreeSet<String>,
     lockfile: Lockfile,
-    changed: bool,
+    pub changed: bool,
 }
 
 impl Index {
@@ -32,6 +33,41 @@ impl Index {
         
         index.clear();
         index
+    }
+    
+    // Getters
+    pub fn get_pathname(&self) -> &PathBuf {
+        &self.pathname
+    }
+    
+    pub fn get_entry(&self, key: &str) -> Option<&Entry> {
+        self.entries.get(key)
+    }
+    
+    pub fn get_entry_mut(&mut self, key: &str) -> Option<&mut Entry> {
+        self.entries.get_mut(key)
+    }
+    
+    pub fn get_keys(&self) -> &BTreeSet<String> {
+        &self.keys
+    }
+    
+    pub fn is_changed(&self) -> bool {
+        self.changed
+    }
+    
+    pub fn set_changed(&mut self, changed: bool) {
+        self.changed = changed;
+    }
+    
+    pub fn update_entry_stat(&mut self, key: &str, stat: &fs::Metadata) -> Result<(), Error> {
+        if let Some(entry) = self.entries.get_mut(key) {
+            entry.update_stat(stat);
+            self.changed = true;
+            Ok(())
+        } else {
+            Err(Error::Generic(format!("Entry not found for key: {}", key)))
+        }
     }
     
     fn clear(&mut self) {
@@ -73,32 +109,32 @@ impl Index {
     pub fn load(&mut self) -> Result<(), Error> {
         self.clear();
     
-    // Try to open the index file
-    let file = match File::open(&self.pathname) {
-        Ok(file) => file,
-        Err(e) => {
-            if e.kind() == io::ErrorKind::NotFound {
-                // It's ok if the index doesn't exist yet
-                return Ok(());
+        // Try to open the index file
+        let file = match File::open(&self.pathname) {
+            Ok(file) => file,
+            Err(e) => {
+                if e.kind() == io::ErrorKind::NotFound {
+                    // It's ok if the index doesn't exist yet
+                    return Ok(());
+                }
+                return Err(Error::IO(e));
             }
-            return Err(Error::IO(e));
-        }
-    };
-    
-    // Verifică dimensiunea fișierului
-    let file_size = match file.metadata() {
-        Ok(metadata) => metadata.len(),
-        Err(e) => return Err(Error::IO(e)),
-    };
-    
-    if file_size < HEADER_SIZE as u64 {
-        println!("Warning: Index file too small ({} bytes), initializing new index", file_size);
-        return Ok(());
-    }
-    
-    let mut reader = file;
-    let mut checksum = Checksum::new();
+        };
         
+        // Verifică dimensiunea fișierului
+        let file_size = match file.metadata() {
+            Ok(metadata) => metadata.len(),
+            Err(e) => return Err(Error::IO(e)),
+        };
+        
+        if file_size < HEADER_SIZE as u64 {
+            println!("Warning: Index file too small ({} bytes), initializing new index", file_size);
+            return Ok(());
+        }
+        
+        let mut reader = file;
+        let mut checksum = Checksum::new();
+            
         // Read header
         let mut header_data = vec![0; HEADER_SIZE];
         reader.read_exact(&mut header_data)?;
@@ -379,5 +415,10 @@ impl Index {
         
         // No lock file exists
         Ok(false)
+    }
+    
+    // Metoda helper pentru a verifica dacă un fișier este indexat
+    pub fn tracked(&self, path: &str) -> bool {
+        self.entries.contains_key(path)
     }
 }
