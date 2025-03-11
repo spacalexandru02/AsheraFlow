@@ -1,3 +1,4 @@
+// src/commands/add.rs - Updated to use refactored Database
 use std::path::{Path, PathBuf};
 use std::collections::HashSet;
 use std::time::Instant;
@@ -6,7 +7,6 @@ use crate::core::database::database::Database;
 use crate::core::index::index::Index;
 use crate::core::workspace::Workspace;
 use crate::errors::error::Error;
-use sha1::Digest;
 use std::fs;
 
 pub struct AddCommand;
@@ -112,13 +112,8 @@ impl AddCommand {
                     let file_key = file_path.to_string_lossy().to_string();
                     
                     // Pre-compute hash to check if the file has changed
-                    let header = format!("blob {}\0", data.len());
-                    let mut full_content = header.as_bytes().to_vec();
-                    full_content.extend(&data);
-                    
-                    let mut hasher = sha1::Sha1::new();
-                    hasher.update(&full_content);
-                    let new_oid = format!("{:x}", hasher.finalize());
+                    // Use the refactored Database's hash_file_data method
+                    let new_oid = database.hash_file_data(&data);
                     
                     if let Some(old_oid) = existing_oids.get(&file_key) {
                         if old_oid == &new_oid {

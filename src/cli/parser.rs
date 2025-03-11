@@ -49,6 +49,16 @@ impl CliParser {
                     },
                 }
             },
+            "status" => {
+                // Check for --porcelain flag
+                let porcelain = args.iter().skip(2).any(|arg| arg == "--porcelain");
+                
+                CliArgs {
+                    command: Command::Status {
+                        porcelain,
+                    },
+                }
+            },
             "validate" => CliArgs {
                 command: Command::Validate,
             },
@@ -62,13 +72,14 @@ impl CliParser {
 
     pub fn format_help() -> String {
         format!(
-            "{}\n{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}",
             "Usage: ash <command> [options]",
             "Commands:",
-            "  init [path]       Initialize a new repository",
-            "  commit <message>  Commit changes to the repository",
-            "  add <paths...>    Add file contents to the index",
-            "  validate          Validate repository health and integrity"
+            "  init [path]           Initialize a new repository",
+            "  commit <message>      Commit changes to the repository",
+            "  add <paths...>        Add file contents to the index",
+            "  status [--porcelain]  Show the working tree status",
+            "  validate              Validate repository health and integrity"
         )
     }
 }

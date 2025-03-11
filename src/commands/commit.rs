@@ -125,7 +125,14 @@ impl CommitCommand {
         };
         
         // Store all trees
-        if let Err(e) = root.traverse(|tree| database.store(tree)) {
+        if let Err(e) = root.traverse(|tree| {
+            // Now store returns the OID as Ok(String), but we don't need it here
+            // since Tree.set_oid() is called inside the store method
+            match database.store(tree) {
+                Ok(_) => Ok(()),  // Discard the OID and return Ok(())
+                Err(e) => Err(e)  // Pass through any errors
+            }
+        }) {
             return Err(Error::Generic(format!("Failed to store trees: {}", e)));
         }
         
