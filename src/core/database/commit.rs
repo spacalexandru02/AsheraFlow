@@ -3,6 +3,7 @@ use super::{author::Author, database::GitObject};
 use crate::errors::error::Error;
 use std::any::Any;
 use std::str;
+use std::collections::HashMap;
 
 pub struct Commit {
     oid: Option<String>,
@@ -148,4 +149,3 @@ impl Commit {
 }
 
 // Adaugă imports-ul necesar
-use std::collections::HashMap;

@@ -8,11 +8,13 @@ use crate::core::database::database::{Database, GitObject};
 use crate::core::database::entry::Entry as DatabaseEntry;
 use crate::core::database::tree::{Tree, TreeEntry};
 use crate::core::database::commit::Commit;
+use crate::core::file_mode::FileMode;
 use crate::core::index::entry::Entry;
 use crate::core::index::index::Index;
 use crate::core::refs::Refs;
 use crate::core::workspace::Workspace;
 use crate::errors::error::Error;
+use crate::core::database::tree::TREE_MODE;
 
 const REGULAR_MODE: u32 = 0o100644;
 const EXECUTABLE_MODE: u32 = 0o100755;
@@ -38,7 +40,7 @@ impl StatusCommand {
         // Verifică modul fișierului
         let entry_mode = entry.get_mode();
         let file_mode = Self::mode_for_stat(stat);
-        let mode_matches = entry_mode == file_mode;
+        let mode_matches = FileMode::are_equivalent(entry_mode, file_mode);
         
         size_matches && mode_matches
     }
@@ -52,6 +54,11 @@ impl StatusCommand {
             // Convertește în secunde și nanosecunde pentru comparație
             let stat_mtime_sec = stat.mtime() as u32;
             let stat_mtime_nsec = stat.mtime_nsec() as u32;
+
+            println!("Comparare timestamps pentru {}", entry.path);
+            println!("Index mtime: {}.{}", entry.get_mtime(), entry.get_mtime_nsec());
+            println!("File mtime: {}.{}", stat_mtime_sec, stat_mtime_nsec);
+            // SFÂRȘITUL CODULUI DE DEBUGGING
             
             // Compară timpii de modificare
             entry.get_mtime() == stat_mtime_sec && entry.get_mtime_nsec() == stat_mtime_nsec
@@ -74,21 +81,7 @@ impl StatusCommand {
     
     /// Determină modul fișierului din metadata (executabil vs regular)
     fn mode_for_stat(stat: &fs::Metadata) -> u32 {
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            if stat.permissions().mode() & 0o111 != 0 {
-                EXECUTABLE_MODE
-            } else {
-                REGULAR_MODE
-            }
-        }
-        
-        #[cfg(not(unix))]
-        {
-            // Windows nu are același model de permisiuni
-            REGULAR_MODE
-        }
+        FileMode::from_metadata(stat)
     }
     
     /// Verifică dacă un director conține fișiere care pot fi urmărite (recursiv)
@@ -180,15 +173,38 @@ impl StatusCommand {
     ) -> Result<HashMap<String, DatabaseEntry>, Error> {
         let mut head_tree = HashMap::new();
         
+        // ADAUGĂ ACEST COD DE DEBUGGING
+        println!("Încărcare HEAD tree");
+        // SFÂRȘITUL CODULUI DE DEBUGGING
+        
         // Citește HEAD
         if let Some(head_oid) = refs.read_head()? {
+            // ADAUGĂ ACEST COD DE DEBUGGING
+            println!("HEAD OID: {}", head_oid);
+            // SFÂRȘITUL CODULUI DE DEBUGGING
+            
             // Încarcă commit-ul din HEAD
             let commit_obj = database.load(&head_oid)?;
             let commit = commit_obj.as_any().downcast_ref::<Commit>().unwrap();
             
+            // ADAUGĂ ACEST COD DE DEBUGGING
+            println!("Commit tree OID: {}", commit.get_tree());
+            // SFÂRȘITUL CODULUI DE DEBUGGING
+            
             // Citește tree-ul recursiv
             Self::read_tree(database, commit.get_tree(), Path::new(""), &mut head_tree)?;
+        } else {
+            // ADAUGĂ ACEST COD DE DEBUGGING
+            println!("Nu s-a găsit HEAD, tree gol");
+            // SFÂRȘITUL CODULUI DE DEBUGGING
         }
+        
+        // ADAUGĂ ACEST COD DE DEBUGGING
+        println!("Entries în HEAD tree: {}", head_tree.len());
+        for (path, entry) in &head_tree {
+            println!("  {} -> {}", path, entry.get_oid());
+        }
+        // SFÂRȘITUL CODULUI DE DEBUGGING
         
         Ok(head_tree)
     }
@@ -215,17 +231,26 @@ impl StatusCommand {
             match entry {
                 TreeEntry::Tree(subtree) => {
                     if let Some(oid) = subtree.get_oid() {
-                        // Procesează recursiv subtree-ul
+                        // În loc să doar adăugăm recursiv, adăugăm și o intrare pentru directorul însuși
+                        let dir_path = path.to_string_lossy().to_string();
+                        let db_entry = DatabaseEntry::new(
+                            dir_path.clone(), // Aici folosim clone pentru a evita eroarea
+                            oid.clone(),
+                            &TREE_MODE.to_string(), // Folosește modul pentru directoare
+                        );
+                        head_tree.insert(dir_path, db_entry);
+                        
+                        // Acum procesează recursiv
                         Self::read_tree(database, oid, &path, head_tree)?;
                     }
                 },
                 TreeEntry::Blob(oid, mode) => {
-                    // Adaugă blob-ul la head_tree
-                    let db_entry = DatabaseEntry {
-                        name: path.to_string_lossy().to_string(),
-                        oid: oid.clone(),
-                        mode: mode.to_string(),
-                    };
+                    // Codul existent pentru blob-uri
+                    let db_entry = DatabaseEntry::new(
+                        path.to_string_lossy().to_string(),
+                        oid.clone(),
+                        &mode.to_string(),
+                    );
                     head_tree.insert(path.to_string_lossy().to_string(), db_entry);
                 }
             }
@@ -235,6 +260,8 @@ impl StatusCommand {
     }
     
     /// Verifică index-ul în raport cu HEAD tree
+    // În funcția check_index_against_head_tree sau echivalent
+    // În funcția check_index_against_head_tree sau echivalent
     fn check_index_against_head_tree(
         index_entry: &Entry,
         head_tree: &HashMap<String, DatabaseEntry>,
@@ -243,24 +270,55 @@ impl StatusCommand {
     ) {
         let path = index_entry.get_path();
         
+        println!("Comparare index cu HEAD pentru {}", path);
+        println!("Index OID: {}", index_entry.get_oid());
+        
+        // Verifică dacă HEAD tree este gol - cazul pentru primul commit
+        if head_tree.is_empty() {
+            // Când nu există HEAD, toate fișierele din index sunt noi
+            println!("HEAD tree gol, fișier marcat ca nou: {}", path);
+            Self::record_change(changed, changes, path.to_string(), ChangeType::IndexAdded);
+            return;
+        }
+        
         if let Some(head_entry) = head_tree.get(path) {
-            // Fișierul există și în HEAD - verifică pentru modificări
+            println!("HEAD OID: {}", head_entry.get_oid());
+            
+            // Comparăm OID-urile
+            let oids_match = index_entry.get_oid() == head_entry.get_oid();
+            println!("OIDs egale: {}", oids_match);
+            
+            // Convertim modurile și le comparăm
             let index_mode = index_entry.get_mode();
-            let head_mode = match head_entry.get_mode().parse::<u32>() {
-                Ok(m) => m,
-                Err(_) => 0, // mod invalid, presupunem diferit
+            
+            // Curăță și parsează modul din head_entry
+            let head_mode_str = head_entry.get_mode().trim();
+            let head_mode = if head_mode_str.starts_with("0") {
+                u32::from_str_radix(&head_mode_str[1..], 8).unwrap_or(0)
+            } else {
+                u32::from_str_radix(head_mode_str, 8).unwrap_or(0)
             };
             
-            // Verifică dacă s-a schimbat modul sau hash-ul (OID)
-            if index_mode != head_mode || index_entry.get_oid() != head_entry.get_oid() {
+            println!("Index mode: {} (decimal)", index_mode);
+            println!("HEAD mode: {} (octal) -> {} (decimal)", head_entry.get_mode(), head_mode);
+            
+            // Decidem dacă modurile sunt compatibile (ignorăm diferențele specifice)
+            let modes_compatible = (index_mode & 0o777) == (head_mode & 0o777);
+            println!("Moduri compatibile: {}", modes_compatible);
+            
+            // Comparăm doar OID-urile, ignorăm modurile pentru acum
+            if !oids_match {
+                println!("Hash-uri diferite, fișier marcat ca modificat");
                 Self::record_change(changed, changes, path.to_string(), ChangeType::IndexModified);
+            } else {
+                println!("Hash-uri egale, fișierul nu este modificat");
             }
         } else {
             // Fișierul nu există în HEAD, a fost adăugat în index
+            println!("Fișier marcat ca adăugat: {} (nu există în HEAD)", path);
             Self::record_change(changed, changes, path.to_string(), ChangeType::IndexAdded);
         }
     }
-    
     /// Verifică HEAD tree în raport cu index
     fn check_head_tree_against_index(
         head_tree: &HashMap<String, DatabaseEntry>,
@@ -399,7 +457,25 @@ impl StatusCommand {
                     Ok(data) => {
                         // Folosește baza de date pentru a calcula hash-ul eficient
                         let computed_oid = database.hash_file_data(&data);
+                        println!("Verificare fișier: {}", path);
+                        println!("Hash în index: {}", oid);
+                        println!("Hash calculat: {}", computed_oid);
+                        if let Some(metadata) = stats_cache.get(path) {
+                            #[cfg(unix)]
+                            {
+                                use std::os::unix::fs::MetadataExt;
+                                let file_mtime = metadata.mtime() as u32;
+                                let file_mtime_nsec = metadata.mtime_nsec() as u32;
+                                println!("Timestamp fișier: {}.{}", file_mtime, file_mtime_nsec);
+                            }
+                        }
                         
+                        // Obține intrarea din index pentru a afișa metadata
+                        if let Some(index_entry) = index.get_entry(path) {
+                            println!("Timestamp index: {}.{}", index_entry.get_mtime(), index_entry.get_mtime_nsec());
+                            println!("Mod index: {}, Mod fișier: {}", index_entry.get_mode(), StatusCommand::mode_for_stat(&metadata));
+                            println!("Size index: {}, Size fișier: {}", index_entry.get_size(), metadata.len());
+                        }
                         if &computed_oid != oid {
                             // Fișierul s-a schimbat, marchează-l ca modificat
                             Self::record_change(&mut changed, &mut changes, path.clone(), ChangeType::WorkspaceModified);

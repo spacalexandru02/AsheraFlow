@@ -3,8 +3,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::core::file_mode::FileMode;
+
 const REGULAR_MODE: u32 = 0o100644;
-const EXECUTABLE_MODE: u32 = 0o100755;
+const EXECUTABLE_MODE: u32 = 0o100755; 
 const MAX_PATH_SIZE: u16 = 0xfff;
 
 #[derive(Debug, Clone)]
@@ -29,15 +31,7 @@ impl Entry {
         let path = pathname.to_string_lossy().to_string();
         
         // Determine if file is executable (mode 755) or regular (mode 644)
-        #[cfg(unix)]
-        let mode = {
-            use std::os::unix::fs::PermissionsExt;
-            if stat.permissions().mode() & 0o111 != 0 {
-                EXECUTABLE_MODE
-            } else {
-                REGULAR_MODE
-            }
-        };
+        let mode = FileMode::from_metadata(stat);
         
         #[cfg(not(unix))]
         let mode = REGULAR_MODE;
@@ -68,6 +62,9 @@ impl Entry {
         }
     }
 
+    pub fn mode_octal(&self) -> String {
+        FileMode::to_octal_string(self.mode)
+    }
     // Getteri pentru toate proprietățile
     pub fn get_ctime(&self) -> u32 {
         self.ctime
@@ -239,11 +236,7 @@ impl Entry {
         path.file_name()
             .map(|name| name.to_string_lossy().to_string())
             .unwrap_or_default()
-    }
-
-    pub fn mode_octal(&self) -> String {
-        format!("{:o}", self.mode)
-    }    
+    }  
     
     pub fn parse(data: &[u8]) -> Result<Self, crate::errors::error::Error> {
         if data.len() < 62 {  // Minimum size without path
