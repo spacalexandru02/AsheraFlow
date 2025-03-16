@@ -1,6 +1,7 @@
 use std::{env, path::Path, time::Instant};
 use std::collections::HashSet;
 
+use crate::core::database::tree::TreeEntry;
 use crate::{core::{database::{author::Author, commit::Commit, database::Database, entry::Entry, tree::Tree}, index::index::Index, refs::Refs}, errors::error::Error};
 
 pub struct CommitCommand;
@@ -97,6 +98,12 @@ impl CommitCommand {
             })
             .collect();
         
+        // Add this at the beginning of CommitCommand::execute to properly validate the paths
+        println!("Index entries before building tree:");
+        for entry in &database_entries {
+            println!("  Path: {}  OID: {}  Mode: {}", entry.get_name(), entry.get_oid(), entry.get_mode());
+        }
+        
         // Verify all objects exist in the database
         let mut missing_objects = Vec::new();
         let mut unique_oids = HashSet::new();
@@ -124,13 +131,78 @@ impl CommitCommand {
             Err(e) => return Err(Error::Generic(format!("Failed to build tree: {}", e))),
         };
         
+        // Add this right after the Tree::build call
+        println!("\nTree structure after building:");
+        println!("Root entries: {}", root.get_entries().len());
+        for (name, entry) in root.get_entries() {
+            match entry {
+                TreeEntry::Blob(oid, mode) => {
+                    println!("  {} (blob, mode {}) -> {}", name, mode, oid);
+                },
+                TreeEntry::Tree(subtree) => {
+                    let oid_str = if let Some(oid) = subtree.get_oid() {
+                        format!("Some(\"{}\")", oid)
+                    } else {
+                        "None".to_string()
+                    };
+                    println!("  {} (tree) -> {}", name, oid_str);
+                    
+                    // Recursively print the first level of the subtree
+                    for (sub_name, sub_entry) in subtree.get_entries() {
+                        match sub_entry {
+                            TreeEntry::Blob(sub_oid, sub_mode) => {
+                                println!("    {}/{} (blob, mode {}) -> {}", name, sub_name, sub_mode, sub_oid);
+                            },
+                            TreeEntry::Tree(sub_subtree) => {
+                                let sub_oid_str = if let Some(oid) = sub_subtree.get_oid() {
+                                    format!("Some(\"{}\")", oid)
+                                } else {
+                                    "None".to_string()
+                                };
+                                println!("    {}/{} (tree) -> {}", name, sub_name, sub_oid_str);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Replace the tree storage code in CommitCommand::execute with this:
+
         // Store all trees
+        println!("\nStoring trees to database...");
+        let mut tree_counter = 0;
         if let Err(e) = root.traverse(|tree| {
+            tree_counter += 1;
+            println!("Storing tree #{} with {} entries...", tree_counter, tree.get_entries().len());
+            
+            // Debug: Print entries before storing
+            for (name, entry) in tree.get_entries() {
+                match entry {
+                    TreeEntry::Blob(oid, mode) => {
+                        println!("  Entry: {} (blob) -> {}", name, oid);
+                    },
+                    TreeEntry::Tree(subtree) => {
+                        if let Some(oid) = subtree.get_oid() {
+                            println!("  Entry: {} (tree) -> {}", name, oid);
+                        } else {
+                            println!("  Entry: {} (tree) -> <no OID>", name);
+                        }
+                    }
+                }
+            }
+            
             // Now store returns the OID as Ok(String), but we don't need it here
             // since Tree.set_oid() is called inside the store method
             match database.store(tree) {
-                Ok(_) => Ok(()),  // Discard the OID and return Ok(())
-                Err(e) => Err(e)  // Pass through any errors
+                Ok(oid) => {
+                    println!("  Tree stored with OID: {}", oid);
+                    Ok(())
+                },
+                Err(e) => {
+                    println!("  Error storing tree: {}", e);
+                    Err(e)
+                }
             }
         }) {
             return Err(Error::Generic(format!("Failed to store trees: {}", e)));
@@ -138,7 +210,28 @@ impl CommitCommand {
         
         // Get the root tree OID
         let tree_oid = root.get_oid()
-            .ok_or(Error::Generic("Tree OID not set after storage".into()))?; 
+            .ok_or(Error::Generic("Tree OID not set after storage".into()))?;
+        
+        // With this fixed version:
+        println!("\nChecking stored tree structure:");
+        let stored_tree_obj = database.load(&tree_oid)?;
+        let stored_tree = stored_tree_obj.as_any().downcast_ref::<Tree>().unwrap();
+        println!("Stored root entries: {}", stored_tree.get_entries().len());
+        for (name, entry) in stored_tree.get_entries() {
+            match entry {
+                TreeEntry::Blob(oid, mode) => {
+                    println!("  {} (blob, mode {}) -> {}", name, mode, oid);
+                },
+                TreeEntry::Tree(subtree) => {
+                    let oid_str = if let Some(oid) = subtree.get_oid() {
+                        format!("Some(\"{}\")", oid)
+                    } else {
+                        "None".to_string()
+                    };
+                    println!("  {} (tree) -> {}", name, oid_str);
+                }
+            }
+        }
         
         // Adaugă aceste linii de debug
         println!("Tree OID: {}", tree_oid);

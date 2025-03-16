@@ -7,14 +7,12 @@ use commands::commit::CommitCommand;
 use commands::init::InitCommand;
 use commands::add::AddCommand;
 use commands::status::StatusCommand;
-use commands::validate::ValidateCommand;
 
 mod cli;
 mod commands;
 mod validators;
 mod errors;
 mod core;
-mod tests;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -31,7 +29,6 @@ fn handle_command(cli_args: CliArgs) {
         Command::Commit { message } => handle_commit_command(&message),
         Command::Add { paths } => handle_add_command(&paths),
         Command::Status { porcelain } => handle_status_command(porcelain),
-        Command::Validate => handle_validate_command(),
         Command::Unknown { name } => exit_with_error(&format!("'{}' is not a ash command", name)),
     }
 }
@@ -64,12 +61,6 @@ fn handle_status_command(porcelain: bool) {
     }
 }
 
-fn handle_validate_command() {
-    match ValidateCommand::execute() {
-        Ok(_) => process::exit(0),
-        Err(e) => exit_with_error(&format!("fatal: {}", e)),
-    }
-}
 
 fn exit_with_error(message: &str) -> ! {
     eprintln!("{}", message);
