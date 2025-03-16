@@ -4,7 +4,6 @@ pub enum Command {
     Commit { message: String },
     Add { paths: Vec<String> },
     Status { porcelain: bool }, // Add the Status command with porcelain option
-    Validate,
     Unknown { name: String },
 }
 
@@ -12,3 +11,4 @@ pub enum Command {
 pub struct CliArgs {
     pub command: Command,
 }
+

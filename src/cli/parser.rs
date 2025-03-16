@@ -59,9 +59,6 @@ impl CliParser {
                     },
                 }
             },
-            "validate" => CliArgs {
-                command: Command::Validate,
-            },
             _ => CliArgs {
                 command: Command::Unknown { name: command },
             },

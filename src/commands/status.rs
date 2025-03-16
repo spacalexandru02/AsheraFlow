@@ -165,93 +165,49 @@ impl StatusCommand {
               .or_insert_with(HashSet::new)
               .insert(change_type);
     }
-    
-    /// Încarcă tree-ul din HEAD commit
-    fn load_head_tree(
-        refs: &Refs, 
-        database: &mut Database
-    ) -> Result<HashMap<String, DatabaseEntry>, Error> {
-        let mut head_tree = HashMap::new();
-        
-        // ADAUGĂ ACEST COD DE DEBUGGING
-        println!("Încărcare HEAD tree");
-        // SFÂRȘITUL CODULUI DE DEBUGGING
-        
-        // Citește HEAD
-        if let Some(head_oid) = refs.read_head()? {
-            // ADAUGĂ ACEST COD DE DEBUGGING
-            println!("HEAD OID: {}", head_oid);
-            // SFÂRȘITUL CODULUI DE DEBUGGING
-            
-            // Încarcă commit-ul din HEAD
-            let commit_obj = database.load(&head_oid)?;
-            let commit = commit_obj.as_any().downcast_ref::<Commit>().unwrap();
-            
-            // ADAUGĂ ACEST COD DE DEBUGGING
-            println!("Commit tree OID: {}", commit.get_tree());
-            // SFÂRȘITUL CODULUI DE DEBUGGING
-            
-            // Citește tree-ul recursiv
-            Self::read_tree(database, commit.get_tree(), Path::new(""), &mut head_tree)?;
-        } else {
-            // ADAUGĂ ACEST COD DE DEBUGGING
-            println!("Nu s-a găsit HEAD, tree gol");
-            // SFÂRȘITUL CODULUI DE DEBUGGING
-        }
-        
-        // ADAUGĂ ACEST COD DE DEBUGGING
-        println!("Entries în HEAD tree: {}", head_tree.len());
-        for (path, entry) in &head_tree {
-            println!("  {} -> {}", path, entry.get_oid());
-        }
-        // SFÂRȘITUL CODULUI DE DEBUGGING
-        
-        Ok(head_tree)
-    }
-    
-    /// Citește recursiv un tree și adaugă intrările la head_tree
-    fn read_tree(
+
+    fn read_tree_entries(
         database: &mut Database,
         tree_oid: &str,
-        prefix: &Path,
+        prefix: &str,
         head_tree: &mut HashMap<String, DatabaseEntry>
     ) -> Result<(), Error> {
-        // Încarcă tree-ul din baza de date
         let tree_obj = database.load(tree_oid)?;
         let tree = tree_obj.as_any().downcast_ref::<Tree>().unwrap();
         
-        // Procesează toate intrările
         for (name, entry) in tree.get_entries() {
-            let path = if prefix.as_os_str().is_empty() {
-                PathBuf::from(name)
+            let full_path = if prefix.is_empty() {
+                name.clone()
             } else {
-                prefix.join(name)
+                format!("{}/{}", prefix, name)
             };
             
             match entry {
                 TreeEntry::Tree(subtree) => {
                     if let Some(oid) = subtree.get_oid() {
-                        // În loc să doar adăugăm recursiv, adăugăm și o intrare pentru directorul însuși
-                        let dir_path = path.to_string_lossy().to_string();
-                        let db_entry = DatabaseEntry::new(
-                            dir_path.clone(), // Aici folosim clone pentru a evita eroarea
-                            oid.clone(),
-                            &TREE_MODE.to_string(), // Folosește modul pentru directoare
+                        // Add entry for this subdirectory
+                        head_tree.insert(
+                            full_path.clone(),
+                            DatabaseEntry::new(
+                                full_path.clone(),
+                                oid.clone(),
+                                &TREE_MODE.to_string()
+                            )
                         );
-                        head_tree.insert(dir_path, db_entry);
                         
-                        // Acum procesează recursiv
-                        Self::read_tree(database, oid, &path, head_tree)?;
+                        // Process its children recursively
+                        Self::read_tree_entries(database, oid, &full_path, head_tree)?;
                     }
                 },
                 TreeEntry::Blob(oid, mode) => {
-                    // Codul existent pentru blob-uri
-                    let db_entry = DatabaseEntry::new(
-                        path.to_string_lossy().to_string(),
-                        oid.clone(),
-                        &mode.to_string(),
+                    head_tree.insert(
+                        full_path.clone(),
+                        DatabaseEntry::new(
+                            full_path,
+                            oid.clone(),
+                            &mode.to_string()
+                        )
                     );
-                    head_tree.insert(path.to_string_lossy().to_string(), db_entry);
                 }
             }
         }
@@ -259,6 +215,132 @@ impl StatusCommand {
         Ok(())
     }
     
+    /// Încarcă tree-ul din HEAD commit
+fn load_head_tree(
+    refs: &Refs, 
+    database: &mut Database
+) -> Result<HashMap<String, DatabaseEntry>, Error> {
+    let mut head_tree = HashMap::new();
+    
+    println!("Încărcare HEAD tree");
+    
+    // Citește HEAD
+    if let Some(head_oid) = refs.read_head()? {
+        println!("HEAD OID: {}", head_oid);
+        
+        // Încarcă commit-ul din HEAD
+        let commit_obj = database.load(&head_oid)?;
+        let commit = match commit_obj.as_any().downcast_ref::<Commit>() {
+            Some(c) => c,
+            None => return Err(Error::Generic("Object is not a commit".to_string())),
+        };
+        
+        println!("Commit tree OID: {}", commit.get_tree());
+        
+        // Citește tree-ul recursiv
+        Self::read_tree(database, commit.get_tree(), &PathBuf::new(), &mut head_tree)?;
+        
+        println!("Entries în HEAD tree: {}", head_tree.len());
+        for (path, entry) in &head_tree {
+            println!("  {} -> {}", path, entry.get_oid());
+        }
+    } else {
+        println!("Nu s-a găsit HEAD, tree gol");
+    }
+    
+    Ok(head_tree)
+}
+
+/// Citește recursiv un tree și adaugă intrările la head_tree
+/// Citește recursiv un tree și adaugă intrările la head_tree
+    /// Citește recursiv un tree și adaugă intrările la head_tree
+    fn read_tree(
+        database: &mut Database,
+        tree_oid: &str,
+        prefix: &Path,
+        head_tree: &mut HashMap<String, DatabaseEntry>
+    ) -> Result<(), Error> {
+        println!("Reading tree: {} at prefix: {}", tree_oid, prefix.display());
+        
+        // Încarcă tree-ul din baza de date
+        let tree_obj = match database.load(tree_oid) {
+            Ok(obj) => obj,
+            Err(e) => {
+                println!("Failed to load tree object {}: {}", tree_oid, e);
+                return Err(e);
+            }
+        };
+        
+        let tree = match tree_obj.as_any().downcast_ref::<Tree>() {
+            Some(t) => t,
+            None => {
+                println!("Object {} is not a tree", tree_oid);
+                return Err(Error::Generic(format!("Object {} is not a tree", tree_oid)));
+            }
+        };
+        
+        println!("Tree {} contains {} entries:", tree_oid, tree.get_entries().len());
+        
+        // Adaugă intrarea pentru directorul curent dacă nu e root
+        if !prefix.as_os_str().is_empty() {
+            let dir_path = prefix.to_string_lossy().to_string();
+            head_tree.insert(
+                dir_path.clone(),
+                DatabaseEntry::new(
+                    dir_path,
+                    tree_oid.to_string(),
+                    &TREE_MODE.to_string()
+                )
+            );
+        }
+        
+        // Procesează toate intrările
+        for (name, entry) in tree.get_entries() {
+            match entry {
+                TreeEntry::Blob(oid, mode) => {
+                    println!("  {} (blob, mode {}) -> {}", name, mode, oid);
+                    
+                    // Crează calea completă pentru acest fișier
+                    let file_path = if prefix.as_os_str().is_empty() {
+                        PathBuf::from(name)
+                    } else {
+                        prefix.join(name)
+                    };
+                    
+                    let file_path_str = file_path.to_string_lossy().to_string();
+                    
+                    // Adaugă fișierul în head_tree
+                    head_tree.insert(
+                        file_path_str.clone(),
+                        DatabaseEntry::new(
+                            file_path_str,
+                            oid.clone(),
+                            &mode.to_string()
+                        )
+                    );
+                    
+                    println!("Added file entry: {} -> {}", file_path.display(), oid);
+                },
+                TreeEntry::Tree(subtree) => {
+                    if let Some(oid) = subtree.get_oid() {
+                        println!("  {} (tree) -> {}", name, oid);
+                        
+                        // Crează calea pentru acest subdirector
+                        let dir_path = if prefix.as_os_str().is_empty() {
+                            PathBuf::from(name)
+                        } else {
+                            prefix.join(name)
+                        };
+                        
+                        // Continuă recursiv cu subdirectorul
+                        Self::read_tree(database, oid, &dir_path, head_tree)?;
+                    }
+                }
+            }
+        }
+        
+        Ok(())
+    }
     /// Verifică index-ul în raport cu HEAD tree
     // În funcția check_index_against_head_tree sau echivalent
     // În funcția check_index_against_head_tree sau echivalent
@@ -320,16 +402,82 @@ impl StatusCommand {
         }
     }
     /// Verifică HEAD tree în raport cu index
+    fn is_parent_of_tracked_files(path: &str, index: &Index) -> bool {
+        // Ensure path ends with a slash for proper prefix matching
+        let normalized_path = if path.ends_with('/') {
+            path.to_string()
+        } else {
+            format!("{}/", path)
+        };
+        
+        // Check if any file in the index has this path as a prefix
+        index.entries.keys().any(|file_path| file_path.starts_with(&normalized_path))
+    }
+    
+    /// Helper method to check if a path is within a deleted directory
+    fn is_within_deleted_dir(path: &str, deleted_dirs: &HashSet<String>) -> bool {
+        for dir in deleted_dirs {
+            let dir_prefix = if dir.ends_with('/') {
+                dir.clone()
+            } else {
+                format!("{}/", dir)
+            };
+            
+            if path.starts_with(&dir_prefix) {
+                return true;
+            }
+        }
+        
+        false
+    }
+    
+    /// Improved version of check_head_tree_against_index
     fn check_head_tree_against_index(
         head_tree: &HashMap<String, DatabaseEntry>,
         index: &Index,
         changed: &mut HashSet<String>,
         changes: &mut HashMap<String, HashSet<ChangeType>>
     ) {
+        // First pass: identify directories in head_tree
+        let mut directories = HashSet::new();
+        
         for (path, head_entry) in head_tree {
-            // Verifică dacă fișierul există în index
+            // Check if the entry is a directory based on its mode
+            let entry_mode = head_entry.get_mode().trim().parse::<u32>().unwrap_or(0);
+            if FileMode::is_directory(entry_mode) {
+                directories.insert(path.clone());
+            }
+        }
+        
+        // Second pass: mark entries as deleted if needed
+        for (path, head_entry) in head_tree {
+            // Skip directories that contain tracked files
+            if directories.contains(path) && Self::is_parent_of_tracked_files(path, index) {
+                println!("Directory {} contains tracked files, not marking as deleted", path);
+                continue;
+            }
+            
+            // If the path doesn't exist in the index, mark it as deleted
             if !index.tracked(path) {
-                // Fișierul a fost în HEAD dar nu mai este în index
+                // For directories, do a more thorough check
+                if directories.contains(path) {
+                    // If directory contents are individually tracked, don't mark as deleted
+                    let normalized_path = if path.ends_with('/') {
+                        path.clone()
+                    } else {
+                        format!("{}/", path)
+                    };
+                    
+                    let has_tracked_children = index.entries.keys().any(|k| 
+                        k.starts_with(&normalized_path)
+                    );
+                    
+                    if has_tracked_children {
+                        println!("Directory {} has tracked children, not marking as deleted", path);
+                        continue;
+                    }
+                }
+                
                 Self::record_change(changed, changes, path.clone(), ChangeType::IndexDeleted);
             }
         }
@@ -370,6 +518,23 @@ impl StatusCommand {
         let mut changed = HashSet::new();      // Fișiere cu orice tip de modificare
         let mut changes = HashMap::new();      // Map de path -> set de tipuri de modificări
         let mut stats_cache = HashMap::new();  // Cache pentru metadata fișierelor
+        
+        // Track directories that need special handling
+        let mut tracked_directories = HashSet::new();
+        
+        // Process index entries to collect parent directories
+        for path in index.entries.keys() {
+            let path_buf = PathBuf::from(path);
+            let mut current = path_buf.clone();
+            
+            while let Some(parent) = current.parent() {
+                if parent.as_os_str().is_empty() {
+                    break;
+                }
+                tracked_directories.insert(parent.to_string_lossy().to_string());
+                current = parent.to_path_buf();
+            }
+        }
         
         // Verifică pentru fișiere neurmărite prin scanarea workspace-ului
         let mut tracked_dirs = HashSet::new();
@@ -496,6 +661,24 @@ impl StatusCommand {
             }
         }
         
+        // Post-process changes to remove directory entries that just represent structural changes
+        let mut dirs_to_remove = Vec::new();
+        
+        for (path, change_types) in &changes {
+            if change_types.contains(&ChangeType::IndexDeleted) {
+                // Check if this is a directory with individual files now tracked
+                if Self::is_parent_of_tracked_files(path, &index) {
+                    dirs_to_remove.push(path.clone());
+                }
+            }
+        }
+        
+        // Remove the directories that are just structure changes
+        for dir in &dirs_to_remove {
+            changes.remove(dir);
+            changed.remove(dir);
+        }
+        
         // Scrie eventualele actualizări de timestamp în index
         if index.is_changed() {
             index.write_updates()?;
@@ -520,7 +703,7 @@ impl StatusCommand {
         
         Ok(())
     }
-    
+
     fn scan_workspace(
         workspace: &Workspace,
         untracked: &mut HashSet<String>,
