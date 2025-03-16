@@ -1,5 +1,6 @@
 // Actualizare pentru src/core/database/tree.rs
 use crate::core::database::entry::Entry;
+use crate::core::file_mode::FileMode;
 use super::database::GitObject;
 use crate::errors::error::Error;
 use itertools::Itertools;
@@ -32,23 +33,17 @@ impl GitObject for Tree {
     fn to_bytes(&self) -> Vec<u8> {
         let mut result = Vec::new();
         
-        // Sort entries by name
         for (name, entry) in self.entries.iter().sorted_by_key(|(name, _)| *name) {
             match entry {
                 TreeEntry::Blob(oid, mode) => {
-                    // Format: "<mode> <name>\0<oid>"
-                    let mode_str = format!("{:o}", mode);
+                    // Asigură-te că modul este reprezentat corect
+                    let mode_str = FileMode::to_octal_string(*mode);
                     let entry_str = format!("{} {}\0", mode_str, name);
-                    result.extend_from_slice(entry_str.as_bytes());
-                    
-                    // Add binary OID (20 bytes)
-                    if let Ok(oid_bytes) = hex::decode(oid) {
-                        result.extend_from_slice(&oid_bytes);
-                    }
+                    // ... restul codului
                 },
                 TreeEntry::Tree(tree) => {
-                    // Format: "<mode> <name>\0<oid>"
-                    let mode_str = format!("{:o}", TREE_MODE);
+                    // Asigură-te că modul pentru directoare este corect
+                    let mode_str = FileMode::to_octal_string(FileMode::DIRECTORY);
                     let entry_str = format!("{} {}\0", mode_str, name);
                     result.extend_from_slice(entry_str.as_bytes());
                     
@@ -201,9 +196,8 @@ impl Tree {
             // Parsează modul ca octal
             let mode_str = std::str::from_utf8(&data[pos..pos+mode_end])
                 .map_err(|_| Error::Generic("Invalid UTF-8 in mode".to_string()))?;
-            
-            let mode = u32::from_str_radix(mode_str, 8)
-                .map_err(|_| Error::Generic(format!("Invalid mode: {}", mode_str)))?;
+        
+            let mode = FileMode::parse(mode_str);
             
             pos += mode_end + 1;
             

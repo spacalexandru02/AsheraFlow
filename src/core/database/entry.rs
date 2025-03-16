@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use crate::core::file_mode::FileMode;
+
 #[derive(Debug, Clone)]
 pub struct Entry {
     pub name: String,
@@ -9,10 +11,14 @@ pub struct Entry {
 
 impl Entry {
     pub fn new(name: String, oid: String, mode: &str) -> Self {
+        // Standardizează modul la format octal
+        let parsed_mode = FileMode::parse(mode);
+        let standard_mode = FileMode::to_octal_string(parsed_mode);
+        
         Entry {
             name,
             oid,
-            mode: mode.to_string(),
+            mode: standard_mode,
         }
     }
 
