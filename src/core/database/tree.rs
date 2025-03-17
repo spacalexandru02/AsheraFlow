@@ -1,6 +1,6 @@
 use crate::core::database::database::Database;
 // Actualizare pentru src/core/database/tree.rs
-use crate::core::database::entry::Entry;
+use crate::core::database::entry::DatabaseEntry;
 use crate::core::file_mode::FileMode;
 use super::database::GitObject;
 use crate::errors::error::Error;
@@ -123,7 +123,7 @@ impl Tree {
     
     pub fn build<'a, I>(entries: I) -> Result<Self, Error>
     where
-        I: Iterator<Item = &'a Entry>,
+        I: Iterator<Item = &'a DatabaseEntry>,
     {
         let mut root = Tree::new();
         
@@ -222,7 +222,7 @@ impl Tree {
         
         Ok(root)
 }
-    pub fn add_entry(&mut self, entry: &Entry) -> Result<(), Error> {
+    pub fn add_entry(&mut self, entry: &DatabaseEntry) -> Result<(), Error> {
         let parent_dirs = entry.parent_directories();
         let basename = entry.basename();
         
@@ -279,55 +279,89 @@ impl Tree {
     
     // În tree.rs:
     pub fn traverse<F>(&mut self, mut func: F) -> Result<(), Error>
-    where
-        F: FnMut(&mut Tree) -> Result<(), Error>
-    {
-        // Process subtrees first (bottom-up)
-        let mut names_to_process = Vec::new();
-        
-        // Collect names of all tree entries
-        for (name, _) in &self.entries {
-            names_to_process.push(name.clone());
-        }
-        
-        // Process each entry
-        for name in names_to_process {
-            if let Some(TreeEntry::Tree(subtree)) = self.entries.get_mut(&name) {
-                println!("Traversing subtree: {}", name);
-                // Process subtree recursively - using traverse_internal
-                subtree.traverse_internal(&mut func)?;
+where
+    F: FnMut(&mut Tree) -> Result<(), Error>
+{
+    // Process subtrees first (bottom-up)
+    let mut names_to_process = Vec::new();
+    
+    // Collect names of all tree entries
+    for (name, _) in &self.entries {
+        names_to_process.push(name.clone());
+    }
+    
+    // Process each entry
+    for name in names_to_process {
+        if let Some(TreeEntry::Tree(subtree)) = self.entries.get_mut(&name) {
+            println!("Traversing subtree: {}", name);
+            // Process subtree recursively - using traverse_internal
+            subtree.traverse_internal(&mut func)?;
+            
+            // Verify subtree has OID set after traversal
+            if subtree.oid.is_none() {
+                println!("Warning: Subtree {} has no OID after traversal", name);
+            } else {
+                println!("Subtree {} has OID {} after traversal", name, subtree.oid.as_ref().unwrap());
             }
         }
-        
-        // Finally, process this tree
-        println!("Processing tree with {} entries", self.entries.len());
-        func(self)
     }
+    
+    // Finally, process this tree
+    println!("Processing tree with {} entries", self.entries.len());
+    func(self)?;
+    
+    // Verify this tree has OID set
+    if self.oid.is_none() {
+        println!("Warning: Tree has no OID after processing");
+    } else {
+        println!("Tree has OID {} after processing", self.oid.as_ref().unwrap());
+    }
+    
+    Ok(())
+}
 
-    fn traverse_internal<F>(&mut self, func: &mut F) -> Result<(), Error>
-    where
-        F: FnMut(&mut Tree) -> Result<(), Error>
-    {
-        // Process subtrees first (bottom-up)
-        let mut names_to_process = Vec::new();
-        
-        // Collect names of all tree entries
-        for (name, _) in &self.entries {
-            names_to_process.push(name.clone());
-        }
-        
-        // Process each entry
-        for name in names_to_process {
-            if let Some(TreeEntry::Tree(subtree)) = self.entries.get_mut(&name) {
-                // Process subtree recursively
-                subtree.traverse_internal(func)?;
+fn traverse_internal<F>(&mut self, func: &mut F) -> Result<(), Error>
+where
+    F: FnMut(&mut Tree) -> Result<(), Error>
+{
+    // Process subtrees first (bottom-up)
+    let mut names_to_process = Vec::new();
+    
+    // Collect names of all tree entries
+    for (name, _) in &self.entries {
+        names_to_process.push(name.clone());
+    }
+    
+    // Process each entry
+    for name in names_to_process {
+        if let Some(TreeEntry::Tree(subtree)) = self.entries.get_mut(&name) {
+            println!("Traversing internal subtree: {}", name);
+            // Process subtree recursively
+            subtree.traverse_internal(func)?;
+            
+            // Verify subtree has OID set after traversal
+            if subtree.oid.is_none() {
+                println!("Warning: Internal subtree {} has no OID after traversal", name);
+            } else {
+                println!("Internal subtree {} has OID {} after traversal", 
+                         name, subtree.oid.as_ref().unwrap());
             }
         }
-        
-        // Finally, process this tree
-        func(self)
     }
-
+    
+    // Finally, process this tree
+    println!("Processing internal tree with {} entries", self.entries.len());
+    let result = func(self);
+    
+    // Verify OID is set after processing
+    if self.oid.is_none() {
+        println!("Warning: Internal tree has no OID after processing");
+    } else {
+        println!("Internal tree has OID {} after processing", self.oid.as_ref().unwrap());
+    }
+    
+    result
+}
 
     pub fn get_oid(&self) -> Option<&String> {
         self.oid.as_ref()
@@ -370,15 +404,15 @@ impl Tree {
                     let oid = hex::encode(&data[pos..pos+20]);
                     pos += 20;
                     
-                    // Add entry to tree based on mode and type
+                    // MODIFICAREA CRUCIALĂ - verifică modul pentru a determina tipul intrării
                     if mode == TREE_MODE || FileMode::is_directory(mode) {
-                        // This is a directory entry - create a subtree
+                        // Aceasta este o intrare de director
                         println!("Tree parse: Found directory entry: {} -> {} (mode {})", name, oid, mode);
                         let mut subtree = Tree::new();
                         subtree.set_oid(oid);
                         tree.entries.insert(name.to_string(), TreeEntry::Tree(Box::new(subtree)));
                     } else {
-                        // This is a regular file
+                        // Aceasta este o intrare normală de fișier
                         println!("Tree parse: Found file entry: {} -> {} (mode {})", name, oid, mode);
                         tree.entries.insert(name.to_string(), TreeEntry::Blob(oid, mode));
                     }
@@ -392,7 +426,7 @@ impl Tree {
         
         Ok(tree)
     }
-
+     
     pub fn insert_entry(&mut self, name: String, entry: TreeEntry) {
         self.entries.insert(name, entry);
     }
@@ -435,138 +469,7 @@ impl Tree {
             }
         }
     }
-
-    /// Recursively traverse the tree structure
-    fn traverse_tree_structure(
-        database: &mut Database,
-        oid: &str,
-        prefix: PathBuf,
-        head_tree: &mut HashMap<String, Entry>
-    ) -> Result<(), Error> {
-        println!("Traversing tree object: {} at path: {}", oid, prefix.display());
-        
-        // Load the object
-        let obj = database.load(oid)?;
-        
-        println!("Loaded object type: {}", obj.get_type());
-        
-        // Process as tree
-        if let Some(tree) = obj.as_any().downcast_ref::<Tree>() {
-            println!("Processing tree with {} entries", tree.get_entries().len());
-            
-            // Process each entry in the tree
-            for (name, entry) in tree.get_entries() {
-                let path = if prefix.as_os_str().is_empty() {
-                    PathBuf::from(name)
-                } else {
-                    prefix.join(name)
-                };
-                
-                let path_str = path.to_string_lossy().to_string();
-                
-                match entry {
-                    TreeEntry::Blob(entry_oid, mode) => {
-                        println!("Found blob: {} -> {} (mode {})", path_str, entry_oid, mode);
-                        
-                        // Add regular file to head_tree
-                        head_tree.insert(
-                            path_str.clone(),
-                            Entry::new(
-                                path_str,
-                                entry_oid.clone(),
-                                &mode.to_string()
-                            )
-                        );
-                    },
-                    TreeEntry::Tree(subtree) => {
-                        if let Some(subtree_oid) = subtree.get_oid() {
-                            println!("Found subtree: {} -> {}", path_str, subtree_oid);
-                            
-                            // Add directory entry to head_tree
-                            head_tree.insert(
-                                path_str.clone(),
-                                Entry::new(
-                                    path_str.clone(),
-                                    subtree_oid.clone(),
-                                    &TREE_MODE.to_string()
-                                )
-                            );
-                            
-                            // Recursively process this subtree
-                            Self::traverse_tree_structure(database, subtree_oid, path, head_tree)?;
-                        } else {
-                            println!("Warning: Tree entry without OID at {}", path_str);
-                        }
-                    }
-                }
-            }
-            
-            return Ok(());
-        }
-        
-        // If we reach here, object is not a tree - check if it's a blob that might be a tree
-        println!("Object {} is not a tree, checking if it's a blob containing a tree", oid);
-        
-        if obj.get_type() == "blob" {
-            let blob_data = obj.to_bytes();
-            match Tree::parse(&blob_data) {
-                Ok(tree) => {
-                    println!("Successfully parsed blob as tree with {} entries", tree.get_entries().len());
-                    
-                    // Process each entry
-                    for (name, entry) in tree.get_entries() {
-                        let path = if prefix.as_os_str().is_empty() {
-                            PathBuf::from(name)
-                        } else {
-                            prefix.join(name)
-                        };
-                        
-                        let path_str = path.to_string_lossy().to_string();
-                        
-                        match entry {
-                            TreeEntry::Blob(entry_oid, mode) => {
-                                println!("Found blob in parsed tree: {} -> {}", path_str, entry_oid);
-                                
-                                head_tree.insert(
-                                    path_str.clone(),
-                                    Entry::new(
-                                        path_str,
-                                        entry_oid.clone(),
-                                        &mode.to_string()
-                                    )
-                                );
-                            },
-                            TreeEntry::Tree(subtree) => {
-                                if let Some(subtree_oid) = subtree.get_oid() {
-                                    println!("Found subtree in parsed tree: {} -> {}", path_str, subtree_oid);
-                                    
-                                    head_tree.insert(
-                                        path_str.clone(),
-                                        Entry::new(
-                                            path_str.clone(),
-                                            subtree_oid.clone(),
-                                            &TREE_MODE.to_string()
-                                        )
-                                    );
-                                    
-                                    // Recursively process
-                                    Self::traverse_tree_structure(database, subtree_oid, path, head_tree)?;
-                                }
-                            }
-                        }
-                    }
-                },
-                Err(e) => {
-                    println!("Failed to parse blob as tree: {}", e);
-                }
-            }
-        } else {
-            println!("Object {} is neither a tree nor a blob", oid);
-        }
-        
-        Ok(())
-    }
-
+    
     pub fn inspect_tree_structure(database: &mut Database, tree_oid: &str, depth: usize) -> Result<(), Error> {
         let indent = "  ".repeat(depth);
         println!("{}Inspecting tree: {}", indent, tree_oid);

@@ -1,12 +1,9 @@
 // src/core/index/entry.rs
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::core::file_mode::FileMode;
-
-const REGULAR_MODE: u32 = 0o100644;
-const EXECUTABLE_MODE: u32 = 0o100755; 
 const MAX_PATH_SIZE: u16 = 0xfff;
 
 #[derive(Debug, Clone)]
@@ -184,30 +181,6 @@ impl Entry {
         
         result
     }
-
-    pub fn parent_directories(&self) -> Vec<PathBuf> {
-        let path = PathBuf::from(&self.path);
-        let mut dirs = Vec::new();
-        
-        let mut current = path.clone();
-        while let Some(parent) = current.parent() {
-            if !parent.as_os_str().is_empty() {
-                dirs.push(parent.to_path_buf());
-            }
-            current = parent.to_path_buf();
-        }
-        
-        // Reverse to get them in ascending order
-        dirs.reverse();
-        dirs
-    }
-
-    pub fn basename(&self) -> String {
-        let path = PathBuf::from(&self.path);
-        path.file_name()
-            .map(|name| name.to_string_lossy().to_string())
-            .unwrap_or_default()
-    }  
     
     pub fn parse(data: &[u8]) -> Result<Self, crate::errors::error::Error> {
         if data.len() < 62 {  // Minimum size without path
@@ -262,39 +235,6 @@ impl Entry {
             flags,
             path,
         })
-    }
-
-    pub fn stat_match(&self, stat: &std::fs::Metadata) -> bool {
-        // Convert numeric mode to string for parsing
-        let entry_mode_str = FileMode::to_octal_string(self.mode);
-        let entry_mode = FileMode::parse(&entry_mode_str);
-        let file_mode = FileMode::from_metadata(stat);
-        
-        FileMode::are_equivalent(entry_mode, file_mode) && 
-            (self.get_size() == 0 || self.get_size() as u64 == stat.len())
-    }
-    
-    // Check if timestamps match the entry
-    pub fn times_match(&self, stat: &std::fs::Metadata) -> bool {
-        // Convert filesystem times to seconds and nanoseconds
-        let mtime_sec = stat.modified()
-            .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as u32)
-            .unwrap_or(0);
-        
-        let mtime_nsec = stat.modified()
-            .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().subsec_nanos())
-            .unwrap_or(0);
-        
-        let ctime_sec = stat.created()
-            .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as u32)
-            .unwrap_or(0);
-        
-        let ctime_nsec = stat.created()
-            .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().subsec_nanos())
-            .unwrap_or(0);
-        
-        self.get_ctime() == ctime_sec && self.get_ctime_nsec() == ctime_nsec &&
-        self.get_mtime() == mtime_sec && self.get_mtime_nsec() == mtime_nsec
     }
     
     // Update stat information for an entry

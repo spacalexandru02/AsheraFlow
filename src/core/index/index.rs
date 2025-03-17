@@ -16,7 +16,7 @@ const HEADER_SIZE: usize = 12;
 pub struct Index {
     pathname: PathBuf,
     pub entries: HashMap<String, Entry>,
-    keys: BTreeSet<String>,
+    pub keys: BTreeSet<String>,
     lockfile: Lockfile,
     pub changed: bool,
 }
@@ -420,5 +420,14 @@ impl Index {
     // Metoda helper pentru a verifica dacă un fișier este indexat
     pub fn tracked(&self, path: &str) -> bool {
         self.entries.contains_key(path)
+    }
+    pub fn remove_entry(&mut self, path: &str) -> Result<(), Error> {
+        if self.entries.remove(path).is_some() {
+            self.keys.remove(path);
+            self.changed = true;
+            Ok(())
+        } else {
+            Err(Error::Generic(format!("Entry not found for path: {}", path)))
+        }
     }
 }

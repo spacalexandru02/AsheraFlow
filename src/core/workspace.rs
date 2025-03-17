@@ -1,6 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use regex::Regex;
 use crate::errors::error::Error;
 
@@ -47,74 +47,147 @@ impl Workspace {
     }
 
     // List files starting from a specific path (for add command)
-    pub fn list_files_from(&self, start_path: &Path) -> Result<Vec<PathBuf>, Error> {
-        let ignore_patterns = self.load_ignore_patterns();
-        let mut files = Vec::new();
+    pub fn list_files_from(&self, start_path: &Path, index_entries: &HashMap<String, String>) -> Result<(Vec<PathBuf>, Vec<String>), Error> {
+        let mut files_found = Vec::new();
+        let mut files_missing = Vec::new();
         
-        // Convert to absolute path if it's not already
+        // Convertim la calea absolută dacă nu este deja
         let abs_start_path = if start_path.is_absolute() {
             start_path.to_path_buf()
         } else {
             self.root_path.join(start_path)
         };
         
-        // Check if path exists
+        // Verifică dacă calea există
         if !abs_start_path.exists() {
             return Err(Error::InvalidPath(format!(
                 "Path '{}' does not exist", abs_start_path.display()
             )));
         }
         
-        if abs_start_path.is_dir() {
-            // For directories, we need to recursively list files
-            match fs::read_dir(&abs_start_path) {
-                Ok(entries) => {
-                    for entry_result in entries {
-                        match entry_result {
-                            Ok(entry) => {
-                                let entry_path = entry.path();
-                                
-                                if entry_path.is_dir() {
-                                    // Recursively process subdirectories
-                                    match self.list_files_from(&entry_path) {
-                                        Ok(sub_files) => files.extend(sub_files),
-                                        Err(Error::InvalidPath(_)) => continue, // Skip invalid subdirectories
-                                        Err(e) => return Err(e),
-                                    }
-                                } else {
-                                    // For files, check if they should be ignored
-                                    if let Ok(rel_path) = entry_path.strip_prefix(&self.root_path) {
-                                        let rel_path_str = rel_path.to_string_lossy().to_string();
-                                        if !self.matches_any_pattern(&rel_path_str, &ignore_patterns) {
-                                            files.push(rel_path.to_path_buf());
-                                        }
-                                    }
-                                }
-                            },
-                            Err(e) => return Err(Error::IO(e)),
-                        }
-                    }
-                },
-                Err(e) => {
-                    if e.kind() == std::io::ErrorKind::PermissionDenied {
-                        return Err(Error::Generic(format!(
-                            "open('{}'): Permission denied", abs_start_path.display()
-                        )));
-                    }
-                    return Err(Error::IO(e));
-                }
-            }
+        // Colectează toate fișierele indexate care ar trebui să fie sub această cale
+        let rel_start_path = if abs_start_path == self.root_path {
+            PathBuf::new()
         } else {
-            // For individual files, add them directly if they're not ignored
-            if let Ok(rel_path) = abs_start_path.strip_prefix(&self.root_path) {
-                let rel_path_str = rel_path.to_string_lossy().to_string();
-                if !self.matches_any_pattern(&rel_path_str, &ignore_patterns) {
-                    files.push(rel_path.to_path_buf());
-                }
+            match abs_start_path.strip_prefix(&self.root_path) {
+                Ok(rel) => rel.to_path_buf(),
+                Err(_) => return Err(Error::InvalidPath(format!(
+                    "Cannot make '{}' relative to repository root", abs_start_path.display()
+                )))
+            }
+        };
+        
+        let path_prefix = rel_start_path.to_string_lossy().to_string();
+        let mut expected_files = HashSet::new();
+        
+        // Colectează toate fișierele din index care încep cu acest prefix
+        for index_path in index_entries.keys() {
+            if index_path == &path_prefix || (path_prefix.is_empty() || index_path.starts_with(&format!("{}/", path_prefix))) {
+                expected_files.insert(index_path.clone());
             }
         }
         
-        Ok(files)
+        // Dacă este un director, procesează-l recursiv
+        if abs_start_path.is_dir() {
+            // Încarcă modelele de ignorare
+            let ignore_patterns = self.load_ignore_patterns();
+            
+            // Procesează recursiv directorul pentru a găsi fișierele
+            let process_result = self.process_directory(
+                &abs_start_path, 
+                &rel_start_path, 
+                &ignore_patterns, 
+                &mut files_found,
+                &mut expected_files
+            );
+            
+            if let Err(e) = process_result {
+                return Err(e);
+            }
+            
+            // Orice fișier rămas în expected_files nu a fost găsit pe disc, deci a fost șters
+            for missing_path in expected_files {
+                files_missing.push(missing_path);
+            }
+        } else {
+            // Pentru fișiere individuale, adaugă-le direct dacă nu sunt ignorate
+            let rel_path_str = rel_start_path.to_string_lossy().to_string();
+            let ignore_patterns = self.load_ignore_patterns();
+            
+            if !self.matches_any_pattern(&rel_path_str, &ignore_patterns) {
+                files_found.push(rel_start_path);
+            }
+            
+            // Elimină din fișierele așteptate
+            expected_files.remove(&rel_path_str);
+        }
+        
+        Ok((files_found, files_missing))
+    }
+    
+    // Helper pentru procesarea recursivă a directoarelor
+    fn process_directory(
+        &self,
+        abs_path: &Path,
+        rel_path: &Path,
+        ignore_patterns: &HashSet<String>,
+        files: &mut Vec<PathBuf>,
+        expected_files: &mut HashSet<String>
+    ) -> Result<(), Error> {
+        match fs::read_dir(abs_path) {
+            Ok(entries) => {
+                for entry_result in entries {
+                    match entry_result {
+                        Ok(entry) => {
+                            let entry_path = entry.path();
+                            
+                            // Obține calea relativă
+                            let entry_rel_path = if rel_path.as_os_str().is_empty() {
+                                PathBuf::from(entry.file_name())
+                            } else {
+                                rel_path.join(entry.file_name())
+                            };
+                            
+                            // Convertă la string pentru verificarea ignorării
+                            let rel_path_str = entry_rel_path.to_string_lossy().to_string();
+                            
+                            // Verifică dacă această cale trebuie ignorată
+                            if self.matches_any_pattern(&rel_path_str, ignore_patterns) {
+                                continue;
+                            }
+                            
+                            if entry_path.is_dir() {
+                                // Procesează recursiv subdirectoarele
+                                self.process_directory(
+                                    &entry_path, 
+                                    &entry_rel_path, 
+                                    ignore_patterns, 
+                                    files,
+                                    expected_files
+                                )?;
+                            } else {
+                                // Adaugă fișierul la lista găsită
+                                files.push(entry_rel_path.clone());
+                                
+                                // Marchează fișierul ca fiind găsit
+                                expected_files.remove(&rel_path_str);
+                            }
+                        },
+                        Err(e) => return Err(Error::IO(e)),
+                    }
+                }
+                Ok(())
+            },
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    Err(Error::Generic(format!(
+                        "open('{}'): Permission denied", abs_path.display()
+                    )))
+                } else {
+                    Err(Error::IO(e))
+                }
+            }
+        }
     }
 
     fn list_files_recursive(

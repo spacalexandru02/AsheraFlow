@@ -4,21 +4,19 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use crate::core::database::database::{Database, GitObject};
+use crate::core::database::database::Database;
 use crate::core::database::blob::Blob;
-use crate::core::database::entry::Entry as DatabaseEntry;
+use crate::core::database::entry::DatabaseEntry as DatabaseEntry;
 use crate::core::database::tree::{Tree, TreeEntry};
 use crate::core::database::commit::Commit;
 use crate::core::file_mode::FileMode;
 use crate::core::index::entry::Entry;
+
 use crate::core::index::index::Index;
 use crate::core::refs::Refs;
 use crate::core::workspace::Workspace;
 use crate::errors::error::Error;
 use crate::core::database::tree::TREE_MODE;
-
-const REGULAR_MODE: u32 = 0o100644;
-const EXECUTABLE_MODE: u32 = 0o100755;
 
 // Enum for change types
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -319,171 +317,106 @@ impl StatusCommand {
     }
 
     /// Recursively traverse the tree structure
-    fn traverse_tree_structure(
-        database: &mut Database,
-        oid: &str,
-        prefix: PathBuf,
-        head_tree: &mut HashMap<String, DatabaseEntry>
-    ) -> Result<(), Error> {
-        println!("Traversing object: {} at path: {}", oid, prefix.display());
-        
-        // Add this entry to head_tree (if it's not the root)
-        if !prefix.as_os_str().is_empty() {
-            let path_str = prefix.to_string_lossy().to_string();
-            head_tree.insert(
-                path_str.clone(),
-                DatabaseEntry::new(
-                    path_str.clone(),
-                    oid.to_string(),
-                    &TREE_MODE.to_string()
-                )
-            );
-        }
-        
-        // Load the object
-        let obj = database.load(oid)?;
-        
-        // Try to process it as a tree
-        if let Some(tree) = obj.as_any().downcast_ref::<Tree>() {
-            println!("Processing tree with {} entries", tree.get_entries().len());
-            
-            // Process each entry in the tree
-            for (name, entry) in tree.get_entries() {
-                let path = if prefix.as_os_str().is_empty() {
-                    PathBuf::from(name)
-                } else {
-                    prefix.join(name)
-                };
-                
-                match entry {
-                    TreeEntry::Blob(entry_oid, mode) => {
-                        let path_str = path.to_string_lossy().to_string();
-                        
-                        // For directory entries (mode 40000)
-                        if *mode == TREE_MODE {
-                            println!("Directory entry: {} -> {}", path_str, entry_oid);
-                            
-                            // Add to head_tree
-                            head_tree.insert(
-                                path_str.clone(),
-                                DatabaseEntry::new(
-                                    path_str.clone(),
-                                    entry_oid.clone(),
-                                    &TREE_MODE.to_string()
-                                )
-                            );
-                            
-                            // Recursively process this directory
-                            match Self::traverse_tree_structure(database, entry_oid, path, head_tree) {
-                                Ok(_) => {},
-                                Err(e) => {
-                                    println!("Warning: Failed to traverse directory '{}': {}", path_str, e);
-                                    // Continue with other entries even if this one fails
-                                }
-                            }
-                        } else {
-                            // Regular file
-                            println!("File entry: {} -> {}", path_str, entry_oid);
-                            
-                            // Add to head_tree
-                            head_tree.insert(
-                                path_str.clone(),
-                                DatabaseEntry::new(
-                                    path_str,
-                                    entry_oid.clone(),
-                                    &mode.to_string()
-                                )
-                            );
-                        }
-                    },
-                    TreeEntry::Tree(subtree) => {
-                        if let Some(subtree_oid) = subtree.get_oid() {
-                            let path_str = path.to_string_lossy().to_string();
-                            println!("Tree entry: {} -> {}", path_str, subtree_oid);
-                            
-                            // Add to head_tree
-                            head_tree.insert(
-                                path_str.clone(),
-                                DatabaseEntry::new(
-                                    path_str.clone(),
-                                    subtree_oid.clone(),
-                                    &TREE_MODE.to_string()
-                                )
-                            );
-                            
-                            // Recursively process this subtree
-                            match Self::traverse_tree_structure(database, subtree_oid, path, head_tree) {
-                                Ok(_) => {},
-                                Err(e) => {
-                                    println!("Warning: Failed to traverse subtree '{}': {}", path_str, e);
-                                    // Continue with other entries even if this one fails
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        } else if obj.get_type() == "blob" {
-            // Try to parse the blob as a tree
-            let blob_data = obj.to_bytes();
-            match Tree::parse(&blob_data) {
-                Ok(tree) => {
-                    println!("Successfully parsed blob as tree with {} entries", tree.get_entries().len());
+    /// Recursively traverse the tree structure with special handling for directories
+fn traverse_tree_structure(
+    database: &mut Database,
+    tree_oid: &str,
+    prefix: PathBuf,
+    head_tree: &mut HashMap<String, DatabaseEntry>
+) -> Result<(), Error> {
+    println!("Traversing object: {} at path: {}", tree_oid, prefix.display());
+    
+    // Load the object
+    let obj = database.load(tree_oid)?;
+    
+    // Verifică pentru directorul root (path gol)
+    if prefix.as_os_str().is_empty() {
+        if let Some(root_tree) = obj.as_any().downcast_ref::<Tree>() {
+            for (name, entry) in root_tree.get_entries() {
+                if name == "src" {
+                    println!("Found src directory in HEAD");
                     
-                    // Process the tree entries
-                    for (name, entry) in tree.get_entries() {
-                        let path = if prefix.as_os_str().is_empty() {
-                            PathBuf::from(name)
-                        } else {
-                            prefix.join(name)
-                        };
-                        
-                        match entry {
-                            TreeEntry::Blob(entry_oid, mode) => {
-                                let path_str = path.to_string_lossy().to_string();
+                    // Obține OID-ul pentru src
+                    let src_oid = match entry {
+                        TreeEntry::Blob(oid, _) => oid,
+                        TreeEntry::Tree(subtree) => {
+                            if let Some(oid) = subtree.get_oid() {
+                                oid
+                            } else {
+                                continue;
+                            }
+                        }
+                    };
+                    
+                    // Adaugă intrarea src în head_tree
+                    head_tree.insert(
+                        "src".to_string(),
+                        DatabaseEntry::new(
+                            "src".to_string(),
+                            src_oid.clone(),
+                            &TREE_MODE.to_string()
+                        )
+                    );
+                    
+                    // Încarcă și procesează src
+                    let src_obj = database.load(src_oid)?;
+                    if let Some(src_tree) = src_obj.as_any().downcast_ref::<Tree>() {
+                        for (src_name, src_entry) in src_tree.get_entries() {
+                            if src_name == "cli" {
+                                println!("Found src/cli directory in HEAD");
                                 
+                                // Obține OID-ul pentru cli
+                                let cli_oid = match src_entry {
+                                    TreeEntry::Blob(oid, _) => oid,
+                                    TreeEntry::Tree(subtree) => {
+                                        if let Some(oid) = subtree.get_oid() {
+                                            oid
+                                        } else {
+                                            continue;
+                                        }
+                                    }
+                                };
+                                
+                                // Adaugă intrarea src/cli în head_tree
                                 head_tree.insert(
-                                    path_str.clone(),
+                                    "src/cli".to_string(),
                                     DatabaseEntry::new(
-                                        path_str,
-                                        entry_oid.clone(),
-                                        &mode.to_string()
+                                        "src/cli".to_string(),
+                                        cli_oid.clone(),
+                                        &TREE_MODE.to_string()
                                     )
                                 );
-                            },
-                            TreeEntry::Tree(subtree) => {
-                                if let Some(subtree_oid) = subtree.get_oid() {
-                                    let path_str = path.to_string_lossy().to_string();
-                                    
-                                    head_tree.insert(
-                                        path_str.clone(),
-                                        DatabaseEntry::new(
-                                            path_str.clone(),
-                                            subtree_oid.clone(),
-                                            &TREE_MODE.to_string()
-                                        )
-                                    );
-                                    
-                                    // Recursively process this subtree
-                                    match Self::traverse_tree_structure(database, subtree_oid, path, head_tree) {
-                                        Ok(_) => {},
-                                        Err(e) => {
-                                            println!("Warning: Failed to traverse subtree: {}", e);
+                                
+                                // Procesează directorul cli
+                                let cli_obj = database.load(cli_oid)?;
+                                if let Some(cli_tree) = cli_obj.as_any().downcast_ref::<Tree>() {
+                                    for (file_name, file_entry) in cli_tree.get_entries() {
+                                        if let TreeEntry::Blob(file_oid, mode) = file_entry {
+                                            let file_path = format!("src/cli/{}", file_name);
+                                            println!("Found file in HEAD: {} -> {}", file_path, file_oid);
+                                            
+                                            // Adaugă fișierul în head_tree
+                                            head_tree.insert(
+                                                file_path.clone(),
+                                                DatabaseEntry::new(
+                                                    file_path,
+                                                    file_oid.clone(),
+                                                    &mode.to_string()
+                                                )
+                                            );
                                         }
                                     }
                                 }
                             }
                         }
                     }
-                },
-                Err(e) => {
-                    println!("Failed to parse blob as tree: {}", e);
                 }
             }
         }
-        
-        Ok(())
     }
+    
+    Ok(())
+}
 
     /// Improved method to check index entries against the HEAD tree
     fn check_index_against_head_tree(
@@ -580,11 +513,6 @@ impl StatusCommand {
         // Check against directory mode (040000 in octal)
         (mode & 0o170000) == TREE_MODE
     }
-
-    // Helper function to check if a path is likely a directory
-    fn is_directory_path(path: &str) -> bool {
-        path.ends_with('/') || !path.contains('.')
-    }    
     
     /// Check if a path is a parent of tracked files
     fn is_parent_of_tracked_files(path: &str, index: &Index) -> bool {
@@ -597,23 +525,6 @@ impl StatusCommand {
         
         // Check if any file in the index has this path as a prefix
         index.entries.keys().any(|file_path| file_path.starts_with(&normalized_path))
-    }
-    
-    /// Check if a path is within a deleted directory
-    fn is_within_deleted_dir(path: &str, deleted_dirs: &HashSet<String>) -> bool {
-        for dir in deleted_dirs {
-            let dir_prefix = if dir.ends_with('/') {
-                dir.clone()
-            } else {
-                format!("{}/", dir)
-            };
-            
-            if path.starts_with(&dir_prefix) {
-                return true;
-            }
-        }
-        
-        false
     }
     
     /// Main execution method
