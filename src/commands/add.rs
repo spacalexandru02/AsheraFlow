@@ -1,11 +1,15 @@
-// src/commands/add.rs - Updated to use refactored Database
+// src/commands/add.rs - With improved tree traversal
 use std::path::{Path, PathBuf};
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use std::time::Instant;
 use crate::core::database::blob::Blob;
-use crate::core::database::database::Database;
+use crate::core::database::database::{Database, GitObject};
+use crate::core::database::tree::{Tree, TreeEntry, TREE_MODE};
+use crate::core::database::commit::Commit;
+use crate::core::file_mode::FileMode;
 use crate::core::index::index::Index;
 use crate::core::workspace::Workspace;
+use crate::core::refs::Refs;
 use crate::errors::error::Error;
 use std::fs;
 
@@ -30,6 +34,7 @@ impl AddCommand {
         let workspace = Workspace::new(root_path);
         let mut database = Database::new(git_path.join("objects"));
         let mut index = Index::new(git_path.join("index"));
+        let refs = Refs::new(&git_path);
         
         // Prepare a set to deduplicate files (in case of overlapping path arguments)
         let mut files_to_add: HashSet<PathBuf> = HashSet::new();
@@ -88,7 +93,7 @@ impl AddCommand {
         }
         
         // Get current files in index to avoid unnecessary operations
-        let mut existing_oids = std::collections::HashMap::new();
+        let mut existing_oids = HashMap::new();
         for entry in index.each_entry() {
             existing_oids.insert(entry.get_path().to_string(), entry.oid.clone());
         }
@@ -192,20 +197,83 @@ impl AddCommand {
                 true => {
                     let elapsed = start_time.elapsed();
                     
+                    // Step 1: Get all files from HEAD commit with proper tree traversal
+                    let mut head_files = HashMap::<String, String>::new(); // path -> oid
+                    
+                    // Only load from HEAD if we have a commit
+                    if let Ok(Some(head_oid)) = refs.read_head() {
+                        println!("Examining HEAD commit: {}", head_oid);
+                        
+                        if let Ok(commit_obj) = database.load(&head_oid) {
+                            if let Some(commit) = commit_obj.as_any().downcast_ref::<Commit>() {
+                                let root_tree_oid = commit.get_tree();
+                                println!("Root tree OID: {}", root_tree_oid);
+                                
+                                // Recursively collect all files from HEAD tree
+                                Self::collect_files_from_tree(&mut database, root_tree_oid, PathBuf::new(), &mut head_files)?;
+                                
+                                println!("Found {} files in HEAD", head_files.len());
+                                for (path, oid) in &head_files {
+                                    println!("  {} -> {}", path, oid);
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Step 2: Count how many files are new vs modified
+                    let mut new_files = 0;
+                    let mut modified_files = 0;
+                    
+                    for path in &files_to_add {
+                        let path_str = path.to_string_lossy().to_string();
+                        
+                        if head_files.contains_key(&path_str) {
+                            println!("File {} exists in HEAD, marking as modified", path_str);
+                            modified_files += 1;
+                        } else {
+                            println!("File {} not in HEAD, marking as new", path_str);
+                            new_files += 1;
+                        }
+                    }
+                    
+                    // Step 3: Format output message
+                    let mut message = String::new();
+                    
+                    if new_files > 0 {
+                        message.push_str(&format!(
+                            "{} new file{}", 
+                            new_files,
+                            if new_files == 1 { "" } else { "s" }
+                        ));
+                    }
+                    
+                    if modified_files > 0 {
+                        if !message.is_empty() {
+                            message.push_str(" and ");
+                        }
+                        message.push_str(&format!(
+                            "{} modified file{}", 
+                            modified_files,
+                            if modified_files == 1 { "" } else { "s" }
+                        ));
+                    }
+                    
+                    if message.is_empty() {
+                        message = format!("{} file{}", added_count, if added_count == 1 { "" } else { "s" });
+                    }
+                    
                     if unchanged_count > 0 {
                         println!(
-                            "Added {} file{} to index, {} file{} unchanged ({:.2}s)",
-                            added_count,
-                            if added_count == 1 { "" } else { "s" },
+                            "{} added to index, {} file{} unchanged ({:.2}s)",
+                            message,
                             unchanged_count,
                             if unchanged_count == 1 { "" } else { "s" },
                             elapsed.as_secs_f32()
                         );
                     } else {
                         println!(
-                            "Added {} file{} to index ({:.2}s)",
-                            added_count,
-                            if added_count == 1 { "" } else { "s" },
+                            "{} added to index ({:.2}s)",
+                            message,
                             elapsed.as_secs_f32()
                         );
                     }
@@ -229,4 +297,121 @@ impl AddCommand {
             Ok(())
         }
     }
+    
+    /// Recursively collect all files from a tree and its subtrees
+fn collect_files_from_tree(
+    database: &mut Database,
+    tree_oid: &str,
+    prefix: PathBuf,
+    files: &mut HashMap<String, String> // map of path -> oid
+) -> Result<(), Error> {
+    println!("Collecting files from tree: {} at path: {}", tree_oid, prefix.display());
+    
+    // Load the object
+    let obj = database.load(tree_oid)?;
+    println!("Loaded object type: {}", obj.get_type());
+    
+    // Step 1: Try to process as a tree
+    if let Some(tree) = obj.as_any().downcast_ref::<Tree>() {
+        println!("Processing tree with {} entries", tree.get_entries().len());
+        
+        // Process each entry in the tree
+        for (name, entry) in tree.get_entries() {
+            let entry_path = if prefix.as_os_str().is_empty() {
+                PathBuf::from(name)
+            } else {
+                prefix.join(name)
+            };
+            
+            let entry_path_str = entry_path.to_string_lossy().to_string();
+            
+            match entry {
+                TreeEntry::Blob(blob_oid, mode) => {
+                    // Check if this is actually a directory entry
+                    if *mode == TREE_MODE || FileMode::is_directory(*mode) {
+                        println!("Found directory as blob: {} -> {}", entry_path_str, blob_oid);
+                        // Recursively process this directory
+                        Self::collect_files_from_tree(database, blob_oid, entry_path, files)?;
+                    } else {
+                        // Regular file entry
+                        println!("Found file: {} -> {}", entry_path_str, blob_oid);
+                        files.insert(entry_path_str, blob_oid.clone());
+                    }
+                },
+                TreeEntry::Tree(subtree) => {
+                    if let Some(subtree_oid) = subtree.get_oid() {
+                        println!("Found subtree: {} -> {}", entry_path_str, subtree_oid);
+                        // Recursively process this directory
+                        Self::collect_files_from_tree(database, subtree_oid, entry_path, files)?;
+                    } else {
+                        println!("Warning: Tree entry without OID: {}", entry_path_str);
+                    }
+                }
+            }
+        }
+        
+        return Ok(());
+    }
+    
+    // Step 2: If not a tree, try to parse as a tree (handle directories stored as blobs)
+    if obj.get_type() == "blob" {
+        println!("Object is a blob, trying to parse as tree: {}", tree_oid);
+        
+        let blob_data = obj.to_bytes();
+        match Tree::parse(&blob_data) {
+            Ok(tree) => {
+                println!("Successfully parsed blob as tree with {} entries", tree.get_entries().len());
+                
+                // Process each entry in the parsed tree
+                for (name, entry) in tree.get_entries() {
+                    let entry_path = if prefix.as_os_str().is_empty() {
+                        PathBuf::from(name)
+                    } else {
+                        prefix.join(name)
+                    };
+                    
+                    let entry_path_str = entry_path.to_string_lossy().to_string();
+                    
+                    match entry {
+                        TreeEntry::Blob(blob_oid, mode) => {
+                            if *mode == TREE_MODE || FileMode::is_directory(*mode) {
+                                println!("Found directory in parsed tree: {} -> {}", entry_path_str, blob_oid);
+                                // Recursively process this directory
+                                Self::collect_files_from_tree(database, blob_oid, entry_path, files)?;
+                            } else {
+                                println!("Found file in parsed tree: {} -> {}", entry_path_str, blob_oid);
+                                files.insert(entry_path_str, blob_oid.clone());
+                            }
+                        },
+                        TreeEntry::Tree(subtree) => {
+                            if let Some(subtree_oid) = subtree.get_oid() {
+                                println!("Found subtree in parsed tree: {} -> {}", entry_path_str, subtree_oid);
+                                // Recursively process this directory
+                                Self::collect_files_from_tree(database, subtree_oid, entry_path, files)?;
+                            }
+                        }
+                    }
+                }
+            },
+            Err(e) => {
+                println!("Failed to parse blob as tree: {}", e);
+                
+                // If this is the root directory, that's a problem
+                if prefix.as_os_str().is_empty() {
+                    println!("Warning: Root tree cannot be parsed");
+                } else {
+                    // Otherwise, this might be a regular file
+                    let path_str = prefix.to_string_lossy().to_string();
+                    println!("Treating {} as a regular file", path_str);
+                    files.insert(path_str, tree_oid.to_string());
+                }
+            }
+        }
+        
+        return Ok(());
+    }
+    
+    println!("Object {} is neither a tree nor a blob that can be parsed as a tree", tree_oid);
+    Ok(())
+}
 }

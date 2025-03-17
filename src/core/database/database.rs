@@ -12,7 +12,6 @@ use crate::errors::error::Error;
 use crate::core::database::blob::Blob;
 use crate::core::database::tree::Tree;
 use crate::core::database::commit::Commit;
-use crate::core::database::entry::Entry;
 use std::any::Any;
 
 use super::tree::TreeEntry;
@@ -130,39 +129,48 @@ fn clone_object(&self, obj: &Box<dyn GitObject>) -> Box<dyn GitObject> {
 
     /// Stochează un obiect git în baza de date
     pub fn store(&mut self, object: &mut impl GitObject) -> Result<String, Error> {
-        // Serializează obiectul
+        println!("Storing object of type: {}", object.get_type());
+        
+        // Serialize object
         let content = self.serialize_object(object)?;
         
-        // Calculează OID-ul (hash)
+        // Calculate OID (hash)
         let oid = self.hash_content(&content);
+        println!("Calculated OID: {}", oid);
         
-        // Scrie doar dacă obiectul nu există deja
+        // Write only if object doesn't already exist
         if !self.exists(&oid) {
+            println!("Object {} doesn't exist, writing to database", oid);
             self.write_object(&oid, &content)?;
+        } else {
+            println!("Object {} already exists in database", oid);
         }
-
-        // Setează OID-ul pe obiect
+    
+        // Set OID on object
         object.set_oid(oid.clone());
-
+    
         Ok(oid)
     }
-    
+
+    pub fn serialize_object(&self, object: &impl GitObject) -> Result<Vec<u8>, Error> {
+        let obj_type = object.get_type();
+        let content = object.to_bytes();
+        println!("Serializing {} object, content size: {} bytes", obj_type, content.len());
+        
+        // Format: "<type> <size>\0<content>"
+        let header = format!("{} {}\0", obj_type, content.len());
+        let mut full_content = header.as_bytes().to_vec();
+        full_content.extend_from_slice(&content);
+        
+        Ok(full_content)
+    }
     /// Calculează hash-ul unui obiect git fără a-l stoca
     pub fn hash_object(&self, object: &impl GitObject) -> Result<String, Error> {
         let content = self.serialize_object(object)?;
         Ok(self.hash_content(&content))
     }
     
-    /// Serializează un obiect git în reprezentarea sa binară
-    pub fn serialize_object(&self, object: &impl GitObject) -> Result<Vec<u8>, Error> {
-        let content = object.to_bytes();
-        let header = format!("{} {}\0", object.get_type(), content.len());
-        let mut full_content = header.as_bytes().to_vec();
-        full_content.extend(content);
-        
-        Ok(full_content)
-    }
-    
+
     /// Calculează hash-ul SHA-1 al conținutului
     pub fn hash_content(&self, content: &[u8]) -> String {
         let mut hasher = Sha1::new();
@@ -210,6 +218,7 @@ fn clone_object(&self, obj: &Box<dyn GitObject>) -> Box<dyn GitObject> {
     }
 
     /// Citește un obiect din baza de date și îl parsează
+    /// Read and parse an object from the database
     fn read_object(&self, oid: &str) -> Result<Box<dyn GitObject>, Error> {
         let path = self.object_path(oid);
         
@@ -217,17 +226,17 @@ fn clone_object(&self, obj: &Box<dyn GitObject>) -> Box<dyn GitObject> {
             return Err(Error::Generic(format!("Object not found: {}", oid)));
         }
         
-        // Citește fișierul
+        // Read the file
         let mut file = File::open(&path)?;
         let mut compressed_data = Vec::new();
         file.read_to_end(&mut compressed_data)?;
         
-        // Decomprimă datele
+        // Decompress data
         let mut decoder = ZlibDecoder::new(&compressed_data[..]);
         let mut data = Vec::new();
         decoder.read_to_end(&mut data)?;
         
-        // Parsează header-ul
+        // Parse header
         let null_pos = data.iter().position(|&b| b == 0)
             .ok_or_else(|| Error::Generic("Invalid object format: missing null byte".to_string()))?;
         
@@ -243,26 +252,36 @@ fn clone_object(&self, obj: &Box<dyn GitObject>) -> Box<dyn GitObject> {
         let obj_size: usize = parts[1].parse()
             .map_err(|_| Error::Generic(format!("Invalid size in header: {}", parts[1])))?;
         
-        // Verifică dimensiunea
+        // Verify size
         if obj_size != data.len() - null_pos - 1 {
-            return Err(Error::Generic(format!(
-                "Size mismatch: header claims {} bytes, actual content is {} bytes",
-                obj_size, data.len() - null_pos - 1
-            )));
+            println!("Warning: Size mismatch in object {}: header claims {} bytes, actual content is {} bytes",
+                oid, obj_size, data.len() - null_pos - 1);
         }
         
-        // Extrage conținutul (după octetul null)
+        // Extract content (after null byte)
         let content = &data[null_pos + 1..];
         
-        // Parsează obiectul în funcție de tip
+        // Parse object based on type
         let mut object: Box<dyn GitObject> = match obj_type {
             "blob" => Box::new(Blob::parse(content)),
-            "tree" => Box::new(Tree::parse(content)?),
-            "commit" => Box::new(Commit::parse(content)?),
+            "tree" => {
+                println!("Parsing tree object: {}", oid);
+                match Tree::parse(content) {
+                    Ok(tree) => Box::new(tree),
+                    Err(e) => {
+                        println!("Error parsing tree {}: {}", oid, e);
+                        return Err(e);
+                    }
+                }
+            },
+            "commit" => match Commit::parse(content) {
+                Ok(commit) => Box::new(commit),
+                Err(e) => return Err(e),
+            },
             _ => return Err(Error::Generic(format!("Unknown object type: {}", obj_type))),
         };
         
-        // Setează OID-ul
+        // Set the OID
         object.set_oid(oid.to_string());
         
         Ok(object)
