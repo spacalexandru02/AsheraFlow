@@ -147,35 +147,6 @@ impl Entry {
         self.oid = oid;
     }
 
-    // Metoda pentru actualizarea tuturor proprietăților de stat
-    pub fn update_stat(&mut self, stat: &fs::Metadata) {
-        // Get ctime and mtime
-        let ctime = stat.created().unwrap_or(SystemTime::now());
-        let mtime = stat.modified().unwrap_or(SystemTime::now());
-        
-        let ctime_duration = ctime.duration_since(UNIX_EPOCH).unwrap_or_default();
-        let mtime_duration = mtime.duration_since(UNIX_EPOCH).unwrap_or_default();
-        
-        self.ctime = ctime_duration.as_secs() as u32;
-        self.ctime_nsec = ctime_duration.subsec_nanos();
-        self.mtime = mtime_duration.as_secs() as u32;
-        self.mtime_nsec = mtime_duration.subsec_nanos();
-        
-        // Update size
-        self.size = stat.len() as u32;
-        
-        // Update mode
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            self.mode = if stat.permissions().mode() & 0o111 != 0 {
-                EXECUTABLE_MODE
-            } else {
-                REGULAR_MODE
-            };
-        }
-    }
-
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut result = Vec::new();
         
@@ -291,5 +262,62 @@ impl Entry {
             flags,
             path,
         })
+    }
+
+    pub fn stat_match(&self, stat: &std::fs::Metadata) -> bool {
+        // Convert numeric mode to string for parsing
+        let entry_mode_str = FileMode::to_octal_string(self.mode);
+        let entry_mode = FileMode::parse(&entry_mode_str);
+        let file_mode = FileMode::from_metadata(stat);
+        
+        FileMode::are_equivalent(entry_mode, file_mode) && 
+            (self.get_size() == 0 || self.get_size() as u64 == stat.len())
+    }
+    
+    // Check if timestamps match the entry
+    pub fn times_match(&self, stat: &std::fs::Metadata) -> bool {
+        // Convert filesystem times to seconds and nanoseconds
+        let mtime_sec = stat.modified()
+            .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as u32)
+            .unwrap_or(0);
+        
+        let mtime_nsec = stat.modified()
+            .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().subsec_nanos())
+            .unwrap_or(0);
+        
+        let ctime_sec = stat.created()
+            .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as u32)
+            .unwrap_or(0);
+        
+        let ctime_nsec = stat.created()
+            .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().subsec_nanos())
+            .unwrap_or(0);
+        
+        self.get_ctime() == ctime_sec && self.get_ctime_nsec() == ctime_nsec &&
+        self.get_mtime() == mtime_sec && self.get_mtime_nsec() == mtime_nsec
+    }
+    
+    // Update stat information for an entry
+    pub fn update_stat(&mut self, stat: &std::fs::Metadata) {
+        // Update timestamps
+        if let Ok(mtime) = stat.modified() {
+            if let Ok(duration) = mtime.duration_since(std::time::UNIX_EPOCH) {
+                self.set_mtime(duration.as_secs() as u32);
+                self.set_mtime_nsec(duration.subsec_nanos());
+            }
+        }
+        
+        if let Ok(ctime) = stat.created() {
+            if let Ok(duration) = ctime.duration_since(std::time::UNIX_EPOCH) {
+                self.set_ctime(duration.as_secs() as u32);
+                self.set_ctime_nsec(duration.subsec_nanos());
+            }
+        }
+        
+        // Update size
+        self.set_size(stat.len() as u32);
+        
+        // Update mode - use the numeric value directly
+        self.set_mode(FileMode::from_metadata(stat));
     }
 }
