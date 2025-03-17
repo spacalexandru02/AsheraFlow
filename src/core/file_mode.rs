@@ -2,7 +2,7 @@ pub struct FileMode;
 
 impl FileMode {
     /// Mod pentru directoare
-    pub const DIRECTORY: u32 = 0o040000;
+    pub const DIRECTORY: u32 = 0o040000; 
     
     /// Mod pentru fișiere normale
     pub const REGULAR: u32 = 0o100644;
@@ -52,6 +52,8 @@ impl FileMode {
     
     /// Verifică dacă un mod corespunde unui director
     pub fn is_directory(mode: u32) -> bool {
+        // Folosim mască de biți pentru a verifica doar biții pentru tip
+        // Comparăm direct cu constanta DIRECTORY definită în octal
         (mode & 0o170000) == Self::DIRECTORY
     }
     

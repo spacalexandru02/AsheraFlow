@@ -1,9 +1,10 @@
+use std::path::PathBuf;
 use std::{env, path::Path, time::Instant};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::core::database::tree::TreeEntry;
-use crate::{core::{database::{author::Author, commit::Commit, database::Database, entry::Entry, tree::Tree}, index::index::Index, refs::Refs}, errors::error::Error};
-
+use crate::core::file_mode::FileMode;
+use crate::{core::{database::{author::Author, commit::Commit, database::Database, entry::DatabaseEntry, tree::Tree}, index::index::Index, refs::Refs}, errors::error::Error};
 pub struct CommitCommand;
 
 impl CommitCommand {
@@ -88,9 +89,9 @@ impl CommitCommand {
         };
         
         // Convert index entries to database entries
-        let database_entries: Vec<Entry> = index.each_entry()
+        let database_entries: Vec<DatabaseEntry> = index.each_entry()
             .map(|index_entry| {
-                Entry::new(
+                DatabaseEntry::new(
                     index_entry.path.clone(),
                     index_entry.oid.clone(),
                     &index_entry.mode_octal()
@@ -167,8 +168,6 @@ impl CommitCommand {
             }
         }
         
-        // Replace the tree storage code in CommitCommand::execute with this:
-
         // Store all trees
         println!("\nStoring trees to database...");
         let mut tree_counter = 0;
@@ -180,7 +179,7 @@ impl CommitCommand {
             for (name, entry) in tree.get_entries() {
                 match entry {
                     TreeEntry::Blob(oid, mode) => {
-                        println!("  Entry: {} (blob) -> {}", name, oid);
+                        println!("  Entry: {} (blob, mode {}) -> {}", name, mode, oid);
                     },
                     TreeEntry::Tree(subtree) => {
                         if let Some(oid) = subtree.get_oid() {
@@ -192,11 +191,10 @@ impl CommitCommand {
                 }
             }
             
-            // Now store returns the OID as Ok(String), but we don't need it here
-            // since Tree.set_oid() is called inside the store method
             match database.store(tree) {
                 Ok(oid) => {
                     println!("  Tree stored with OID: {}", oid);
+                    println!("  Verified: Tree now has OID: {}", tree.get_oid().unwrap_or(&"<none>".to_string()));
                     Ok(())
                 },
                 Err(e) => {
@@ -273,6 +271,75 @@ impl CommitCommand {
             return Err(Error::Generic(format!("Failed to update HEAD: {}", e)));
         }
         
+        // ----- IMPLEMENTARE PENTRU RAPORTAREA CORECTĂ A NUMĂRULUI DE FIȘIERE SCHIMBATE -----
+        
+        // Numără doar fișierele care s-au schimbat efectiv
+        let mut changed_files = 0;
+        
+        // Dacă există un commit părinte, compară cu el
+        if let Some(parent_oid) = &parent {
+            // Încarcă commit-ul părinte
+            if let Ok(parent_obj) = database.load(parent_oid) {
+                if let Some(parent_commit) = parent_obj.as_any().downcast_ref::<Commit>() {
+                    let parent_tree_oid = parent_commit.get_tree();
+                    
+                    // Colectează toate fișierele din commit-ul părinte
+                    let mut parent_files = HashMap::<String, String>::new(); // path -> oid
+                    Self::collect_files_from_tree(&mut database, &parent_tree_oid, PathBuf::new(), &mut parent_files)?;
+                    
+                    // Colectează toate fișierele din commit-ul curent
+                    let mut current_files = HashMap::<String, String>::new(); // path -> oid
+                    Self::collect_files_from_tree(&mut database, &tree_oid, PathBuf::new(), &mut current_files)?;
+                    
+                    println!("Files in parent commit: {}", parent_files.len());
+                    println!("Files in current commit: {}", current_files.len());
+                    
+                    // Calculează fișierele adăugate (există în curent, nu în părinte)
+                    let mut added = 0;
+                    for path in current_files.keys() {
+                        if !parent_files.contains_key(path) {
+                            println!("Added file: {}", path);
+                            added += 1;
+                        }
+                    }
+                    
+                    // Calculează fișierele șterse (există în părinte, nu în curent)
+                    let mut deleted = 0;
+                    for path in parent_files.keys() {
+                        if !current_files.contains_key(path) {
+                            println!("Deleted file: {}", path);
+                            deleted += 1;
+                        }
+                    }
+                    
+                    // Calculează fișierele modificate (există în ambele, dar OID diferit)
+                    let mut modified = 0;
+                    for (path, oid) in &current_files {
+                        if let Some(parent_oid) = parent_files.get(path) {
+                            if parent_oid != oid {
+                                println!("Modified file: {}", path);
+                                modified += 1;
+                            }
+                        }
+                    }
+                    
+                    // Numărul total de fișiere schimbate
+                    changed_files = added + deleted + modified;
+                    println!("Changed files: {} (added: {}, deleted: {}, modified: {})",
+                        changed_files, added, deleted, modified);
+                }
+            }
+        } else {
+            // Pentru primul commit, toate fișierele sunt noi
+            for entry in &database_entries {
+                let path = entry.get_name();
+                // Să nu numărăm directoarele ca fișiere
+                if !path.ends_with('/') {
+                    changed_files += 1;
+                }
+            }
+        }
+        
         // Print commit message
         let is_root = if parent.is_none() { "(root-commit) " } else { "" };
         let first_line = message.lines().next().unwrap_or("");
@@ -286,14 +353,126 @@ impl CommitCommand {
             elapsed.as_secs_f32()
         );
         
-        // Print a summary of the commit
-        let entry_count = database_entries.len();
+        // Print a summary of the commit using the correctly counted changed files
         println!(
             "{} file{} changed", 
-            entry_count, 
-            if entry_count == 1 { "" } else { "s" }
+            changed_files, 
+            if changed_files == 1 { "" } else { "s" }
         );
+        
         Tree::inspect_tree_structure(&mut database, &tree_oid, 0)?;
+        Ok(())
+    }
+    
+    // Funcția de colectare a fișierelor din arbore
+    fn collect_files_from_tree(
+        database: &mut Database,
+        tree_oid: &str,
+        prefix: PathBuf,
+        files: &mut HashMap<String, String> // map of path -> oid
+    ) -> Result<(), Error> {
+        println!("Collecting files from tree: {} at path: {}", tree_oid, prefix.display());
+        
+        // Load the object
+        let obj = database.load(tree_oid)?;
+        println!("Loaded object type: {}", obj.get_type());
+        
+        // Process as Tree
+        if let Some(tree) = obj.as_any().downcast_ref::<Tree>() {
+            println!("Processing tree with {} entries", tree.get_entries().len());
+            
+            // Process each entry in the tree
+            for (name, entry) in tree.get_entries() {
+                let entry_path = if prefix.as_os_str().is_empty() {
+                    PathBuf::from(name)
+                } else {
+                    prefix.join(name)
+                };
+                
+                let entry_path_str = entry_path.to_string_lossy().to_string();
+                
+                match entry {
+                    TreeEntry::Blob(blob_oid, mode) => {
+                        // Verifică explicit dacă este un director după mod
+                        if *mode == 0o040000 {
+                            println!("Found directory entry: {} -> {}", entry_path_str, blob_oid);
+                            // Recursively process this directory
+                            Self::collect_files_from_tree(database, blob_oid, entry_path, files)?;
+                        } else {
+                            // Regular file
+                            println!("Found regular file: {} -> {}", entry_path_str, blob_oid);
+                            files.insert(entry_path_str, blob_oid.clone());
+                        }
+                    },
+                    TreeEntry::Tree(subtree) => {
+                        if let Some(subtree_oid) = subtree.get_oid() {
+                            println!("Found tree entry: {} -> {}", entry_path_str, subtree_oid);
+                            // Recursively process this directory
+                            Self::collect_files_from_tree(database, subtree_oid, entry_path, files)?;
+                        } else {
+                            println!("Warning: Tree entry without OID: {}", entry_path_str);
+                        }
+                    }
+                }
+            }
+            
+            return Ok(());
+        }
+        
+        // If the object is a Blob, try to parse it as a Tree
+        if obj.get_type() == "blob" {
+            let blob_data = obj.to_bytes();
+            match Tree::parse(&blob_data) {
+                Ok(parsed_tree) => {
+                    println!("Successfully parsed blob as tree with {} entries", parsed_tree.get_entries().len());
+                    
+                    // Process each entry in the parsed tree
+                    for (name, entry) in parsed_tree.get_entries() {
+                        let entry_path = if prefix.as_os_str().is_empty() {
+                            PathBuf::from(name)
+                        } else {
+                            prefix.join(name)
+                        };
+                        
+                        let entry_path_str = entry_path.to_string_lossy().to_string();
+                        
+                        match entry {
+                            TreeEntry::Blob(blob_oid, mode) => {
+                                // Verifică explicit modul pentru directoare
+                                if *mode == 0o040000 {
+                                    println!("Found directory in parsed tree: {} -> {}", entry_path_str, blob_oid);
+                                    // Recursively process this directory
+                                    Self::collect_files_from_tree(database, blob_oid, entry_path, files)?;
+                                } else {
+                                    println!("Found file in parsed tree: {} -> {}", entry_path_str, blob_oid);
+                                    files.insert(entry_path_str, blob_oid.clone());
+                                }
+                            },
+                            TreeEntry::Tree(subtree) => {
+                                if let Some(subtree_oid) = subtree.get_oid() {
+                                    println!("Found subtree in parsed tree: {} -> {}", entry_path_str, subtree_oid);
+                                    // Recursively process this directory
+                                    Self::collect_files_from_tree(database, subtree_oid, entry_path, files)?;
+                                }
+                            }
+                        }
+                    }
+                    return Ok(());
+                },
+                Err(e) => {
+                    // Verifică dacă acest blob ar putea fi un fișier obișnuit
+                    if !prefix.as_os_str().is_empty() {
+                        // Este un fișier obișnuit într-un director
+                        let path_str = prefix.to_string_lossy().to_string();
+                        files.insert(path_str, tree_oid.to_string());
+                        return Ok(());
+                    }
+                    println!("Failed to parse blob as tree: {}", e);
+                }
+            }
+        }
+        
+        println!("Object {} is neither a tree nor a blob that can be parsed as a tree", tree_oid);
         Ok(())
     }
 }

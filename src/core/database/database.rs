@@ -148,6 +148,16 @@ fn clone_object(&self, obj: &Box<dyn GitObject>) -> Box<dyn GitObject> {
     
         // Set OID on object
         object.set_oid(oid.clone());
+        
+        // Verifică că OID-ul a fost setat corect
+        if object.get_type() == "tree" {
+            // Pentru verificare suplimentară la arbori (dacă implementați metoda get_oid())
+            if let Some(tree) = object.as_any().downcast_ref::<Tree>() {
+                if tree.get_oid().is_none() {
+                    println!("WARNING: OID not set correctly on tree after store()!");
+                }
+            }
+        }
     
         Ok(oid)
     }
@@ -164,12 +174,6 @@ fn clone_object(&self, obj: &Box<dyn GitObject>) -> Box<dyn GitObject> {
         
         Ok(full_content)
     }
-    /// Calculează hash-ul unui obiect git fără a-l stoca
-    pub fn hash_object(&self, object: &impl GitObject) -> Result<String, Error> {
-        let content = self.serialize_object(object)?;
-        Ok(self.hash_content(&content))
-    }
-    
 
     /// Calculează hash-ul SHA-1 al conținutului
     pub fn hash_content(&self, content: &[u8]) -> String {
@@ -263,17 +267,28 @@ fn clone_object(&self, obj: &Box<dyn GitObject>) -> Box<dyn GitObject> {
         
         // Parse object based on type
         let mut object: Box<dyn GitObject> = match obj_type {
-            "blob" => Box::new(Blob::parse(content)),
-            "tree" => {
-                println!("Parsing tree object: {}", oid);
+        "blob" => {
+            // Verifică dacă acest blob ar putea fi de fapt un director
+            if content.len() >= 20 && (content[0] == b'4' && content[1] == b'0' && content[2] == b'0' && content[3] == b'0' && content[4] == b'0') {
+                // Ar putea fi un arbore
                 match Tree::parse(content) {
                     Ok(tree) => Box::new(tree),
-                    Err(e) => {
-                        println!("Error parsing tree {}: {}", oid, e);
-                        return Err(e);
-                    }
+                    Err(_) => Box::new(Blob::parse(content))
                 }
-            },
+            } else {
+                Box::new(Blob::parse(content))
+            }
+        },
+        "tree" => {
+            println!("Parsing tree object: {}", oid);
+            match Tree::parse(content) {
+                Ok(tree) => Box::new(tree),
+                Err(e) => {
+                    println!("Error parsing tree {}: {}", oid, e);
+                    return Err(e);
+                }
+            }
+        },
             "commit" => match Commit::parse(content) {
                 Ok(commit) => Box::new(commit),
                 Err(e) => return Err(e),
