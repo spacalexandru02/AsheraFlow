@@ -60,13 +60,13 @@ impl Index {
         self.changed = changed;
     }
     
-    pub fn update_entry_stat(&mut self, key: &str, stat: &fs::Metadata) -> Result<(), Error> {
-        if let Some(entry) = self.entries.get_mut(key) {
+    pub fn update_entry_stat(&mut self, path: &str, stat: &std::fs::Metadata) -> Result<(), Error> {
+        if let Some(entry) = self.get_entry_mut(path) {
             entry.update_stat(stat);
             self.changed = true;
             Ok(())
         } else {
-            Err(Error::Generic(format!("Entry not found for key: {}", key)))
+            Err(Error::Generic(format!("Entry not found for key: {}", path)))
         }
     }
     
