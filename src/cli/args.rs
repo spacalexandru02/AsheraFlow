@@ -11,5 +11,3 @@ pub enum Command {
 pub struct CliArgs {
     pub command: Command,
 }
-
-
