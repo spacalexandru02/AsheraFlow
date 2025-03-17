@@ -293,7 +293,7 @@ impl CommitCommand {
             entry_count, 
             if entry_count == 1 { "" } else { "s" }
         );
-        
+        Tree::inspect_tree_structure(&mut database, &tree_oid, 0)?;
         Ok(())
     }
 }
