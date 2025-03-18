@@ -3,7 +3,8 @@ pub enum Command {
     Init { path: String },
     Commit { message: String },
     Add { paths: Vec<String> },
-    Status { porcelain: bool, color: String }, // Add color option
+    Status { porcelain: bool, color: String }, 
+    Diff { paths: Vec<String>, cached: bool },
     Unknown { name: String },
 }
 

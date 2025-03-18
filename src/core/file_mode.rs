@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[derive(PartialEq, Clone, Copy)] // Added Copy trait
+#[derive(PartialEq, Clone, Copy)] 
 pub struct FileMode(pub u32);
 
 impl FileMode {
