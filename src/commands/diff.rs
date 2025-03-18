@@ -1,8 +1,7 @@
-// src/commands/diff.rs
+    // src/commands/diff.rs - versiune îmbunătățită
 use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 use std::time::Instant;
-
 use crate::core::color::Color;
 use crate::core::database::database::Database;
 use crate::core::database::tree::{Tree, TreeEntry, TREE_MODE};
@@ -11,21 +10,21 @@ use crate::core::database::commit::Commit;
 use crate::core::refs::Refs;
 use crate::core::workspace::Workspace;
 use crate::core::diff::diff;
-use crate::core::diff::myers::{diff_lines,format_diff};
+use crate::core::diff::myers::{diff_lines, format_diff, is_binary_content};
 use crate::errors::error::Error;
 
 pub struct DiffCommand;
 
 
 impl DiffCommand {
-    /// Execute diff command between index/HEAD and working tree
+/// Execute diff command between index/HEAD and working tree
     pub fn execute(paths: &[String], cached: bool) -> Result<(), Error> {
         let start_time = Instant::now();
         
         let root_path = Path::new(".");
         let git_path = root_path.join(".ash");
         
-        // Verify .ash directory exists
+        // Verifică dacă directorul .ash există
         if !git_path.exists() {
             return Err(Error::Generic("fatal: not an ash repository (or any of the parent directories): .ash directory not found".into()));
         }
@@ -35,15 +34,15 @@ impl DiffCommand {
         let mut index = Index::new(git_path.join("index"));
         let refs = Refs::new(&git_path);
         
-        // Load the index
+        // Încarcă indexul
         index.load()?;
         
-        // Determine what to compare based on paths and --cached flag
+        // Determină ce să compari în funcție de căi și flag-ul --cached
         if paths.is_empty() {
-            // Handle full repository diff
+            // Tratează diff-ul pentru întregul repository
             Self::diff_all(&workspace, &mut database, &index, &refs, cached)?;
         } else {
-            // Handle specific paths
+            // Tratează căi specifice
             for path_str in paths {
                 let path = PathBuf::from(path_str);
                 Self::diff_path(&workspace, &mut database, &index, &refs, &path, cached)?;
@@ -55,7 +54,7 @@ impl DiffCommand {
         
         Ok(())
     }
-    
+
     /// Diff all changed files in the repository
     fn diff_all(
         workspace: &Workspace,
@@ -64,61 +63,74 @@ impl DiffCommand {
         refs: &Refs,
         cached: bool
     ) -> Result<(), Error> {
-        // If cached flag is set, compare index with HEAD
+        // Dacă flag-ul cached este setat, compară indexul cu HEAD
         if cached {
             return Self::diff_index_vs_head(workspace, database, index, refs);
         }
         
-        // Otherwise compare working tree with index
+        // În caz contrar, compară arborele de lucru cu indexul
         let mut has_changes = false;
         
-        // Get all files from the index
+        // Obține toate fișierele din index
         for entry in index.each_entry() {
             let path = Path::new(entry.get_path());
             
-            // Skip if the file doesn't exist in workspace
+            // Sări dacă fișierul nu există în workspace
             if !workspace.path_exists(path)? {
+                has_changes = true;
                 let path_str = path.display().to_string();
                 println!("diff --ash a/{} b/{}", Color::cyan(&path_str), Color::cyan(&path_str));
                 println!("{} {}", Color::red("deleted file mode"), Color::red(&entry.mode_octal()));
                 println!("--- a/{}", Color::red(&path_str));
                 println!("+++ {}", Color::red("/dev/null"));
                 
-                // Get blob content from database
+                // Obține conținutul blob-ului din baza de date
                 let blob_obj = database.load(entry.get_oid())?;
                 let content = blob_obj.to_bytes();
+                
+                // Verifică dacă conținutul este binar
+                if is_binary_content(&content) {
+                    println!("Binary file a/{} has been deleted", path_str);
+                    continue;
+                }
+                
                 let lines = diff::split_lines(&String::from_utf8_lossy(&content));
                 
-                // Show deletion diff
+                // Arată diff-ul de ștergere
                 for line in &lines {
                     println!("{}", Color::red(&format!("-{}", line)));
                 }
                 
-                has_changes = true;
                 continue;
             }
             
-            // Read file content
+            // Citește conținutul fișierului
             let file_content = workspace.read_file(path)?;
             
-            // Calculate hash for the file content
+            // Calculează hash-ul pentru conținutul fișierului
             let file_hash = database.hash_file_data(&file_content);
             
-            // If the hash matches, there's no change
+            // Dacă hash-ul se potrivește, nu există nicio modificare
             if file_hash == entry.get_oid() {
                 continue;
             }
             
             has_changes = true;
             
-            // Print diff header
+            // Tipărește antetul diff-ului
             let path_str = path.display().to_string();
             println!("diff --ash a/{} b/{}", Color::cyan(&path_str), Color::cyan(&path_str));
             
-            // Get diff between index and working copy
+            // Verifică dacă fișierul este binar
+            if is_binary_content(&file_content) {
+                println!("Binary files a/{} and b/{} differ", path_str, path_str);
+                continue;
+            }
+            
+            // Obține diff-ul între index și copia de lucru
             let raw_diff_output = diff::diff_with_database(workspace, database, path, entry.get_oid(), 3)?;
             
-            // Add colors to the diff output
+            // Adaugă culori la ieșirea diff-ului
             let colored_diff = Self::colorize_diff_output(&raw_diff_output);
             print!("{}", colored_diff);
         }
@@ -129,279 +141,30 @@ impl DiffCommand {
         
         Ok(())
     }
-    
-    /// Diff between index and HEAD
-    fn diff_index_vs_head(
-        workspace: &Workspace,
-        database: &mut Database,
-        index: &Index,
-        refs: &Refs
-    ) -> Result<(), Error> {
-        // Get HEAD commit
-        let head_oid = match refs.read_head()? {
-            Some(oid) => oid,
-            None => {
-                println!("{}", Color::yellow("No HEAD commit found. Index contains initial version."));
-                return Ok(());
-            }
-        };
-        
-        // Load HEAD commit
-        let commit_obj = database.load(&head_oid)?;
-        let commit = match commit_obj.as_any().downcast_ref::<Commit>() {
-            Some(c) => c,
-            None => return Err(Error::Generic("HEAD is not a commit".into())),
-        };
-        
-        // Get files from HEAD
-        let mut head_files = HashMap::new();
-        Self::collect_files_from_commit(database, commit, &mut head_files)?;
-        
-        let mut has_changes = false;
-        
-        // Compare files in index with HEAD
-        for entry in index.each_entry() {
-            let path = entry.get_path();
-            
-            if let Some(head_oid) = head_files.get(path) {
-                // File exists in both index and HEAD
-                if head_oid == entry.get_oid() {
-                    // No change
-                    continue;
-                }
-                
-                // File changed
-                has_changes = true;
-                println!("diff --ash a/{} b/{}", Color::cyan(path), Color::cyan(path));
-                
-                // Load both versions
-                let head_obj = database.load(head_oid)?;
-                let index_obj = database.load(entry.get_oid())?;
-                
-                let head_content = head_obj.to_bytes();
-                let index_content = index_obj.to_bytes();
-                
-                let head_lines = diff::split_lines(&String::from_utf8_lossy(&head_content));
-                let index_lines = diff::split_lines(&String::from_utf8_lossy(&index_content));
-                
-                // Calculate diff
-                let edits = diff_lines(&head_lines, &index_lines);
-                let raw_diff = format_diff(&head_lines, &index_lines, &edits, 3);
-                
-                // Colorize and print the diff
-                let colored_diff = Self::colorize_diff_output(&raw_diff);
-                print!("{}", colored_diff);
-            } else {
-                // File exists in index but not in HEAD (new file)
-                has_changes = true;
-                println!("diff --ash a/{} b/{}", Color::cyan(path), Color::cyan(path));
-                println!("{} {}", Color::green("new file mode"), Color::green(&entry.mode_octal()));
-                println!("--- {}", Color::red("/dev/null"));
-                println!("+++ b/{}", Color::green(path));
-                
-                // Load index version
-                let index_obj = database.load(entry.get_oid())?;
-                let content = index_obj.to_bytes();
-                let lines = diff::split_lines(&String::from_utf8_lossy(&content));
-                
-                // Show addition diff
-                for line in &lines {
-                    println!("{}", Color::green(&format!("+{}", line)));
-                }
-            }
-        }
-        
-        // Check for files in HEAD that were removed from index
-        for (path, head_oid) in &head_files {
-            if !index.tracked(path) {
-                // File was in HEAD but removed from index
-                has_changes = true;
-                println!("diff --ash a/{} b/{}", Color::cyan(path), Color::cyan(path));
-                println!("{}", Color::red("deleted file"));
-                println!("--- a/{}", Color::red(path));
-                println!("+++ {}", Color::red("/dev/null"));
-                
-                // Load HEAD version
-                let head_obj = database.load(head_oid)?;
-                let content = head_obj.to_bytes();
-                let lines = diff::split_lines(&String::from_utf8_lossy(&content));
-                
-                // Show deletion diff
-                for line in &lines {
-                    println!("{}", Color::red(&format!("-{}", line)));
-                }
-            }
-        }
-        
-        if !has_changes {
-            println!("{}", Color::green("No changes staged for commit"));
-        }
-        
-        Ok(())
-    }
-    
-    /// Diff a specific path
-    fn diff_path(
-        workspace: &Workspace,
-        database: &mut Database,
-        index: &Index,
-        refs: &Refs,
-        path: &Path,
-        cached: bool
-    ) -> Result<(), Error> {
-        let path_str = path.to_string_lossy().to_string();
-        
-        // If path is in index
-        if let Some(entry) = index.get_entry(&path_str) {
-            if cached {
-                // Compare index with HEAD
-                let head_oid = match refs.read_head()? {
-                    Some(oid) => oid,
-                    None => {
-                        // No HEAD, show as new file
-                        println!("diff --ash a/{} b/{}", Color::cyan(&path_str), Color::cyan(&path_str));
-                        println!("{} {}", Color::green("new file mode"), Color::green(&entry.mode_octal()));
-                        println!("--- {}", Color::red("/dev/null"));
-                        println!("+++ b/{}", Color::green(&path_str));
-                        
-                        // Load index version
-                        let index_obj = database.load(entry.get_oid())?;
-                        let content = index_obj.to_bytes();
-                        let lines = diff::split_lines(&String::from_utf8_lossy(&content));
-                        
-                        for line in &lines {
-                            println!("{}", Color::green(&format!("+{}", line)));
-                        }
-                        
-                        return Ok(());
-                    }
-                };
-                
-                // Get file from HEAD commit
-                let mut head_files = HashMap::new();
-                let commit_obj = database.load(&head_oid)?;
-                let commit = match commit_obj.as_any().downcast_ref::<Commit>() {
-                    Some(c) => c,
-                    None => return Err(Error::Generic("HEAD is not a commit".into())),
-                };
-                
-                Self::collect_files_from_commit(database, commit, &mut head_files)?;
-                
-                if let Some(head_oid) = head_files.get(&path_str) {
-                    // File exists in both HEAD and index
-                    if head_oid == entry.get_oid() {
-                        println!("{}", Color::green(&format!("No changes staged for {}", path_str)));
-                        return Ok(());
-                    }
-                    
-                    // Compare HEAD and index versions
-                    println!("diff --ash a/{} b/{}", Color::cyan(&path_str), Color::cyan(&path_str));
-                    
-                    // Load both versions
-                    let head_obj = database.load(head_oid)?;
-                    let index_obj = database.load(entry.get_oid())?;
-                    
-                    let head_content = head_obj.to_bytes();
-                    let index_content = index_obj.to_bytes();
-                    
-                    let head_lines = diff::split_lines(&String::from_utf8_lossy(&head_content));
-                    let index_lines = diff::split_lines(&String::from_utf8_lossy(&index_content));
-                    
-                    // Calculate diff
-                    let edits = diff_lines(&head_lines, &index_lines);
-                    let raw_diff = format_diff(&head_lines, &index_lines, &edits, 3);
-                    
-                    // Colorize and print the diff
-                    let colored_diff = Self::colorize_diff_output(&raw_diff);
-                    print!("{}", colored_diff);
-                } else {
-                    // File is in index but not in HEAD (new file)
-                    println!("diff --ash a/{} b/{}", Color::cyan(&path_str), Color::cyan(&path_str));
-                    println!("{} {}", Color::green("new file mode"), Color::green(&entry.mode_octal()));
-                    println!("--- {}", Color::red("/dev/null"));
-                    println!("+++ b/{}", Color::green(&path_str));
-                    
-                    // Load index version
-                    let index_obj = database.load(entry.get_oid())?;
-                    let content = index_obj.to_bytes();
-                    let lines = diff::split_lines(&String::from_utf8_lossy(&content));
-                    
-                    for line in &lines {
-                        println!("{}", Color::green(&format!("+{}", line)));
-                    }
-                }
-            } else {
-                // Compare index with working tree
-                if !workspace.path_exists(path)? {
-                    println!("diff --ash a/{} b/{}", Color::cyan(&path_str), Color::cyan(&path_str));
-                    println!("{} {}", Color::red("deleted file mode"), Color::red(&entry.mode_octal()));
-                    println!("--- a/{}", Color::red(&path_str));
-                    println!("+++ {}", Color::red("/dev/null"));
-                    
-                    // Load index version
-                    let index_obj = database.load(entry.get_oid())?;
-                    let content = index_obj.to_bytes();
-                    let lines = diff::split_lines(&String::from_utf8_lossy(&content));
-                    
-                    for line in &lines {
-                        println!("{}", Color::red(&format!("-{}", line)));
-                    }
-                    
-                    return Ok(());
-                }
-                
-                // Read working copy
-                let file_content = workspace.read_file(path)?;
-                
-                // Calculate hash for the file content
-                let file_hash = database.hash_file_data(&file_content);
-                
-                // If the hash matches, there's no change
-                if file_hash == entry.get_oid() {
-                    println!("{}", Color::green(&format!("No changes in {}", path_str)));
-                    return Ok(());
-                }
-                
-                // Show diff between index and working copy
-                println!("diff --ash a/{} b/{}", Color::cyan(&path_str), Color::cyan(&path_str));
-                
-                let raw_diff_output = diff::diff_with_database(workspace, database, path, entry.get_oid(), 3)?;
-                
-                // Colorize and print the diff
-                let colored_diff = Self::colorize_diff_output(&raw_diff_output);
-                print!("{}", colored_diff);
-            }
-        } else {
-            // Path not in index
-            if workspace.path_exists(path)? {
-                println!("{}", Color::red(&format!("error: path '{}' is untracked", path_str)));
-            } else {
-                println!("{}", Color::red(&format!("error: path '{}' does not exist", path_str)));
-            }
-        }
-        
-        Ok(())
-    }
-    
-    /// Helper method to colorize diff output
+
+    /// Metodă helper pentru colorarea ieșirii diff-ului
     fn colorize_diff_output(diff: &str) -> String {
         let mut result = String::new();
         
         for line in diff.lines() {
-            if line.starts_with("@@") && line.contains("@@") {
-                // Hunk header
+            if line.starts_with("Binary files") {
+                // Mesaje despre fișiere binare
+                result.push_str(&Color::yellow(line));
+                result.push('\n');
+            } else if line.starts_with("@@") && line.contains("@@") {
+                // Antet de hunk
                 result.push_str(&Color::cyan(line));
                 result.push('\n');
             } else if line.starts_with('+') {
-                // Added line
+                // Linie adăugată
                 result.push_str(&Color::green(line));
                 result.push('\n');
             } else if line.starts_with('-') {
-                // Removed line
+                // Linie eliminată
                 result.push_str(&Color::red(line));
                 result.push('\n');
             } else {
-                // Context line
+                // Linie de context
                 result.push_str(line);
                 result.push('\n');
             }
@@ -409,36 +172,41 @@ impl DiffCommand {
         
         result
     }
-    
-    /// Collect all files from a commit
+
+    /// Colectează toate fișierele dintr-un commit
     fn collect_files_from_commit(
         database: &mut Database,
         commit: &Commit,
         files: &mut HashMap<String, String>
     ) -> Result<(), Error> {
-        // Get the tree OID from the commit
+        // Obține OID-ul arborelui din commit
         let tree_oid = commit.get_tree();
         
-        // Collect files from the tree
+        // Colectează fișierele din arbore
         Self::collect_files_from_tree(database, tree_oid, PathBuf::new(), files)?;
         
         Ok(())
     }
-    
+
+    // Implementare îmbunătățită pentru a trata recursiv traversarea arborilor
     fn collect_files_from_tree(
         database: &mut Database,
         tree_oid: &str,
         prefix: PathBuf,
         files: &mut HashMap<String, String>
     ) -> Result<(), Error> {
-        println!("Traversing tree: {} at path: {}", tree_oid, prefix.display());
+        // Încarcă obiectul
+        let obj = match database.load(tree_oid) {
+            Ok(obj) => obj,
+            Err(e) => {
+                println!("Warning: Could not load object {}: {}", tree_oid, e);
+                return Ok(());
+            }
+        };
         
-        // Load the object
-        let obj = database.load(tree_oid)?;
-        
-        // Check if the object is a tree
+        // Verifică dacă obiectul este un arbore
         if let Some(tree) = obj.as_any().downcast_ref::<Tree>() {
-            // Process each entry in the tree
+            // Procesează fiecare intrare din arbore
             for (name, entry) in tree.get_entries() {
                 let entry_path = if prefix.as_os_str().is_empty() {
                     PathBuf::from(name)
@@ -450,24 +218,23 @@ impl DiffCommand {
                 
                 match entry {
                     TreeEntry::Blob(oid, mode) => {
-                        // If this is a directory entry masquerading as a blob
+                        // Dacă aceasta este o intrare de director deghizată ca blob
                         if *mode == TREE_MODE || mode.is_directory() {
-                            println!("Found directory stored as blob: {} -> {}", entry_path_str, oid);
-                            // Recursively process this directory
-                            Self::collect_files_from_tree(database, oid, entry_path, files)?;
+                            // Procesează recursiv acest director
+                            if let Err(e) = Self::collect_files_from_tree(database, oid, entry_path, files) {
+                                println!("Warning: Error traversing directory '{}': {}", entry_path_str, e);
+                            }
                         } else {
-                            // Regular file
-                            println!("Found file: {} -> {}", entry_path_str, oid);
+                            // Fișier normal
                             files.insert(entry_path_str, oid.clone());
                         }
                     },
                     TreeEntry::Tree(subtree) => {
                         if let Some(subtree_oid) = subtree.get_oid() {
-                            println!("Found directory: {} -> {}", entry_path_str, subtree_oid);
-                            // Recursively process this directory
-                            Self::collect_files_from_tree(database, subtree_oid, entry_path, files)?;
-                        } else {
-                            println!("Warning: Tree entry without OID: {}", entry_path_str);
+                            // Procesează recursiv acest director
+                            if let Err(e) = Self::collect_files_from_tree(database, subtree_oid, entry_path, files) {
+                                println!("Warning: Error traversing subtree '{}': {}", entry_path_str, e);
+                            }
                         }
                     }
                 }
@@ -476,85 +243,426 @@ impl DiffCommand {
             return Ok(());
         }
         
-        // If object is a blob, try to parse it as a tree
+        // Dacă obiectul este un blob, încearcă să-l parsezi ca arbore
         if obj.get_type() == "blob" {
-            println!("Object is a blob, attempting to parse as tree...");
-            
-            // Attempt to parse blob as a tree (this handles directories stored as blobs)
+            // Încearcă să parsezi blob-ul ca arbore (aceasta tratează directoare stocate ca blob-uri)
             let blob_data = obj.to_bytes();
-            match Tree::parse(&blob_data) {
-                Ok(parsed_tree) => {
-                    println!("Successfully parsed blob as tree with {} entries", parsed_tree.get_entries().len());
+            if let Ok(parsed_tree) = Tree::parse(&blob_data) {
+                // Procesează fiecare intrare din arborele parsat
+                for (name, entry) in parsed_tree.get_entries() {
+                    let entry_path = if prefix.as_os_str().is_empty() {
+                        PathBuf::from(name)
+                    } else {
+                        prefix.join(name)
+                    };
                     
-                    // Process each entry in the parsed tree
-                    for (name, entry) in parsed_tree.get_entries() {
-                        let entry_path = if prefix.as_os_str().is_empty() {
-                            PathBuf::from(name)
-                        } else {
-                            prefix.join(name)
-                        };
-                        
-                        let entry_path_str = entry_path.to_string_lossy().to_string();
-                        
-                        match entry {
-                            TreeEntry::Blob(oid, mode) => {
-                                if *mode == TREE_MODE || mode.is_directory() {
-                                    println!("Found directory in parsed tree: {} -> {}", entry_path_str, oid);
-                                    // Recursively process this directory
-                                    Self::collect_files_from_tree(database, oid, entry_path, files)?;
-                                } else {
-                                    println!("Found file in parsed tree: {} -> {}", entry_path_str, oid);
-                                    files.insert(entry_path_str, oid.clone());
+                    let entry_path_str = entry_path.to_string_lossy().to_string();
+                    
+                    match entry {
+                        TreeEntry::Blob(oid, mode) => {
+                            if *mode == TREE_MODE || mode.is_directory() {
+                                // Procesează recursiv acest director
+                                if let Err(e) = Self::collect_files_from_tree(database, oid, entry_path, files) {
+                                    println!("Warning: Error traversing directory '{}': {}", entry_path_str, e);
                                 }
-                            },
-                            TreeEntry::Tree(subtree) => {
-                                if let Some(subtree_oid) = subtree.get_oid() {
-                                    println!("Found directory in parsed tree: {} -> {}", entry_path_str, subtree_oid);
-                                    // Recursively process this directory
-                                    Self::collect_files_from_tree(database, subtree_oid, entry_path, files)?;
-                                } else {
-                                    println!("Warning: Tree entry without OID in parsed tree: {}", entry_path_str);
+                            } else {
+                                // Fișier normal
+                                files.insert(entry_path_str, oid.clone());
+                            }
+                        },
+                        TreeEntry::Tree(subtree) => {
+                            if let Some(subtree_oid) = subtree.get_oid() {
+                                // Procesează recursiv acest director
+                                if let Err(e) = Self::collect_files_from_tree(database, subtree_oid, entry_path, files) {
+                                    println!("Warning: Error traversing subtree '{}': {}", entry_path_str, e);
                                 }
                             }
                         }
                     }
-                    
+                }
+                
+                return Ok(());
+            } else {
+                // Dacă suntem la o cale non-root, acesta ar putea fi un fișier
+                if !prefix.as_os_str().is_empty() {
+                    let path_str = prefix.to_string_lossy().to_string();
+                    files.insert(path_str, tree_oid.to_string());
                     return Ok(());
-                },
-                Err(e) => {
-                    // If we're at a non-root path, this might be a file
-                    if !prefix.as_os_str().is_empty() {
-                        let path_str = prefix.to_string_lossy().to_string();
-                        println!("Adding file at path: {} -> {}", path_str, tree_oid);
-                        files.insert(path_str, tree_oid.to_string());
+                }
+            }
+        }
+        
+        // Caz special pentru intrări de top-level care ar putea necesita traversare mai profundă
+        if prefix.as_os_str().is_empty() {
+            // Verifică toate intrările găsite în root
+            for (path, oid) in files.clone() {  // Clonăm pentru a evita probleme de împrumut
+                // Doar căutăm intrări de director de top-level (fără separatori de cale)
+                if !path.contains('/') {
+                    // Încearcă să încarci și să traversezi ca director
+                    let dir_path = PathBuf::from(&path);
+                    if let Err(e) = Self::collect_files_from_tree(database, &oid, dir_path, files) {
+                        println!("Warning: Error traversing entry '{}': {}", path, e);
+                        // Continuă cu alte intrări chiar dacă aceasta eșuează
+                    }
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    /// Diff a specific path
+    fn diff_path(
+        workspace: &Workspace,
+        database: &mut Database,
+        index: &Index,
+        refs: &Refs,
+        path: &Path,
+        cached: bool
+    ) -> Result<(), Error> {
+        let path_str = path.to_string_lossy().to_string();
+        
+        // Dacă calea este în index
+        if let Some(entry) = index.get_entry(&path_str) {
+            if cached {
+                // Compară indexul cu HEAD
+                let head_oid = match refs.read_head()? {
+                    Some(oid) => oid,
+                    None => {
+                        // Fără HEAD, arată ca fișier nou
+                        let index_obj = database.load(entry.get_oid())?;
+                        let content = index_obj.to_bytes();
+                        
+                        // Verifică dacă fișierul este binar
+                        if is_binary_content(&content) {
+                            println!("Binary file b/{} created", path_str);
+                            return Ok(());
+                        }
+                        
+                        // Generează un hash fictiv pentru formatul git
+                        let index_hash = entry.get_oid();
+                        let index_hash_short = if index_hash.len() >= 7 { &index_hash[0..7] } else { index_hash };
+                        
+                        println!("index 0000000..{} 100644", index_hash_short);
+                        println!("--- /dev/null");
+                        println!("+++ b/{}", path_str);
+                        println!("@@ -0,0 +1,{} @@", content.len());
+                        
+                        let lines = diff::split_lines(&String::from_utf8_lossy(&content));
+                        
+                        for line in &lines {
+                            println!("{}", Color::green(&format!("+{}", line)));
+                        }
+                        
+                        return Ok(());
+                    }
+                };
+                
+                // Obține fișierul din commit-ul HEAD
+                let commit_obj = database.load(&head_oid)?;
+                let commit = match commit_obj.as_any().downcast_ref::<Commit>() {
+                    Some(c) => c,
+                    None => return Err(Error::Generic("HEAD is not a commit".into())),
+                };
+                
+                let mut head_files: HashMap<String, String> = HashMap::new();
+                DiffCommand::collect_files_from_commit(database, commit, &mut head_files)?;
+                
+                if let Some(head_oid) = head_files.get(&path_str) {
+                    // Fișierul există atât în HEAD, cât și în index
+                    if head_oid == entry.get_oid() {
+                        println!("{}", Color::green(&format!("No changes staged for {}", path_str)));
                         return Ok(());
                     }
                     
-                    println!("Failed to parse blob as tree: {}", e);
-                }
-            }
-        }
-        
-        // Special case for top-level entries that might need deeper traversal
-        // This handles cases where we have entries like "src" but need to explore "src/commands"
-        if prefix.as_os_str().is_empty() {
-            // Check all found entries in the root
-            for (path, oid) in files.clone() {  // Clone to avoid borrowing issues
-                // Only look at top-level directory entries (no path separators)
-                if !path.contains('/') {
-                    println!("Checking top-level entry for deeper traversal: {} -> {}", path, oid);
+                    // Compară versiunile din HEAD și index
+                    // Încarcă ambele versiuni
+                    let head_obj = database.load(head_oid)?;
+                    let index_obj = database.load(entry.get_oid())?;
                     
-                    // Try to load and traverse it as a directory
-                    let dir_path = PathBuf::from(&path);
-                    if let Err(e) = Self::collect_files_from_tree(database, &oid, dir_path, files) {
-                        println!("Error traversing {}: {}", path, e);
-                        // Continue with other entries even if this one fails
+                    let head_content = head_obj.to_bytes();
+                    let index_content = index_obj.to_bytes();
+                    
+                    // Verifică dacă vreunul dintre fișiere este binar
+                    if is_binary_content(&head_content) || is_binary_content(&index_content) {
+                        println!("Binary files a/{} and b/{} differ", path_str, path_str);
+                        return Ok(());
+                    }
+                    
+                    // Generează hash-uri scurte pentru formatul git
+                    let head_hash_short = if head_oid.len() >= 7 { &head_oid[0..7] } else { head_oid };
+                    let index_hash_short = if entry.get_oid().len() >= 7 { &entry.get_oid()[0..7] } else { entry.get_oid() };
+                    
+                    println!("index {}..{} {}", head_hash_short, index_hash_short, entry.mode_octal());
+                    println!("--- a/{}", path_str);
+                    println!("+++ b/{}", path_str);
+                    
+                    let head_lines = diff::split_lines(&String::from_utf8_lossy(&head_content));
+                    let index_lines = diff::split_lines(&String::from_utf8_lossy(&index_content));
+                    
+                    // Calculează diff-ul
+                    let edits = diff_lines(&head_lines, &index_lines);
+                    let diff_text = format_diff(&head_lines, &index_lines, &edits, 3);
+                    
+                    // Afișează diff-ul colorat
+                    print!("{}", DiffCommand::colorize_diff_output(&diff_text));
+                } else {
+                    // Fișierul este în index, dar nu în HEAD (fișier nou)
+                    let index_obj = database.load(entry.get_oid())?;
+                    let content = index_obj.to_bytes();
+                    
+                    // Verifică dacă fișierul este binar
+                    if is_binary_content(&content) {
+                        println!("Binary file b/{} created", path_str);
+                        return Ok(());
+                    }
+                    
+                    // Generează un hash fictiv pentru formatul git
+                    let index_hash = entry.get_oid();
+                    let index_hash_short = if index_hash.len() >= 7 { &index_hash[0..7] } else { index_hash };
+                    
+                    println!("index 0000000..{} {}", index_hash_short, entry.mode_octal());
+                    println!("--- /dev/null");
+                    println!("+++ b/{}", path_str);
+                    println!("@@ -0,0 +1,{} @@", content.len());
+                    
+                    let lines = diff::split_lines(&String::from_utf8_lossy(&content));
+                    
+                    for line in &lines {
+                        println!("{}", Color::green(&format!("+{}", line)));
                     }
                 }
+            } else {
+                // Compară indexul cu arborele de lucru
+                if !workspace.path_exists(path)? {
+                    let index_obj = database.load(entry.get_oid())?;
+                    let content = index_obj.to_bytes();
+                    
+                    // Verifică dacă fișierul este binar
+                    if is_binary_content(&content) {
+                        println!("Binary file a/{} has been deleted", path_str);
+                        return Ok(());
+                    }
+                    
+                    // Generează un hash fictiv pentru formatul git
+                    let index_hash = entry.get_oid();
+                    let index_hash_short = if index_hash.len() >= 7 { &index_hash[0..7] } else { index_hash };
+                    
+                    println!("index {}..0000000 {}", index_hash_short, entry.mode_octal());
+                    println!("--- a/{}", path_str);
+                    println!("+++ /dev/null");
+                    println!("@@ -1,{} +0,0 @@", content.len());
+                    
+                    let lines = diff::split_lines(&String::from_utf8_lossy(&content));
+                    
+                    for line in &lines {
+                        println!("{}", Color::red(&format!("-{}", line)));
+                    }
+                    
+                    return Ok(());
+                }
+                
+                // Citește copia de lucru
+                let file_content = workspace.read_file(path)?;
+                
+                // Calculează hash-ul pentru conținutul fișierului
+                let file_hash = database.hash_file_data(&file_content);
+                
+                // Dacă hash-ul se potrivește, nu există nicio modificare
+                if file_hash == entry.get_oid() {
+                    println!("{}", Color::green(&format!("No changes in {}", path_str)));
+                    return Ok(());
+                }
+                
+                // Verifică dacă fișierul este binar
+                if is_binary_content(&file_content) {
+                    println!("index {}..{} {}", 
+                            &entry.get_oid()[0..std::cmp::min(7, entry.get_oid().len())], 
+                            &file_hash[0..std::cmp::min(7, file_hash.len())], 
+                            entry.mode_octal());
+                    println!("Binary files a/{} and b/{} differ", path_str, path_str);
+                    return Ok(());
+                }
+                
+                // Arată diff-ul între index și copia de lucru
+                // Generează hash-uri scurte pentru formatul git
+                let index_hash_short = if entry.get_oid().len() >= 7 { &entry.get_oid()[0..7] } else { entry.get_oid() };
+                let file_hash_short = if file_hash.len() >= 7 { &file_hash[0..7] } else { &file_hash };
+                
+                println!("index {}..{} {}", index_hash_short, file_hash_short, entry.mode_octal());
+                println!("--- a/{}", path_str);
+                println!("+++ b/{}", path_str);
+                
+                // Folosește diff_with_database din modulul diff pentru a obține conținutul diff-ului
+                let raw_diff_output = diff::diff_with_database(workspace, database, path, entry.get_oid(), 3)?;
+                
+                // Extrage doar partea cu diferențele (fără antetele adăugate de diff_with_database)
+                let lines: Vec<&str> = raw_diff_output.lines().collect();
+                let diff_content = if lines.len() > 3 {
+                    // Sari peste primele 3 linii (antetele) care sunt deja afișate
+                    lines[3..].join("\n")
+                } else {
+                    raw_diff_output
+                };
+                
+                // Colorează și afișează diff-ul
+                print!("{}", DiffCommand::colorize_diff_output(&diff_content));
+            }
+        } else {
+            // Calea nu este în index
+            if workspace.path_exists(path)? {
+                println!("{}", Color::red(&format!("error: path '{}' is untracked", path_str)));
+            } else {
+                println!("{}", Color::red(&format!("error: path '{}' does not exist", path_str)));
             }
         }
         
-        println!("Object {} is neither a tree nor a blob that can be parsed as a tree", tree_oid);
         Ok(())
     }
+    fn diff_index_vs_head(
+        workspace: &Workspace,
+        database: &mut Database,
+        index: &Index,
+        refs: &Refs
+    ) -> Result<(), Error> {
+        // Obține commit-ul HEAD
+        let head_oid = match refs.read_head()? {
+            Some(oid) => oid,
+            None => {
+                println!("{}", Color::yellow("No HEAD commit found. Index contains initial version."));
+                return Ok(());
+            }
+        };
+        
+        // Încarcă commit-ul HEAD
+        let commit_obj = database.load(&head_oid)?;
+        let commit = match commit_obj.as_any().downcast_ref::<Commit>() {
+            Some(c) => c,
+            None => return Err(Error::Generic("HEAD is not a commit".into())),
+        };
+        
+        // Obține fișierele din HEAD
+        let mut head_files: HashMap<String, String> = HashMap::new();
+        DiffCommand::collect_files_from_commit(database, commit, &mut head_files)?;
+        
+        let mut has_changes = false;
+        
+        // Compară fișierele din index cu HEAD
+        for entry in index.each_entry() {
+            let path = entry.get_path();
+            
+            if let Some(head_oid) = head_files.get(path) {
+                // Fișierul există atât în index, cât și în HEAD
+                if head_oid == entry.get_oid() {
+                    // Nicio modificare
+                    continue;
+                }
+                
+                // Fișierul a fost modificat
+                has_changes = true;
+                
+                // Generează hash-uri scurte pentru antetul git
+                let head_hash_short = if head_oid.len() >= 7 { &head_oid[0..7] } else { head_oid };
+                let index_hash_short = if entry.get_oid().len() >= 7 { &entry.get_oid()[0..7] } else { entry.get_oid() };
+                
+                println!("index {}..{} {}", head_hash_short, index_hash_short, entry.mode_octal());
+                println!("--- a/{}", path);
+                println!("+++ b/{}", path);
+                
+                // Încarcă ambele versiuni
+                let head_obj = database.load(head_oid)?;
+                let index_obj = database.load(entry.get_oid())?;
+                
+                let head_content = head_obj.to_bytes();
+                let index_content = index_obj.to_bytes();
+                
+                // Verifică dacă fișierul este binar
+                if is_binary_content(&head_content) || is_binary_content(&index_content) {
+                    println!("Binary files a/{} and b/{} differ", path, path);
+                    continue;
+                }
+                
+                let head_lines = diff::split_lines(&String::from_utf8_lossy(&head_content));
+                let index_lines = diff::split_lines(&String::from_utf8_lossy(&index_content));
+                
+                // Calculează diff-ul
+                let edits = diff_lines(&head_lines, &index_lines);
+                let raw_diff = format_diff(&head_lines, &index_lines, &edits, 3);
+                
+                // Colorează și afișează diff-ul
+                let colored_diff = DiffCommand::colorize_diff_output(&raw_diff);
+                print!("{}", colored_diff);
+            } else {
+                // Fișierul există în index, dar nu în HEAD (fișier nou)
+                has_changes = true;
+                
+                // Generează hash-ul pentru antetul git
+                let index_hash_short = if entry.get_oid().len() >= 7 { &entry.get_oid()[0..7] } else { entry.get_oid() };
+                
+                println!("index 0000000..{} {}", index_hash_short, entry.mode_octal());
+                println!("--- /dev/null");
+                println!("+++ b/{}", path);
+                
+                // Încarcă versiunea din index
+                let index_obj = database.load(entry.get_oid())?;
+                let content = index_obj.to_bytes();
+                
+                // Verifică dacă fișierul este binar
+                if is_binary_content(&content) {
+                    println!("Binary file b/{} created", path);
+                    continue;
+                }
+                
+                let lines = diff::split_lines(&String::from_utf8_lossy(&content));
+                
+                // Afișează antetul hunk-ului
+                println!("@@ -0,0 +1,{} @@", lines.len());
+                
+                // Arată diff-ul de adăugare
+                for line in &lines {
+                    println!("{}", Color::green(&format!("+{}", line)));
+                }
+            }
+        }
+        
+        // Verifică fișierele din HEAD care au fost eliminate din index
+        for (path, head_oid) in &head_files {
+            if !index.tracked(path) {
+                // Fișierul a fost în HEAD, dar a fost eliminat din index
+                has_changes = true;
+                
+                // Generează hash-ul pentru antetul git
+                let head_hash_short = if head_oid.len() >= 7 { &head_oid[0..7] } else { head_oid };
+                
+                println!("index {}..0000000", head_hash_short);
+                println!("--- a/{}", path);
+                println!("+++ /dev/null");
+                
+                // Încarcă versiunea din HEAD
+                let head_obj = database.load(head_oid)?;
+                let content = head_obj.to_bytes();
+                
+                // Verifică dacă fișierul este binar
+                if is_binary_content(&content) {
+                    println!("Binary file a/{} deleted", path);
+                    continue;
+                }
+                
+                let lines = diff::split_lines(&String::from_utf8_lossy(&content));
+                
+                // Afișează antetul hunk-ului
+                println!("@@ -1,{} +0,0 @@", lines.len());
+                
+                // Arată diff-ul de ștergere
+                for line in &lines {
+                    println!("{}", Color::red(&format!("-{}", line)));
+                }
+            }
+        }
+        
+        if !has_changes {
+            println!("{}", Color::green("No changes staged for commit"));
+        }
+        
+        Ok(())
+    }  
 }
