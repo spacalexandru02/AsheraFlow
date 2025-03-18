@@ -4,6 +4,7 @@ use cli::args::CliArgs;
 use cli::args::Command;
 use cli::parser::CliParser;
 use commands::commit::CommitCommand;
+use commands::diff::DiffCommand;
 use commands::init::InitCommand;
 use commands::add::AddCommand;
 use commands::status::StatusCommand;
@@ -29,6 +30,7 @@ fn handle_command(cli_args: CliArgs) {
         Command::Commit { message } => handle_commit_command(&message),
         Command::Add { paths } => handle_add_command(&paths),
         Command::Status { porcelain, color } => handle_status_command(porcelain, &color),
+        Command::Diff { paths, cached } => handle_diff_command(&paths, cached),
         Command::Unknown { name } => exit_with_error(&format!("'{}' is not a ash command", name)),
     }
 }
@@ -64,6 +66,12 @@ fn handle_status_command(porcelain: bool, color: &str) {
     }
 }
 
+fn handle_diff_command(paths: &[String], cached: bool) {
+    match DiffCommand::execute(paths, cached) {
+        Ok(_) => process::exit(0),
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
+    }
+}
 
 fn exit_with_error(message: &str) -> ! {
     eprintln!("{}", message);

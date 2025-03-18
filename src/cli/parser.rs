@@ -71,6 +71,27 @@ impl CliParser {
                     },
                 }
             },
+            "diff" => {
+                // Parse diff command arguments
+                let mut paths = Vec::new();
+                let mut cached = false;
+                
+                // Check for --cached or --staged flag
+                for arg in args.iter().skip(2) {
+                    if arg == "--cached" || arg == "--staged" {
+                        cached = true;
+                    } else if !arg.starts_with("-") {
+                        paths.push(arg.clone());
+                    }
+                }
+                
+                CliArgs {
+                    command: Command::Diff {
+                        paths,
+                        cached,
+                    },
+                }
+            },
             _ => CliArgs {
                 command: Command::Unknown { name: command },
             },
@@ -81,7 +102,7 @@ impl CliParser {
 
     pub fn format_help() -> String {
         format!(
-            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
             "Usage: ash <command> [options]",
             "Commands:",
             "  init [path]                      Initialize a new repository",
@@ -89,7 +110,8 @@ impl CliParser {
             "  add <paths...>                   Add file contents to the index",
             "  status [--porcelain] [--color=<when>]   Show the working tree status",
             "         --porcelain               Machine-readable output",
-            "         --color=<when>            Colorize output (always|auto|never)"
+            "         --color=<when>            Colorize output (always|auto|never)",
+            "  diff [--cached] [paths...]  Show changes between commits, commit and working tree, etc"
         )
     }
 }
