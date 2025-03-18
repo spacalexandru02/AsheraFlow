@@ -3,7 +3,9 @@ use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 use std::time::Instant;
 
+use crate::core::color::Color;
 use crate::core::database::database::Database;
+use crate::core::database::tree::{Tree, TreeEntry, TREE_MODE};
 use crate::core::index::index::Index;
 use crate::core::database::commit::Commit;
 use crate::core::refs::Refs;
@@ -13,6 +15,7 @@ use crate::core::diff::myers::{diff_lines,format_diff};
 use crate::errors::error::Error;
 
 pub struct DiffCommand;
+
 
 impl DiffCommand {
     /// Execute diff command between index/HEAD and working tree
@@ -48,7 +51,7 @@ impl DiffCommand {
         }
         
         let elapsed = start_time.elapsed();
-        println!("Diff completed in {:.2}s", elapsed.as_secs_f32());
+        println!("{}", Color::cyan(&format!("Diff completed in {:.2}s", elapsed.as_secs_f32())));
         
         Ok(())
     }
@@ -75,10 +78,11 @@ impl DiffCommand {
             
             // Skip if the file doesn't exist in workspace
             if !workspace.path_exists(path)? {
-                println!("diff --ash a/{} b/{}", path.display(), path.display());
-                println!("deleted file mode {}", entry.mode_octal());
-                println!("--- a/{}", path.display());
-                println!("+++ /dev/null");
+                let path_str = path.display().to_string();
+                println!("diff --ash a/{} b/{}", Color::cyan(&path_str), Color::cyan(&path_str));
+                println!("{} {}", Color::red("deleted file mode"), Color::red(&entry.mode_octal()));
+                println!("--- a/{}", Color::red(&path_str));
+                println!("+++ {}", Color::red("/dev/null"));
                 
                 // Get blob content from database
                 let blob_obj = database.load(entry.get_oid())?;
@@ -87,7 +91,7 @@ impl DiffCommand {
                 
                 // Show deletion diff
                 for line in &lines {
-                    println!("-{}", line);
+                    println!("{}", Color::red(&format!("-{}", line)));
                 }
                 
                 has_changes = true;
@@ -108,15 +112,19 @@ impl DiffCommand {
             has_changes = true;
             
             // Print diff header
-            println!("diff --ash a/{} b/{}", path.display(), path.display());
+            let path_str = path.display().to_string();
+            println!("diff --ash a/{} b/{}", Color::cyan(&path_str), Color::cyan(&path_str));
             
             // Get diff between index and working copy
-            let diff_output = diff::diff_with_database(workspace, database, path, entry.get_oid(), 3)?;
-            print!("{}", diff_output);
+            let raw_diff_output = diff::diff_with_database(workspace, database, path, entry.get_oid(), 3)?;
+            
+            // Add colors to the diff output
+            let colored_diff = Self::colorize_diff_output(&raw_diff_output);
+            print!("{}", colored_diff);
         }
         
         if !has_changes {
-            println!("No changes");
+            println!("{}", Color::green("No changes"));
         }
         
         Ok(())
@@ -133,7 +141,7 @@ impl DiffCommand {
         let head_oid = match refs.read_head()? {
             Some(oid) => oid,
             None => {
-                println!("No HEAD commit found. Index contains initial version.");
+                println!("{}", Color::yellow("No HEAD commit found. Index contains initial version."));
                 return Ok(());
             }
         };
@@ -164,7 +172,7 @@ impl DiffCommand {
                 
                 // File changed
                 has_changes = true;
-                println!("diff --ash a/{} b/{}", path, path);
+                println!("diff --ash a/{} b/{}", Color::cyan(path), Color::cyan(path));
                 
                 // Load both versions
                 let head_obj = database.load(head_oid)?;
@@ -178,16 +186,18 @@ impl DiffCommand {
                 
                 // Calculate diff
                 let edits = diff_lines(&head_lines, &index_lines);
-                let diff = format_diff(&head_lines, &index_lines, &edits, 3);
+                let raw_diff = format_diff(&head_lines, &index_lines, &edits, 3);
                 
-                print!("{}", diff);
+                // Colorize and print the diff
+                let colored_diff = Self::colorize_diff_output(&raw_diff);
+                print!("{}", colored_diff);
             } else {
                 // File exists in index but not in HEAD (new file)
                 has_changes = true;
-                println!("diff --ash a/{} b/{}", path, path);
-                println!("new file mode {}", entry.mode_octal());
-                println!("--- /dev/null");
-                println!("+++ b/{}", path);
+                println!("diff --ash a/{} b/{}", Color::cyan(path), Color::cyan(path));
+                println!("{} {}", Color::green("new file mode"), Color::green(&entry.mode_octal()));
+                println!("--- {}", Color::red("/dev/null"));
+                println!("+++ b/{}", Color::green(path));
                 
                 // Load index version
                 let index_obj = database.load(entry.get_oid())?;
@@ -196,7 +206,7 @@ impl DiffCommand {
                 
                 // Show addition diff
                 for line in &lines {
-                    println!("+{}", line);
+                    println!("{}", Color::green(&format!("+{}", line)));
                 }
             }
         }
@@ -206,10 +216,10 @@ impl DiffCommand {
             if !index.tracked(path) {
                 // File was in HEAD but removed from index
                 has_changes = true;
-                println!("diff --ash a/{} b/{}", path, path);
-                println!("deleted file");
-                println!("--- a/{}", path);
-                println!("+++ /dev/null");
+                println!("diff --ash a/{} b/{}", Color::cyan(path), Color::cyan(path));
+                println!("{}", Color::red("deleted file"));
+                println!("--- a/{}", Color::red(path));
+                println!("+++ {}", Color::red("/dev/null"));
                 
                 // Load HEAD version
                 let head_obj = database.load(head_oid)?;
@@ -218,13 +228,13 @@ impl DiffCommand {
                 
                 // Show deletion diff
                 for line in &lines {
-                    println!("-{}", line);
+                    println!("{}", Color::red(&format!("-{}", line)));
                 }
             }
         }
         
         if !has_changes {
-            println!("No changes staged for commit");
+            println!("{}", Color::green("No changes staged for commit"));
         }
         
         Ok(())
@@ -249,10 +259,10 @@ impl DiffCommand {
                     Some(oid) => oid,
                     None => {
                         // No HEAD, show as new file
-                        println!("diff --ash a/{} b/{}", path_str, path_str);
-                        println!("new file mode {}", entry.mode_octal());
-                        println!("--- /dev/null");
-                        println!("+++ b/{}", path_str);
+                        println!("diff --ash a/{} b/{}", Color::cyan(&path_str), Color::cyan(&path_str));
+                        println!("{} {}", Color::green("new file mode"), Color::green(&entry.mode_octal()));
+                        println!("--- {}", Color::red("/dev/null"));
+                        println!("+++ b/{}", Color::green(&path_str));
                         
                         // Load index version
                         let index_obj = database.load(entry.get_oid())?;
@@ -260,7 +270,7 @@ impl DiffCommand {
                         let lines = diff::split_lines(&String::from_utf8_lossy(&content));
                         
                         for line in &lines {
-                            println!("+{}", line);
+                            println!("{}", Color::green(&format!("+{}", line)));
                         }
                         
                         return Ok(());
@@ -280,12 +290,12 @@ impl DiffCommand {
                 if let Some(head_oid) = head_files.get(&path_str) {
                     // File exists in both HEAD and index
                     if head_oid == entry.get_oid() {
-                        println!("No changes staged for {}", path_str);
+                        println!("{}", Color::green(&format!("No changes staged for {}", path_str)));
                         return Ok(());
                     }
                     
                     // Compare HEAD and index versions
-                    println!("diff --ash a/{} b/{}", path_str, path_str);
+                    println!("diff --ash a/{} b/{}", Color::cyan(&path_str), Color::cyan(&path_str));
                     
                     // Load both versions
                     let head_obj = database.load(head_oid)?;
@@ -299,15 +309,17 @@ impl DiffCommand {
                     
                     // Calculate diff
                     let edits = diff_lines(&head_lines, &index_lines);
-                    let diff = format_diff(&head_lines, &index_lines, &edits, 3);
+                    let raw_diff = format_diff(&head_lines, &index_lines, &edits, 3);
                     
-                    print!("{}", diff);
+                    // Colorize and print the diff
+                    let colored_diff = Self::colorize_diff_output(&raw_diff);
+                    print!("{}", colored_diff);
                 } else {
                     // File is in index but not in HEAD (new file)
-                    println!("diff --ash a/{} b/{}", path_str, path_str);
-                    println!("new file mode {}", entry.mode_octal());
-                    println!("--- /dev/null");
-                    println!("+++ b/{}", path_str);
+                    println!("diff --ash a/{} b/{}", Color::cyan(&path_str), Color::cyan(&path_str));
+                    println!("{} {}", Color::green("new file mode"), Color::green(&entry.mode_octal()));
+                    println!("--- {}", Color::red("/dev/null"));
+                    println!("+++ b/{}", Color::green(&path_str));
                     
                     // Load index version
                     let index_obj = database.load(entry.get_oid())?;
@@ -315,16 +327,16 @@ impl DiffCommand {
                     let lines = diff::split_lines(&String::from_utf8_lossy(&content));
                     
                     for line in &lines {
-                        println!("+{}", line);
+                        println!("{}", Color::green(&format!("+{}", line)));
                     }
                 }
             } else {
                 // Compare index with working tree
                 if !workspace.path_exists(path)? {
-                    println!("diff --ash a/{} b/{}", path_str, path_str);
-                    println!("deleted file mode {}", entry.mode_octal());
-                    println!("--- a/{}", path_str);
-                    println!("+++ /dev/null");
+                    println!("diff --ash a/{} b/{}", Color::cyan(&path_str), Color::cyan(&path_str));
+                    println!("{} {}", Color::red("deleted file mode"), Color::red(&entry.mode_octal()));
+                    println!("--- a/{}", Color::red(&path_str));
+                    println!("+++ {}", Color::red("/dev/null"));
                     
                     // Load index version
                     let index_obj = database.load(entry.get_oid())?;
@@ -332,7 +344,7 @@ impl DiffCommand {
                     let lines = diff::split_lines(&String::from_utf8_lossy(&content));
                     
                     for line in &lines {
-                        println!("-{}", line);
+                        println!("{}", Color::red(&format!("-{}", line)));
                     }
                     
                     return Ok(());
@@ -346,26 +358,56 @@ impl DiffCommand {
                 
                 // If the hash matches, there's no change
                 if file_hash == entry.get_oid() {
-                    println!("No changes in {}", path_str);
+                    println!("{}", Color::green(&format!("No changes in {}", path_str)));
                     return Ok(());
                 }
                 
                 // Show diff between index and working copy
-                println!("diff --ash a/{} b/{}", path_str, path_str);
+                println!("diff --ash a/{} b/{}", Color::cyan(&path_str), Color::cyan(&path_str));
                 
-                let diff_output = diff::diff_with_database(workspace, database, path, entry.get_oid(), 3)?;
-                print!("{}", diff_output);
+                let raw_diff_output = diff::diff_with_database(workspace, database, path, entry.get_oid(), 3)?;
+                
+                // Colorize and print the diff
+                let colored_diff = Self::colorize_diff_output(&raw_diff_output);
+                print!("{}", colored_diff);
             }
         } else {
             // Path not in index
             if workspace.path_exists(path)? {
-                println!("error: path '{}' is untracked", path_str);
+                println!("{}", Color::red(&format!("error: path '{}' is untracked", path_str)));
             } else {
-                println!("error: path '{}' does not exist", path_str);
+                println!("{}", Color::red(&format!("error: path '{}' does not exist", path_str)));
             }
         }
         
         Ok(())
+    }
+    
+    /// Helper method to colorize diff output
+    fn colorize_diff_output(diff: &str) -> String {
+        let mut result = String::new();
+        
+        for line in diff.lines() {
+            if line.starts_with("@@") && line.contains("@@") {
+                // Hunk header
+                result.push_str(&Color::cyan(line));
+                result.push('\n');
+            } else if line.starts_with('+') {
+                // Added line
+                result.push_str(&Color::green(line));
+                result.push('\n');
+            } else if line.starts_with('-') {
+                // Removed line
+                result.push_str(&Color::red(line));
+                result.push('\n');
+            } else {
+                // Context line
+                result.push_str(line);
+                result.push('\n');
+            }
+        }
+        
+        result
     }
     
     /// Collect all files from a commit
@@ -383,32 +425,136 @@ impl DiffCommand {
         Ok(())
     }
     
-    /// Recursively collect files from a tree
     fn collect_files_from_tree(
         database: &mut Database,
         tree_oid: &str,
         prefix: PathBuf,
         files: &mut HashMap<String, String>
     ) -> Result<(), Error> {
-        // This is a simplified implementation - in a real implementation you would
-        // traverse the tree structure properly to collect all files recursively
+        println!("Traversing tree: {} at path: {}", tree_oid, prefix.display());
         
-        // For demonstration, let's just add a few known files if they exist
-        // You should replace this with proper tree traversal code based on your repo structure
+        // Load the object
+        let obj = database.load(tree_oid)?;
         
-        // Example: if this is the root tree, add src/commands/diff.rs
-        if prefix.as_os_str().is_empty() {
-            // Check if src directory exists in the tree
-            let obj = database.load(tree_oid)?;
+        // Check if the object is a tree
+        if let Some(tree) = obj.as_any().downcast_ref::<Tree>() {
+            // Process each entry in the tree
+            for (name, entry) in tree.get_entries() {
+                let entry_path = if prefix.as_os_str().is_empty() {
+                    PathBuf::from(name)
+                } else {
+                    prefix.join(name)
+                };
+                
+                let entry_path_str = entry_path.to_string_lossy().to_string();
+                
+                match entry {
+                    TreeEntry::Blob(oid, mode) => {
+                        // If this is a directory entry masquerading as a blob
+                        if *mode == TREE_MODE || mode.is_directory() {
+                            println!("Found directory stored as blob: {} -> {}", entry_path_str, oid);
+                            // Recursively process this directory
+                            Self::collect_files_from_tree(database, oid, entry_path, files)?;
+                        } else {
+                            // Regular file
+                            println!("Found file: {} -> {}", entry_path_str, oid);
+                            files.insert(entry_path_str, oid.clone());
+                        }
+                    },
+                    TreeEntry::Tree(subtree) => {
+                        if let Some(subtree_oid) = subtree.get_oid() {
+                            println!("Found directory: {} -> {}", entry_path_str, subtree_oid);
+                            // Recursively process this directory
+                            Self::collect_files_from_tree(database, subtree_oid, entry_path, files)?;
+                        } else {
+                            println!("Warning: Tree entry without OID: {}", entry_path_str);
+                        }
+                    }
+                }
+            }
             
-            // Simplified traversal logic - in a real implementation, you would 
-            // follow your tree structure to recursively collect all files
-            // This is a placeholder for demonstration
-            
-            // Recursively collect files based on your tree implementation
-            files.insert("src/commands/diff.rs".to_string(), "placeholder_oid".to_string());
+            return Ok(());
         }
         
+        // If object is a blob, try to parse it as a tree
+        if obj.get_type() == "blob" {
+            println!("Object is a blob, attempting to parse as tree...");
+            
+            // Attempt to parse blob as a tree (this handles directories stored as blobs)
+            let blob_data = obj.to_bytes();
+            match Tree::parse(&blob_data) {
+                Ok(parsed_tree) => {
+                    println!("Successfully parsed blob as tree with {} entries", parsed_tree.get_entries().len());
+                    
+                    // Process each entry in the parsed tree
+                    for (name, entry) in parsed_tree.get_entries() {
+                        let entry_path = if prefix.as_os_str().is_empty() {
+                            PathBuf::from(name)
+                        } else {
+                            prefix.join(name)
+                        };
+                        
+                        let entry_path_str = entry_path.to_string_lossy().to_string();
+                        
+                        match entry {
+                            TreeEntry::Blob(oid, mode) => {
+                                if *mode == TREE_MODE || mode.is_directory() {
+                                    println!("Found directory in parsed tree: {} -> {}", entry_path_str, oid);
+                                    // Recursively process this directory
+                                    Self::collect_files_from_tree(database, oid, entry_path, files)?;
+                                } else {
+                                    println!("Found file in parsed tree: {} -> {}", entry_path_str, oid);
+                                    files.insert(entry_path_str, oid.clone());
+                                }
+                            },
+                            TreeEntry::Tree(subtree) => {
+                                if let Some(subtree_oid) = subtree.get_oid() {
+                                    println!("Found directory in parsed tree: {} -> {}", entry_path_str, subtree_oid);
+                                    // Recursively process this directory
+                                    Self::collect_files_from_tree(database, subtree_oid, entry_path, files)?;
+                                } else {
+                                    println!("Warning: Tree entry without OID in parsed tree: {}", entry_path_str);
+                                }
+                            }
+                        }
+                    }
+                    
+                    return Ok(());
+                },
+                Err(e) => {
+                    // If we're at a non-root path, this might be a file
+                    if !prefix.as_os_str().is_empty() {
+                        let path_str = prefix.to_string_lossy().to_string();
+                        println!("Adding file at path: {} -> {}", path_str, tree_oid);
+                        files.insert(path_str, tree_oid.to_string());
+                        return Ok(());
+                    }
+                    
+                    println!("Failed to parse blob as tree: {}", e);
+                }
+            }
+        }
+        
+        // Special case for top-level entries that might need deeper traversal
+        // This handles cases where we have entries like "src" but need to explore "src/commands"
+        if prefix.as_os_str().is_empty() {
+            // Check all found entries in the root
+            for (path, oid) in files.clone() {  // Clone to avoid borrowing issues
+                // Only look at top-level directory entries (no path separators)
+                if !path.contains('/') {
+                    println!("Checking top-level entry for deeper traversal: {} -> {}", path, oid);
+                    
+                    // Try to load and traverse it as a directory
+                    let dir_path = PathBuf::from(&path);
+                    if let Err(e) = Self::collect_files_from_tree(database, &oid, dir_path, files) {
+                        println!("Error traversing {}: {}", path, e);
+                        // Continue with other entries even if this one fails
+                    }
+                }
+            }
+        }
+        
+        println!("Object {} is neither a tree nor a blob that can be parsed as a tree", tree_oid);
         Ok(())
     }
 }
