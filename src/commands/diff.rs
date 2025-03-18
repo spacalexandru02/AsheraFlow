@@ -1,4 +1,4 @@
-    // src/commands/diff.rs - versiune îmbunătățită
+// src/commands/diff.rs - updated to use pager
 use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 use std::time::Instant;
@@ -12,12 +12,12 @@ use crate::core::workspace::Workspace;
 use crate::core::diff::diff;
 use crate::core::diff::myers::{diff_lines, format_diff, is_binary_content};
 use crate::errors::error::Error;
+use crate::core::pager::Pager;
 
 pub struct DiffCommand;
 
-
 impl DiffCommand {
-/// Execute diff command between index/HEAD and working tree
+    /// Execute diff command between index/HEAD and working tree
     pub fn execute(paths: &[String], cached: bool) -> Result<(), Error> {
         let start_time = Instant::now();
         
@@ -32,27 +32,57 @@ impl DiffCommand {
         let workspace = Workspace::new(root_path);
         let mut database = Database::new(git_path.join("objects"));
         let mut index = Index::new(git_path.join("index"));
-        let refs = Refs::new(&git_path);
         
-        // Încarcă indexul
+        // Load the index first
         index.load()?;
         
-        // Determină ce să compari în funcție de căi și flag-ul --cached
-        if paths.is_empty() {
-            // Tratează diff-ul pentru întregul repository
-            Self::diff_all(&workspace, &mut database, &index, &refs, cached)?;
+        let refs = Refs::new(&git_path);
+        
+        // Initialize the pager
+        let mut pager = Pager::new();
+        
+        // Start the pager - this creates the pager process
+        pager.start()?;
+        
+        // Execute diff commands
+        let result = if paths.is_empty() {
+            // Treat the entire repository
+            Self::diff_all(&workspace, &mut database, &index, &refs, cached, &mut pager)
         } else {
-            // Tratează căi specifice
+            // Process specific paths
+            let mut overall_result = Ok(());
+            
             for path_str in paths {
+                // Stop processing if user exited pager
+                if !pager.is_enabled() {
+                    break;
+                }
+                
                 let path = PathBuf::from(path_str);
-                Self::diff_path(&workspace, &mut database, &index, &refs, &path, cached)?;
+                if let Err(e) = Self::diff_path(&workspace, &mut database, &index, &refs, &path, cached, &mut pager) {
+                    overall_result = Err(e);
+                    break;
+                }
             }
+            
+            overall_result
+        };
+        
+        // Only show completion message if pager is still active (user hasn't exited)
+        if pager.is_enabled() {
+            let elapsed = start_time.elapsed();
+            let _ = pager.write(&format!("\n{}\n", Color::cyan(&format!("Diff completed in {:.2}s", elapsed.as_secs_f32()))));
         }
         
-        let elapsed = start_time.elapsed();
-        println!("{}", Color::cyan(&format!("Diff completed in {:.2}s", elapsed.as_secs_f32())));
+        // Close pager properly - this will wait for it to exit if it's still running
+        let close_result = pager.close();
         
-        Ok(())
+        // Return the first error we encountered (either from diff or closing pager)
+        match (result, close_result) {
+            (Err(e), _) => Err(e),
+            (_, Err(e)) => Err(e),
+            _ => Ok(()),
+        }
     }
 
     /// Diff all changed files in the repository
@@ -61,11 +91,12 @@ impl DiffCommand {
         database: &mut Database,
         index: &Index,
         refs: &Refs,
-        cached: bool
+        cached: bool,
+        pager: &mut Pager
     ) -> Result<(), Error> {
         // Dacă flag-ul cached este setat, compară indexul cu HEAD
         if cached {
-            return Self::diff_index_vs_head(workspace, database, index, refs);
+            return Self::diff_index_vs_head(workspace, database, index, refs, pager);
         }
         
         // În caz contrar, compară arborele de lucru cu indexul
@@ -79,10 +110,10 @@ impl DiffCommand {
             if !workspace.path_exists(path)? {
                 has_changes = true;
                 let path_str = path.display().to_string();
-                println!("diff --ash a/{} b/{}", Color::cyan(&path_str), Color::cyan(&path_str));
-                println!("{} {}", Color::red("deleted file mode"), Color::red(&entry.mode_octal()));
-                println!("--- a/{}", Color::red(&path_str));
-                println!("+++ {}", Color::red("/dev/null"));
+                pager.write(&format!("diff --ash a/{} b/{}\n", Color::cyan(&path_str), Color::cyan(&path_str)))?;
+                pager.write(&format!("{} {}\n", Color::red("deleted file mode"), Color::red(&entry.mode_octal())))?;
+                pager.write(&format!("--- a/{}\n", Color::red(&path_str)))?;
+                pager.write(&format!("+++ {}\n", Color::red("/dev/null")))?;
                 
                 // Obține conținutul blob-ului din baza de date
                 let blob_obj = database.load(entry.get_oid())?;
@@ -90,7 +121,7 @@ impl DiffCommand {
                 
                 // Verifică dacă conținutul este binar
                 if is_binary_content(&content) {
-                    println!("Binary file a/{} has been deleted", path_str);
+                    pager.write(&format!("Binary file a/{} has been deleted\n", path_str))?;
                     continue;
                 }
                 
@@ -98,7 +129,7 @@ impl DiffCommand {
                 
                 // Arată diff-ul de ștergere
                 for line in &lines {
-                    println!("{}", Color::red(&format!("-{}", line)));
+                    pager.write(&format!("{}\n", Color::red(&format!("-{}", line))))?;
                 }
                 
                 continue;
@@ -119,11 +150,11 @@ impl DiffCommand {
             
             // Tipărește antetul diff-ului
             let path_str = path.display().to_string();
-            println!("diff --ash a/{} b/{}", Color::cyan(&path_str), Color::cyan(&path_str));
+            pager.write(&format!("diff --ash a/{} b/{}\n", Color::cyan(&path_str), Color::cyan(&path_str)))?;
             
             // Verifică dacă fișierul este binar
             if is_binary_content(&file_content) {
-                println!("Binary files a/{} and b/{} differ", path_str, path_str);
+                pager.write(&format!("Binary files a/{} and b/{} differ\n", path_str, path_str))?;
                 continue;
             }
             
@@ -132,11 +163,11 @@ impl DiffCommand {
             
             // Adaugă culori la ieșirea diff-ului
             let colored_diff = Self::colorize_diff_output(&raw_diff_output);
-            print!("{}", colored_diff);
+            pager.write(&colored_diff)?;
         }
         
         if !has_changes {
-            println!("{}", Color::green("No changes"));
+            pager.write(&format!("{}\n", Color::green("No changes")))?;
         }
         
         Ok(())
@@ -310,6 +341,7 @@ impl DiffCommand {
         
         Ok(())
     }
+    
     /// Diff a specific path
     fn diff_path(
         workspace: &Workspace,
@@ -317,7 +349,8 @@ impl DiffCommand {
         index: &Index,
         refs: &Refs,
         path: &Path,
-        cached: bool
+        cached: bool,
+        pager: &mut Pager
     ) -> Result<(), Error> {
         let path_str = path.to_string_lossy().to_string();
         
@@ -334,7 +367,7 @@ impl DiffCommand {
                         
                         // Verifică dacă fișierul este binar
                         if is_binary_content(&content) {
-                            println!("Binary file b/{} created", path_str);
+                            pager.write(&format!("Binary file b/{} created\n", path_str))?;
                             return Ok(());
                         }
                         
@@ -342,15 +375,15 @@ impl DiffCommand {
                         let index_hash = entry.get_oid();
                         let index_hash_short = if index_hash.len() >= 7 { &index_hash[0..7] } else { index_hash };
                         
-                        println!("index 0000000..{} 100644", index_hash_short);
-                        println!("--- /dev/null");
-                        println!("+++ b/{}", path_str);
-                        println!("@@ -0,0 +1,{} @@", content.len());
+                        pager.write(&format!("index 0000000..{} 100644\n", index_hash_short))?;
+                        pager.write(&format!("--- /dev/null\n"))?;
+                        pager.write(&format!("+++ b/{}\n", path_str))?;
+                        pager.write(&format!("@@ -0,0 +1,{} @@\n", content.len()))?;
                         
                         let lines = diff::split_lines(&String::from_utf8_lossy(&content));
                         
                         for line in &lines {
-                            println!("{}", Color::green(&format!("+{}", line)));
+                            pager.write(&format!("{}\n", Color::green(&format!("+{}", line))))?;
                         }
                         
                         return Ok(());
@@ -370,7 +403,7 @@ impl DiffCommand {
                 if let Some(head_oid) = head_files.get(&path_str) {
                     // Fișierul există atât în HEAD, cât și în index
                     if head_oid == entry.get_oid() {
-                        println!("{}", Color::green(&format!("No changes staged for {}", path_str)));
+                        pager.write(&format!("{}\n", Color::green(&format!("No changes staged for {}", path_str))))?;
                         return Ok(());
                     }
                     
@@ -384,7 +417,7 @@ impl DiffCommand {
                     
                     // Verifică dacă vreunul dintre fișiere este binar
                     if is_binary_content(&head_content) || is_binary_content(&index_content) {
-                        println!("Binary files a/{} and b/{} differ", path_str, path_str);
+                        pager.write(&format!("Binary files a/{} and b/{} differ\n", path_str, path_str))?;
                         return Ok(());
                     }
                     
@@ -392,9 +425,9 @@ impl DiffCommand {
                     let head_hash_short = if head_oid.len() >= 7 { &head_oid[0..7] } else { head_oid };
                     let index_hash_short = if entry.get_oid().len() >= 7 { &entry.get_oid()[0..7] } else { entry.get_oid() };
                     
-                    println!("index {}..{} {}", head_hash_short, index_hash_short, entry.mode_octal());
-                    println!("--- a/{}", path_str);
-                    println!("+++ b/{}", path_str);
+                    pager.write(&format!("index {}..{} {}\n", head_hash_short, index_hash_short, entry.mode_octal()))?;
+                    pager.write(&format!("--- a/{}\n", path_str))?;
+                    pager.write(&format!("+++ b/{}\n", path_str))?;
                     
                     let head_lines = diff::split_lines(&String::from_utf8_lossy(&head_content));
                     let index_lines = diff::split_lines(&String::from_utf8_lossy(&index_content));
@@ -404,7 +437,7 @@ impl DiffCommand {
                     let diff_text = format_diff(&head_lines, &index_lines, &edits, 3);
                     
                     // Afișează diff-ul colorat
-                    print!("{}", DiffCommand::colorize_diff_output(&diff_text));
+                    pager.write(&DiffCommand::colorize_diff_output(&diff_text))?;
                 } else {
                     // Fișierul este în index, dar nu în HEAD (fișier nou)
                     let index_obj = database.load(entry.get_oid())?;
@@ -412,7 +445,7 @@ impl DiffCommand {
                     
                     // Verifică dacă fișierul este binar
                     if is_binary_content(&content) {
-                        println!("Binary file b/{} created", path_str);
+                        pager.write(&format!("Binary file b/{} created\n", path_str))?;
                         return Ok(());
                     }
                     
@@ -420,15 +453,15 @@ impl DiffCommand {
                     let index_hash = entry.get_oid();
                     let index_hash_short = if index_hash.len() >= 7 { &index_hash[0..7] } else { index_hash };
                     
-                    println!("index 0000000..{} {}", index_hash_short, entry.mode_octal());
-                    println!("--- /dev/null");
-                    println!("+++ b/{}", path_str);
-                    println!("@@ -0,0 +1,{} @@", content.len());
+                    pager.write(&format!("index 0000000..{} {}\n", index_hash_short, entry.mode_octal()))?;
+                    pager.write(&format!("--- /dev/null\n"))?;
+                    pager.write(&format!("+++ b/{}\n", path_str))?;
+                    pager.write(&format!("@@ -0,0 +1,{} @@\n", content.len()))?;
                     
                     let lines = diff::split_lines(&String::from_utf8_lossy(&content));
                     
                     for line in &lines {
-                        println!("{}", Color::green(&format!("+{}", line)));
+                        pager.write(&format!("{}\n", Color::green(&format!("+{}", line))))?;
                     }
                 }
             } else {
@@ -439,7 +472,7 @@ impl DiffCommand {
                     
                     // Verifică dacă fișierul este binar
                     if is_binary_content(&content) {
-                        println!("Binary file a/{} has been deleted", path_str);
+                        pager.write(&format!("Binary file a/{} has been deleted\n", path_str))?;
                         return Ok(());
                     }
                     
@@ -447,15 +480,15 @@ impl DiffCommand {
                     let index_hash = entry.get_oid();
                     let index_hash_short = if index_hash.len() >= 7 { &index_hash[0..7] } else { index_hash };
                     
-                    println!("index {}..0000000 {}", index_hash_short, entry.mode_octal());
-                    println!("--- a/{}", path_str);
-                    println!("+++ /dev/null");
-                    println!("@@ -1,{} +0,0 @@", content.len());
+                    pager.write(&format!("index {}..0000000 {}\n", index_hash_short, entry.mode_octal()))?;
+                    pager.write(&format!("--- a/{}\n", path_str))?;
+                    pager.write(&format!("+++ /dev/null\n"))?;
+                    pager.write(&format!("@@ -1,{} +0,0 @@\n", content.len()))?;
                     
                     let lines = diff::split_lines(&String::from_utf8_lossy(&content));
                     
                     for line in &lines {
-                        println!("{}", Color::red(&format!("-{}", line)));
+                        pager.write(&format!("{}\n", Color::red(&format!("-{}", line))))?;
                     }
                     
                     return Ok(());
@@ -469,17 +502,17 @@ impl DiffCommand {
                 
                 // Dacă hash-ul se potrivește, nu există nicio modificare
                 if file_hash == entry.get_oid() {
-                    println!("{}", Color::green(&format!("No changes in {}", path_str)));
+                    pager.write(&format!("{}\n", Color::green(&format!("No changes in {}", path_str))))?;
                     return Ok(());
                 }
                 
                 // Verifică dacă fișierul este binar
                 if is_binary_content(&file_content) {
-                    println!("index {}..{} {}", 
+                    pager.write(&format!("index {}..{} {}\n", 
                             &entry.get_oid()[0..std::cmp::min(7, entry.get_oid().len())], 
                             &file_hash[0..std::cmp::min(7, file_hash.len())], 
-                            entry.mode_octal());
-                    println!("Binary files a/{} and b/{} differ", path_str, path_str);
+                            entry.mode_octal()))?;
+                    pager.write(&format!("Binary files a/{} and b/{} differ\n", path_str, path_str))?;
                     return Ok(());
                 }
                 
@@ -488,9 +521,9 @@ impl DiffCommand {
                 let index_hash_short = if entry.get_oid().len() >= 7 { &entry.get_oid()[0..7] } else { entry.get_oid() };
                 let file_hash_short = if file_hash.len() >= 7 { &file_hash[0..7] } else { &file_hash };
                 
-                println!("index {}..{} {}", index_hash_short, file_hash_short, entry.mode_octal());
-                println!("--- a/{}", path_str);
-                println!("+++ b/{}", path_str);
+                pager.write(&format!("index {}..{} {}\n", index_hash_short, file_hash_short, entry.mode_octal()))?;
+                pager.write(&format!("--- a/{}\n", path_str))?;
+                pager.write(&format!("+++ b/{}\n", path_str))?;
                 
                 // Folosește diff_with_database din modulul diff pentru a obține conținutul diff-ului
                 let raw_diff_output = diff::diff_with_database(workspace, database, path, entry.get_oid(), 3)?;
@@ -505,30 +538,32 @@ impl DiffCommand {
                 };
                 
                 // Colorează și afișează diff-ul
-                print!("{}", DiffCommand::colorize_diff_output(&diff_content));
+                pager.write(&DiffCommand::colorize_diff_output(&diff_content))?;
             }
         } else {
             // Calea nu este în index
             if workspace.path_exists(path)? {
-                println!("{}", Color::red(&format!("error: path '{}' is untracked", path_str)));
+                pager.write(&format!("{}\n", Color::red(&format!("error: path '{}' is untracked", path_str))))?;
             } else {
-                println!("{}", Color::red(&format!("error: path '{}' does not exist", path_str)));
+                pager.write(&format!("{}\n", Color::red(&format!("error: path '{}' does not exist", path_str))))?;
             }
         }
         
         Ok(())
     }
+
     fn diff_index_vs_head(
         workspace: &Workspace,
         database: &mut Database,
         index: &Index,
-        refs: &Refs
+        refs: &Refs,
+        pager: &mut Pager
     ) -> Result<(), Error> {
         // Obține commit-ul HEAD
         let head_oid = match refs.read_head()? {
             Some(oid) => oid,
             None => {
-                println!("{}", Color::yellow("No HEAD commit found. Index contains initial version."));
+                pager.write(&format!("{}\n", Color::yellow("No HEAD commit found. Index contains initial version.")))?;
                 return Ok(());
             }
         };
@@ -564,9 +599,9 @@ impl DiffCommand {
                 let head_hash_short = if head_oid.len() >= 7 { &head_oid[0..7] } else { head_oid };
                 let index_hash_short = if entry.get_oid().len() >= 7 { &entry.get_oid()[0..7] } else { entry.get_oid() };
                 
-                println!("index {}..{} {}", head_hash_short, index_hash_short, entry.mode_octal());
-                println!("--- a/{}", path);
-                println!("+++ b/{}", path);
+                pager.write(&format!("index {}..{} {}\n", head_hash_short, index_hash_short, entry.mode_octal()))?;
+                pager.write(&format!("--- a/{}\n", path))?;
+                pager.write(&format!("+++ b/{}\n", path))?;
                 
                 // Încarcă ambele versiuni
                 let head_obj = database.load(head_oid)?;
@@ -577,7 +612,7 @@ impl DiffCommand {
                 
                 // Verifică dacă fișierul este binar
                 if is_binary_content(&head_content) || is_binary_content(&index_content) {
-                    println!("Binary files a/{} and b/{} differ", path, path);
+                    pager.write(&format!("Binary files a/{} and b/{} differ\n", path, path))?;
                     continue;
                 }
                 
@@ -590,7 +625,7 @@ impl DiffCommand {
                 
                 // Colorează și afișează diff-ul
                 let colored_diff = DiffCommand::colorize_diff_output(&raw_diff);
-                print!("{}", colored_diff);
+                pager.write(&colored_diff)?;
             } else {
                 // Fișierul există în index, dar nu în HEAD (fișier nou)
                 has_changes = true;
@@ -598,9 +633,9 @@ impl DiffCommand {
                 // Generează hash-ul pentru antetul git
                 let index_hash_short = if entry.get_oid().len() >= 7 { &entry.get_oid()[0..7] } else { entry.get_oid() };
                 
-                println!("index 0000000..{} {}", index_hash_short, entry.mode_octal());
-                println!("--- /dev/null");
-                println!("+++ b/{}", path);
+                pager.write(&format!("index 0000000..{} {}\n", index_hash_short, entry.mode_octal()))?;
+                pager.write(&format!("--- /dev/null\n"))?;
+                pager.write(&format!("+++ b/{}\n", path))?;
                 
                 // Încarcă versiunea din index
                 let index_obj = database.load(entry.get_oid())?;
@@ -608,18 +643,18 @@ impl DiffCommand {
                 
                 // Verifică dacă fișierul este binar
                 if is_binary_content(&content) {
-                    println!("Binary file b/{} created", path);
+                    pager.write(&format!("Binary file b/{} created\n", path))?;
                     continue;
                 }
                 
                 let lines = diff::split_lines(&String::from_utf8_lossy(&content));
                 
                 // Afișează antetul hunk-ului
-                println!("@@ -0,0 +1,{} @@", lines.len());
+                pager.write(&format!("@@ -0,0 +1,{} @@\n", lines.len()))?;
                 
                 // Arată diff-ul de adăugare
                 for line in &lines {
-                    println!("{}", Color::green(&format!("+{}", line)));
+                    pager.write(&format!("{}\n", Color::green(&format!("+{}", line))))?;
                 }
             }
         }
@@ -633,9 +668,9 @@ impl DiffCommand {
                 // Generează hash-ul pentru antetul git
                 let head_hash_short = if head_oid.len() >= 7 { &head_oid[0..7] } else { head_oid };
                 
-                println!("index {}..0000000", head_hash_short);
-                println!("--- a/{}", path);
-                println!("+++ /dev/null");
+                pager.write(&format!("index {}..0000000\n", head_hash_short))?;
+                pager.write(&format!("--- a/{}\n", path))?;
+                pager.write(&format!("+++ /dev/null\n"))?;
                 
                 // Încarcă versiunea din HEAD
                 let head_obj = database.load(head_oid)?;
@@ -643,24 +678,24 @@ impl DiffCommand {
                 
                 // Verifică dacă fișierul este binar
                 if is_binary_content(&content) {
-                    println!("Binary file a/{} deleted", path);
+                    pager.write(&format!("Binary file a/{} deleted\n", path))?;
                     continue;
                 }
                 
                 let lines = diff::split_lines(&String::from_utf8_lossy(&content));
                 
                 // Afișează antetul hunk-ului
-                println!("@@ -1,{} +0,0 @@", lines.len());
+                pager.write(&format!("@@ -1,{} +0,0 @@\n", lines.len()))?;
                 
                 // Arată diff-ul de ștergere
                 for line in &lines {
-                    println!("{}", Color::red(&format!("-{}", line)));
+                    pager.write(&format!("{}\n", Color::red(&format!("-{}", line))))?;
                 }
             }
         }
         
         if !has_changes {
-            println!("{}", Color::green("No changes staged for commit"));
+            pager.write(&format!("{}\n", Color::green("No changes staged for commit")))?;
         }
         
         Ok(())

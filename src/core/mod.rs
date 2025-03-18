@@ -7,3 +7,4 @@ pub mod index;
 pub mod file_mode;
 pub mod color;
 pub mod diff;
+pub mod pager;
