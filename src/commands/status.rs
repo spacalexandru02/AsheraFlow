@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use crate::core::color::Color;
 use crate::core::database::database::Database;
 use crate::core::database::blob::Blob;
 use crate::core::database::entry::DatabaseEntry;
@@ -150,6 +151,7 @@ impl StatusCommand {
         
         format!("{}{}", left, right)
     }
+    
     
     /// Record a change for a specific path
     fn record_change(
@@ -691,7 +693,7 @@ impl StatusCommand {
         
         let elapsed = start_time.elapsed();
         if !porcelain {
-            println!("\nStatus completed in {:.2}s", elapsed.as_secs_f32());
+            println!("\n{} {:.2}s", Color::cyan("Status completed in"), elapsed.as_secs_f32());
         }
         
         Ok(())
@@ -801,10 +803,19 @@ impl StatusCommand {
         // Display status for each file
         for path in &all_files {
             if untracked.contains(path) {
-                println!("?? {}", path);
+                println!("{} {}", Color::red("??"), Color::red(path));
             } else {
                 let status = Self::status_for(path, changes);
-                println!("{} {}", status, path);
+                let status_colored = if status.contains('M') {
+                    Color::yellow(&status)
+                } else if status.contains('A') {
+                    Color::green(&status)
+                } else if status.contains('D') {
+                    Color::red(&status)
+                } else {
+                    status.to_string()
+                };
+                println!("{} {}", status_colored, path);
             }
         }
     }
@@ -838,51 +849,62 @@ impl StatusCommand {
             }
         }
         
-        println!("On branch master");
+        println!("On branch {}", Color::green("master"));
         
         // Display changes in index (HEAD -> Index)
         if !changes_to_be_committed.is_empty() {
-            println!("\nChanges to be committed:");
-            println!("  (use \"ash reset HEAD <file>...\" to unstage)");
+            println!("\n{}:", Color::green("Changes to be committed"));
+            println!("  (use \"{}\" to unstage)", Color::cyan("ash reset HEAD <file>..."));
             
             // Sort for consistent output
             changes_to_be_committed.sort();
             
             for (path, status) in &changes_to_be_committed {
-                println!("        {}: {}", status, path);
+                let colored_status = match *status {
+                    "new file" => Color::green("new file"),
+                    "modified" => Color::green("modified"),
+                    "deleted" => Color::green("deleted"),
+                    _ => status.to_string()
+                };
+                println!("        {}: {}", colored_status, Color::green(path));
             }
         }
         
         // Display changes in workspace (Index -> Workspace)
         if !changes_not_staged.is_empty() {
-            println!("\nChanges not staged for commit:");
-            println!("  (use \"ash add <file>...\" to update what will be committed)");
-            println!("  (use \"ash checkout -- <file>...\" to discard changes in working directory)");
+            println!("\n{}:", Color::red("Changes not staged for commit"));
+            println!("  (use \"{}\" to update what will be committed)", Color::cyan("ash add <file>..."));
+            println!("  (use \"{}\" to discard changes in working directory)", Color::cyan("ash checkout -- <file>..."));
             
             // Sort for consistent output
             changes_not_staged.sort();
             
             for (path, status) in &changes_not_staged {
-                println!("        {}: {}", status, path);
+                let colored_status = match *status {
+                    "modified" => Color::red("modified"),
+                    "deleted" => Color::red("deleted"),
+                    _ => status.to_string()
+                };
+                println!("        {}: {}", colored_status, Color::red(path));
             }
         }
         
         // Display untracked files
         if !untracked.is_empty() {
-            println!("\nUntracked files:");
-            println!("  (use \"ash add <file>...\" to include in what will be committed)");
+            println!("\n{}:", Color::red("Untracked files"));
+            println!("  (use \"{}\" to include in what will be committed)", Color::cyan("ash add <file>..."));
             
             let mut sorted_untracked: Vec<&String> = untracked.iter().collect();
             sorted_untracked.sort();
             
             for path in sorted_untracked {
-                println!("        {}", path);
+                println!("        {}", Color::red(path));
             }
         }
         
         // If no changes, show "working tree clean" message
         if changes_to_be_committed.is_empty() && changes_not_staged.is_empty() && untracked.is_empty() {
-            println!("nothing to commit, working tree clean");
+            println!("{}", Color::green("nothing to commit, working tree clean"));
         }
     }
 }
