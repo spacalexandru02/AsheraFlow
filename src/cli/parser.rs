@@ -69,14 +69,15 @@ impl CliParser {
 
     pub fn format_help() -> String {
         format!(
-            "{}\n{}\n{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
             "Usage: ash <command> [options]",
             "Commands:",
-            "  init [path]           Initialize a new repository",
-            "  commit <message>      Commit changes to the repository",
-            "  add <paths...>        Add file contents to the index",
-            "  status [--porcelain]  Show the working tree status",
-            "  validate              Validate repository health and integrity"
+            "  init [path]                      Initialize a new repository",
+            "  commit <message>                 Commit changes to the repository",
+            "  add <paths...>                   Add file contents to the index",
+            "  status [--porcelain] [--color=<when>]   Show the working tree status",
+            "         --porcelain               Machine-readable output",
+            "         --color=<when>            Colorize output (always|auto|never)"
         )
     }
 }

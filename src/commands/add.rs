@@ -4,8 +4,9 @@ use std::collections::{HashSet, HashMap};
 use std::time::Instant;
 use crate::core::database::blob::Blob;
 use crate::core::database::database::Database;
-use crate::core::database::tree::{Tree, TreeEntry};
+use crate::core::database::tree::{Tree, TreeEntry, TREE_MODE};
 use crate::core::database::commit::Commit;
+use crate::core::file_mode::FileMode;
 use crate::core::index::index::Index;
 use crate::core::workspace::Workspace;
 use crate::core::refs::Refs;
@@ -353,78 +354,139 @@ impl AddCommand {
     }
 
     /// Recursively collect all files from a tree and its subtrees
-    fn collect_files_from_tree(
-        database: &mut Database,
-        tree_oid: &str,
-        prefix: PathBuf,
-        files: &mut HashMap<String, String>
-    ) -> Result<(), Error> {
-        println!("Collecting files from tree: {} at path: {}", tree_oid, prefix.display());
-        
-        // Tratează specific cazul directorul root (prefix gol)
-        if prefix.as_os_str().is_empty() {
-            let root_obj = database.load(tree_oid)?;
+/// This is a general implementation that will work for any directory structure
+/// Recursively collect all files from a tree and its subtrees
+/// This is a general implementation that will work for any directory structure
+fn collect_files_from_tree(
+    database: &mut Database,
+    tree_oid: &str,
+    prefix: PathBuf,
+    files: &mut HashMap<String, String>
+) -> Result<(), Error> {
+    println!("Traversing tree: {} at path: {}", tree_oid, prefix.display());
+    
+    // Load the object
+    let obj = database.load(tree_oid)?;
+    
+    // Check if the object is a tree
+    if let Some(tree) = obj.as_any().downcast_ref::<Tree>() {
+        // Process each entry in the tree
+        for (name, entry) in tree.get_entries() {
+            let entry_path = if prefix.as_os_str().is_empty() {
+                PathBuf::from(name)
+            } else {
+                prefix.join(name)
+            };
             
-            if let Some(root_tree) = root_obj.as_any().downcast_ref::<Tree>() {
-                // Caută entry-ul "src"
-                for (name, entry) in root_tree.get_entries() {
-                    if name == "src" {
-                        println!("Found src directory entry");
-                        
-                        // Obține OID-ul pentru src
-                        let src_oid = match entry {
-                            TreeEntry::Blob(oid, _) => oid,
-                            TreeEntry::Tree(subtree) => {
-                                if let Some(oid) = subtree.get_oid() {
-                                    oid
-                                } else {
-                                    continue;
-                                }
-                            }
-                        };
-                        
-                        // Încarcă obiectul src
-                        let src_obj = database.load(src_oid)?;
-                        
-                        // Parcurge src pentru a găsi "cli"
-                        if let Some(src_tree) = src_obj.as_any().downcast_ref::<Tree>() {
-                            for (src_name, src_entry) in src_tree.get_entries() {
-                                if src_name == "cli" {
-                                    println!("Found src/cli directory entry");
-                                    
-                                    // Obține OID-ul pentru cli
-                                    let cli_oid = match src_entry {
-                                        TreeEntry::Blob(oid, _) => oid,
-                                        TreeEntry::Tree(subtree) => {
-                                            if let Some(oid) = subtree.get_oid() {
-                                                oid
-                                            } else {
-                                                continue;
-                                            }
-                                        }
-                                    };
-                                    
-                                    // Încarcă obiectul cli
-                                    let cli_obj = database.load(cli_oid)?;
-                                    
-                                    // Colectează fișierele din cli
-                                    if let Some(cli_tree) = cli_obj.as_any().downcast_ref::<Tree>() {
-                                        for (cli_name, cli_entry) in cli_tree.get_entries() {
-                                            if let TreeEntry::Blob(file_oid, _) = cli_entry {
-                                                let file_path = format!("src/cli/{}", cli_name);
-                                                println!("Found file in src/cli: {} -> {}", file_path, file_oid);
-                                                files.insert(file_path, file_oid.clone());
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+            let entry_path_str = entry_path.to_string_lossy().to_string();
+            
+            match entry {
+                TreeEntry::Blob(oid, mode) => {
+                    // If this is a directory entry masquerading as a blob
+                    if *mode == TREE_MODE || mode.is_directory() {
+                        println!("Found directory stored as blob: {} -> {}", entry_path_str, oid);
+                        // Recursively process this directory
+                        Self::collect_files_from_tree(database, oid, entry_path, files)?;
+                    } else {
+                        // Regular file
+                        println!("Found file: {} -> {}", entry_path_str, oid);
+                        files.insert(entry_path_str, oid.clone());
+                    }
+                },
+                TreeEntry::Tree(subtree) => {
+                    if let Some(subtree_oid) = subtree.get_oid() {
+                        println!("Found directory: {} -> {}", entry_path_str, subtree_oid);
+                        // Recursively process this directory
+                        Self::collect_files_from_tree(database, subtree_oid, entry_path, files)?;
+                    } else {
+                        println!("Warning: Tree entry without OID: {}", entry_path_str);
                     }
                 }
             }
         }
         
-        Ok(())
+        return Ok(());
     }
+    
+    // If object is a blob, try to parse it as a tree
+    if obj.get_type() == "blob" {
+        println!("Object is a blob, attempting to parse as tree...");
+        
+        // Attempt to parse blob as a tree (this handles directories stored as blobs)
+        let blob_data = obj.to_bytes();
+        match Tree::parse(&blob_data) {
+            Ok(parsed_tree) => {
+                println!("Successfully parsed blob as tree with {} entries", parsed_tree.get_entries().len());
+                
+                // Process each entry in the parsed tree
+                for (name, entry) in parsed_tree.get_entries() {
+                    let entry_path = if prefix.as_os_str().is_empty() {
+                        PathBuf::from(name)
+                    } else {
+                        prefix.join(name)
+                    };
+                    
+                    let entry_path_str = entry_path.to_string_lossy().to_string();
+                    
+                    match entry {
+                        TreeEntry::Blob(oid, mode) => {
+                            if *mode == TREE_MODE || mode.is_directory() {
+                                println!("Found directory in parsed tree: {} -> {}", entry_path_str, oid);
+                                // Recursively process this directory
+                                Self::collect_files_from_tree(database, oid, entry_path, files)?;
+                            } else {
+                                println!("Found file in parsed tree: {} -> {}", entry_path_str, oid);
+                                files.insert(entry_path_str, oid.clone());
+                            }
+                        },
+                        TreeEntry::Tree(subtree) => {
+                            if let Some(subtree_oid) = subtree.get_oid() {
+                                println!("Found directory in parsed tree: {} -> {}", entry_path_str, subtree_oid);
+                                // Recursively process this directory
+                                Self::collect_files_from_tree(database, subtree_oid, entry_path, files)?;
+                            } else {
+                                println!("Warning: Tree entry without OID in parsed tree: {}", entry_path_str);
+                            }
+                        }
+                    }
+                }
+                
+                return Ok(());
+            },
+            Err(e) => {
+                // If we're at a non-root path, this might be a file
+                if !prefix.as_os_str().is_empty() {
+                    let path_str = prefix.to_string_lossy().to_string();
+                    println!("Adding file at path: {} -> {}", path_str, tree_oid);
+                    files.insert(path_str, tree_oid.to_string());
+                    return Ok(());
+                }
+                
+                println!("Failed to parse blob as tree: {}", e);
+            }
+        }
+    }
+    
+    // Special case for top-level entries that might need deeper traversal
+    // This handles cases where we have entries like "src" but need to explore "src/commands"
+    if prefix.as_os_str().is_empty() {
+        // Check all found entries in the root
+        for (path, oid) in files.clone() {  // Clone to avoid borrowing issues
+            // Only look at top-level directory entries (no path separators)
+            if !path.contains('/') {
+                println!("Checking top-level entry for deeper traversal: {} -> {}", path, oid);
+                
+                // Try to load and traverse it as a directory
+                let dir_path = PathBuf::from(&path);
+                if let Err(e) = Self::collect_files_from_tree(database, &oid, dir_path, files) {
+                    println!("Error traversing {}: {}", path, e);
+                    // Continue with other entries even if this one fails
+                }
+            }
+        }
+    }
+    
+    println!("Object {} is neither a tree nor a blob that can be parsed as a tree", tree_oid);
+    Ok(())
+}
 }

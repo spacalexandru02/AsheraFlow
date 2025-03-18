@@ -14,7 +14,7 @@ pub struct Entry {
     mtime_nsec: u32,
     dev: u32,
     ino: u32,
-    pub mode: u32,
+    pub mode: FileMode,
     uid: u32,
     gid: u32,
     pub size: u32,
@@ -31,7 +31,7 @@ impl Entry {
         let mode = FileMode::from_metadata(stat);
         
         #[cfg(not(unix))]
-        let mode = REGULAR_MODE;
+        let mode = FileMode::REGULAR;
         
         let flags = path.len().min(MAX_PATH_SIZE as usize) as u16;
         
@@ -60,8 +60,9 @@ impl Entry {
     }
 
     pub fn mode_octal(&self) -> String {
-        FileMode::to_octal_string(self.mode)
+        self.mode.to_octal_string()
     }
+    
     // Getteri pentru toate proprietățile
     pub fn get_ctime(&self) -> u32 {
         self.ctime
@@ -87,8 +88,8 @@ impl Entry {
         self.ino
     }
 
-    pub fn get_mode(&self) -> u32 {
-        self.mode
+    pub fn get_mode(&self) -> &FileMode {
+        &self.mode
     }
 
     pub fn get_uid(&self) -> u32 {
@@ -132,7 +133,7 @@ impl Entry {
         self.mtime_nsec = mtime_nsec;
     }
 
-    pub fn set_mode(&mut self, mode: u32) {
+    pub fn set_mode(&mut self, mode: FileMode) {
         self.mode = mode;
     }
 
@@ -154,7 +155,7 @@ impl Entry {
         result.extend_from_slice(&self.mtime_nsec.to_be_bytes());
         result.extend_from_slice(&self.dev.to_be_bytes());
         result.extend_from_slice(&self.ino.to_be_bytes());
-        result.extend_from_slice(&self.mode.to_be_bytes());
+        result.extend_from_slice(&self.mode.0.to_be_bytes()); // Use the inner u32 value
         result.extend_from_slice(&self.uid.to_be_bytes());
         result.extend_from_slice(&self.gid.to_be_bytes());
         result.extend_from_slice(&self.size.to_be_bytes());
@@ -194,7 +195,8 @@ impl Entry {
         let mtime_nsec = u32::from_be_bytes([data[12], data[13], data[14], data[15]]);
         let dev = u32::from_be_bytes([data[16], data[17], data[18], data[19]]);
         let ino = u32::from_be_bytes([data[20], data[21], data[22], data[23]]);
-        let mode = u32::from_be_bytes([data[24], data[25], data[26], data[27]]);
+        let mode_u32 = u32::from_be_bytes([data[24], data[25], data[26], data[27]]);
+        let mode = FileMode(mode_u32);
         let uid = u32::from_be_bytes([data[28], data[29], data[30], data[31]]);
         let gid = u32::from_be_bytes([data[32], data[33], data[34], data[35]]);
         let size = u32::from_be_bytes([data[36], data[37], data[38], data[39]]);
@@ -257,7 +259,7 @@ impl Entry {
         // Update size
         self.set_size(stat.len() as u32);
         
-        // Update mode - use the numeric value directly
+        // Update mode using the new FileMode struct
         self.set_mode(FileMode::from_metadata(stat));
     }
 }

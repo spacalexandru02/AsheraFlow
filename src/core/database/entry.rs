@@ -1,24 +1,22 @@
 use std::path::PathBuf;
-
 use crate::core::file_mode::FileMode;
 
 #[derive(Debug, Clone)]
 pub struct DatabaseEntry {
     pub name: String,
     pub oid: String,
-    pub mode: String,
+    pub mode: String, // We still store mode as string for serialization compatibility
 }
 
 impl DatabaseEntry {
     pub fn new(name: String, oid: String, mode: &str) -> Self {
-        // Standardizează modul la format octal
-        let parsed_mode = FileMode::parse(mode);
-        let standard_mode = FileMode::to_octal_string(parsed_mode);
+        // Standardizează modul folosind FileMode
+        let file_mode = FileMode::parse(mode);
         
         DatabaseEntry {
             name,
             oid,
-            mode: standard_mode,
+            mode: file_mode.to_octal_string(),
         }
     }
 
@@ -32,6 +30,11 @@ impl DatabaseEntry {
     
     pub fn get_mode(&self) -> &str {
         &self.mode
+    }
+    
+    // Helper method to get the FileMode object
+    pub fn get_file_mode(&self) -> FileMode {
+        FileMode::parse(&self.mode)
     }
     
     pub fn parent_directories(&self) -> Vec<PathBuf> {

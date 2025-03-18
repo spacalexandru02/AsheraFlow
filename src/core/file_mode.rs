@@ -1,45 +1,19 @@
-pub struct FileMode;
+use std::fmt;
+
+#[derive(PartialEq, Clone, Copy)] // Added Copy trait
+pub struct FileMode(pub u32);
 
 impl FileMode {
-    /// Mod pentru directoare
-    pub const DIRECTORY: u32 = 0o040000; 
-    
-    /// Mod pentru fișiere normale
-    pub const REGULAR: u32 = 0o100644;
-    
-    /// Mod pentru fișiere executabile
-    pub const EXECUTABLE: u32 = 0o100755;
-    
     /// Mod pentru symlink-uri
     pub const SYMLINK: u32 = 0o120000;
-    
-    /// Convertește un șir de caractere la un mod numeric
-    /// Acceptă atât reprezentări octale cât și zecimale
-    pub fn parse(mode_str: &str) -> u32 {
-        let trimmed = mode_str.trim();
-        
-        // Încercăm mai întâi ca număr octal
-        if trimmed.starts_with("0") || trimmed.starts_with("0o") {
-            let start_idx = if trimmed.starts_with("0o") { 2 } else { 1 };
-            if let Ok(mode) = u32::from_str_radix(&trimmed[start_idx..], 8) {
-                return mode;
-            }
-        }
-        
-        // Încercăm valori octale fără prefix (cum ar fi "100644")
-        if trimmed.len() >= 6 && trimmed.starts_with('1') {
-            if let Ok(mode) = u32::from_str_radix(trimmed, 8) {
-                return mode;
-            }
-        }
-        
-        // În final, încercăm ca număr zecimal
-        trimmed.parse::<u32>().unwrap_or(Self::REGULAR)
-    }
+
+    pub const REGULAR: FileMode = FileMode(0o100644);
+    pub const EXECUTABLE: FileMode = FileMode(0o100755);
+    pub const DIRECTORY: FileMode = FileMode(0o040000);
     
     /// Convertește un mod numeric la reprezentarea sa octală
-    pub fn to_octal_string(mode: u32) -> String {
-        format!("{:o}", mode)
+    pub fn to_octal_string(&self) -> String {
+        format!("{:o}", self.0)
     }
     
     /// Verifică dacă două moduri sunt echivalente, indiferent de reprezentare
@@ -50,32 +24,54 @@ impl FileMode {
         (mode1 & mask) == (mode2 & mask)
     }
     
-    /// Verifică dacă un mod corespunde unui director
-    pub fn is_directory(mode: u32) -> bool {
-        // Folosim mască de biți pentru a verifica doar biții pentru tip
-        // Comparăm direct cu constanta DIRECTORY definită în octal
-        (mode & 0o170000) == Self::DIRECTORY
-    }
-    
     /// Verifică dacă un mod corespunde unui fișier executabil
     pub fn is_executable(mode: u32) -> bool {
         (mode & 0o111) != 0
     }
     
     /// Determină modul corespunzător din metadatele unui fișier
-    pub fn from_metadata(metadata: &std::fs::Metadata) -> u32 {
+    pub fn from_metadata(metadata: &std::fs::Metadata) -> FileMode {
         if metadata.is_dir() {
-            return Self::DIRECTORY;
+            return FileMode::DIRECTORY;
         }
-        
+    
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             if metadata.permissions().mode() & 0o111 != 0 {
-                return Self::EXECUTABLE;
+                return FileMode::EXECUTABLE;
             }
         }
         
-        Self::REGULAR
+        FileMode::REGULAR
+    }
+
+    pub fn parse(mode_str: &str) -> Self {
+        // Parsează ca număr octal
+        let mode = u32::from_str_radix(mode_str, 8).unwrap_or(Self::REGULAR.0);
+        FileMode(mode)
+    }
+
+    pub fn is_directory(&self) -> bool {
+        *self == FileMode::DIRECTORY
+    }
+    
+    // Add a static version of the method that takes a FileMode value
+    pub fn is_directory_mode(mode: FileMode) -> bool {
+        mode == FileMode::DIRECTORY
+    }
+}
+
+impl fmt::Display for FileMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Afișează mereu în format octal
+        write!(f, "{:o}", self.0)
+    }
+}
+
+impl fmt::Debug for FileMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Debug afișează în octal și o notă clară
+        write!(f, "FileMode({:o})", self.0)
     }
 }

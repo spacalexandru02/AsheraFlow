@@ -321,7 +321,7 @@ impl Index {
         let count = u32::from_be_bytes([header_data[8], header_data[9], header_data[10], header_data[11]]);
         
         // Read the entries
-        let mut metadata = fs::metadata(file_path)?;
+        let metadata = fs::metadata(file_path)?;
         let expected_size = HEADER_SIZE as u64 + (count as u64 * 62) + CHECKSUM_SIZE as u64;
         
         if metadata.len() < expected_size {
