@@ -52,10 +52,22 @@ impl CliParser {
             "status" => {
                 // Check for --porcelain flag
                 let porcelain = args.iter().skip(2).any(|arg| arg == "--porcelain");
+
+                // Check for --color option
+                let color = args.iter().skip(2).enumerate().find_map(|(i, arg)| {
+                    if arg == "--color" && i + 1 < args.len() - 2 {
+                        Some(args[i + 3].clone())
+                    } else if arg.starts_with("--color=") {
+                        Some(arg.split('=').nth(1).unwrap_or("auto").to_string())
+                    } else {
+                        None
+                    }
+                }).unwrap_or_else(|| "auto".to_string());
                 
                 CliArgs {
                     command: Command::Status {
                         porcelain,
+                        color,
                     },
                 }
             },
@@ -69,14 +81,15 @@ impl CliParser {
 
     pub fn format_help() -> String {
         format!(
-            "{}\n{}\n{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
             "Usage: ash <command> [options]",
             "Commands:",
-            "  init [path]           Initialize a new repository",
-            "  commit <message>      Commit changes to the repository",
-            "  add <paths...>        Add file contents to the index",
-            "  status [--porcelain]  Show the working tree status",
-            "  validate              Validate repository health and integrity"
+            "  init [path]                      Initialize a new repository",
+            "  commit <message>                 Commit changes to the repository",
+            "  add <paths...>                   Add file contents to the index",
+            "  status [--porcelain] [--color=<when>]   Show the working tree status",
+            "         --porcelain               Machine-readable output",
+            "         --color=<when>            Colorize output (always|auto|never)"
         )
     }
 }

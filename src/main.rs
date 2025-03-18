@@ -28,7 +28,7 @@ fn handle_command(cli_args: CliArgs) {
         Command::Init { path } => handle_init_command(&path),
         Command::Commit { message } => handle_commit_command(&message),
         Command::Add { paths } => handle_add_command(&paths),
-        Command::Status { porcelain } => handle_status_command(porcelain),
+        Command::Status { porcelain, color } => handle_status_command(porcelain, &color),
         Command::Unknown { name } => exit_with_error(&format!("'{}' is not a ash command", name)),
     }
 }
@@ -54,7 +54,10 @@ fn handle_add_command(paths: &[String]) {
     }
 }
 
-fn handle_status_command(porcelain: bool) {
+fn handle_status_command(porcelain: bool, color: &str) {
+    // Set color mode environment variable
+    std::env::set_var("ASH_COLOR", color);
+    
     match StatusCommand::execute(porcelain) {
         Ok(_) => process::exit(0),
         Err(e) => exit_with_error(&format!("fatal: {}", e)),

@@ -4,9 +4,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use crate::core::color::Color;
 use crate::core::database::database::Database;
 use crate::core::database::blob::Blob;
-use crate::core::database::entry::DatabaseEntry as DatabaseEntry;
+use crate::core::database::entry::DatabaseEntry;
 use crate::core::database::tree::{Tree, TreeEntry};
 use crate::core::database::commit::Commit;
 use crate::core::file_mode::FileMode;
@@ -39,7 +40,7 @@ impl StatusCommand {
         // Check file mode
         let entry_mode = entry.get_mode();
         let file_mode = Self::mode_for_stat(stat);
-        let mode_matches = FileMode::are_equivalent(entry_mode, file_mode);
+        let mode_matches = FileMode::are_equivalent(entry_mode.0, file_mode.0);
         
         size_matches && mode_matches
     }
@@ -78,7 +79,7 @@ impl StatusCommand {
     }
     
     /// Determine file mode from metadata (executable vs regular)
-    fn mode_for_stat(stat: &fs::Metadata) -> u32 {
+    fn mode_for_stat(stat: &fs::Metadata) -> FileMode {
         FileMode::from_metadata(stat)
     }
     
@@ -150,6 +151,7 @@ impl StatusCommand {
         
         format!("{}{}", left, right)
     }
+    
     
     /// Record a change for a specific path
     fn record_change(
@@ -302,7 +304,7 @@ impl StatusCommand {
                 }
             }
             
-            // Use the traverse_tree_structure to build the complete head_tree
+            // Use a proper generic recursive traversal to build the complete head_tree
             Self::traverse_tree_structure(database, root_tree_oid, PathBuf::new(), &mut head_tree)?;
             
             println!("Found {} entries in HEAD tree", head_tree.len());
@@ -315,108 +317,115 @@ impl StatusCommand {
         
         Ok(head_tree)
     }
-
     /// Recursively traverse the tree structure
     /// Recursively traverse the tree structure with special handling for directories
-fn traverse_tree_structure(
-    database: &mut Database,
-    tree_oid: &str,
-    prefix: PathBuf,
-    head_tree: &mut HashMap<String, DatabaseEntry>
-) -> Result<(), Error> {
-    println!("Traversing object: {} at path: {}", tree_oid, prefix.display());
-    
-    // Load the object
-    let obj = database.load(tree_oid)?;
-    
-    // Verifică pentru directorul root (path gol)
-    if prefix.as_os_str().is_empty() {
-        if let Some(root_tree) = obj.as_any().downcast_ref::<Tree>() {
-            for (name, entry) in root_tree.get_entries() {
-                if name == "src" {
-                    println!("Found src directory in HEAD");
-                    
-                    // Obține OID-ul pentru src
-                    let src_oid = match entry {
-                        TreeEntry::Blob(oid, _) => oid,
-                        TreeEntry::Tree(subtree) => {
-                            if let Some(oid) = subtree.get_oid() {
-                                oid
-                            } else {
-                                continue;
-                            }
+    fn traverse_tree_structure(
+        database: &mut Database,
+        tree_oid: &str,
+        prefix: PathBuf,
+        head_tree: &mut HashMap<String, DatabaseEntry>
+    ) -> Result<(), Error> {
+        println!("Traversing tree: {} at path: {}", tree_oid, prefix.display());
+        
+        // Load the tree object
+        let obj = database.load(tree_oid)?;
+        
+        if let Some(tree) = obj.as_any().downcast_ref::<Tree>() {
+            // Process all entries in the tree
+            for (name, entry) in tree.get_entries() {
+                // Construct the full path for this entry
+                let entry_path = if prefix.as_os_str().is_empty() {
+                    PathBuf::from(name)
+                } else {
+                    prefix.join(name)
+                };
+                
+                let path_str = entry_path.to_string_lossy().to_string();
+                
+                match entry {
+                    TreeEntry::Blob(oid, mode) => {
+                        // Store file entry in the head_tree
+                        println!("  Found file in HEAD: {} -> {}", path_str, oid);
+                        head_tree.insert(
+                            path_str.clone(),
+                            DatabaseEntry::new(
+                                path_str,
+                                oid.clone(),
+                                &mode.to_octal_string()
+                            )
+                        );
+                    },
+                    TreeEntry::Tree(subtree) => {
+                        if let Some(subtree_oid) = subtree.get_oid() {
+                            println!("  Found directory in HEAD: {} -> {}", path_str, subtree_oid);
+                            
+                            // Store directory entry in the head_tree
+                            head_tree.insert(
+                                path_str.clone(),
+                                DatabaseEntry::new(
+                                    path_str.clone(),
+                                    subtree_oid.clone(),
+                                    &TREE_MODE.to_octal_string()
+                                )
+                            );
+                            
+                            // Recursively process the subtree
+                            Self::traverse_tree_structure(database, subtree_oid, entry_path, head_tree)?;
                         }
+                    }
+                }
+            }
+        } else if obj.get_type() == "blob" {
+            // Sometimes blobs are used to store directories (special handling)
+            let blob_data = obj.to_bytes();
+            if let Ok(parsed_tree) = Tree::parse(&blob_data) {
+                println!("  Successfully parsed blob as tree with {} entries", parsed_tree.get_entries().len());
+                
+                // Process entries in the parsed tree
+                for (name, entry) in parsed_tree.get_entries() {
+                    let entry_path = if prefix.as_os_str().is_empty() {
+                        PathBuf::from(name)
+                    } else {
+                        prefix.join(name)
                     };
                     
-                    // Adaugă intrarea src în head_tree
-                    head_tree.insert(
-                        "src".to_string(),
-                        DatabaseEntry::new(
-                            "src".to_string(),
-                            src_oid.clone(),
-                            &TREE_MODE.to_string()
-                        )
-                    );
+                    let path_str = entry_path.to_string_lossy().to_string();
                     
-                    // Încarcă și procesează src
-                    let src_obj = database.load(src_oid)?;
-                    if let Some(src_tree) = src_obj.as_any().downcast_ref::<Tree>() {
-                        for (src_name, src_entry) in src_tree.get_entries() {
-                            if src_name == "cli" {
-                                println!("Found src/cli directory in HEAD");
-                                
-                                // Obține OID-ul pentru cli
-                                let cli_oid = match src_entry {
-                                    TreeEntry::Blob(oid, _) => oid,
-                                    TreeEntry::Tree(subtree) => {
-                                        if let Some(oid) = subtree.get_oid() {
-                                            oid
-                                        } else {
-                                            continue;
-                                        }
-                                    }
-                                };
-                                
-                                // Adaugă intrarea src/cli în head_tree
+                    match entry {
+                        TreeEntry::Blob(blob_oid, mode) => {
+                            println!("  Found file in parsed tree: {} -> {}", path_str, blob_oid);
+                            head_tree.insert(
+                                path_str.clone(),
+                                DatabaseEntry::new(
+                                    path_str,
+                                    blob_oid.clone(),
+                                    &mode.to_octal_string()
+                                )
+                            );
+                        },
+                        TreeEntry::Tree(subtree) => {
+                            if let Some(subtree_oid) = subtree.get_oid() {
+                                println!("  Found directory in parsed tree: {} -> {}", path_str, subtree_oid);
                                 head_tree.insert(
-                                    "src/cli".to_string(),
+                                    path_str.clone(),
                                     DatabaseEntry::new(
-                                        "src/cli".to_string(),
-                                        cli_oid.clone(),
-                                        &TREE_MODE.to_string()
+                                        path_str.clone(),
+                                        subtree_oid.clone(),
+                                        &TREE_MODE.to_octal_string()
                                     )
                                 );
                                 
-                                // Procesează directorul cli
-                                let cli_obj = database.load(cli_oid)?;
-                                if let Some(cli_tree) = cli_obj.as_any().downcast_ref::<Tree>() {
-                                    for (file_name, file_entry) in cli_tree.get_entries() {
-                                        if let TreeEntry::Blob(file_oid, mode) = file_entry {
-                                            let file_path = format!("src/cli/{}", file_name);
-                                            println!("Found file in HEAD: {} -> {}", file_path, file_oid);
-                                            
-                                            // Adaugă fișierul în head_tree
-                                            head_tree.insert(
-                                                file_path.clone(),
-                                                DatabaseEntry::new(
-                                                    file_path,
-                                                    file_oid.clone(),
-                                                    &mode.to_string()
-                                                )
-                                            );
-                                        }
-                                    }
-                                }
+                                // Recursively process the subtree
+                                Self::traverse_tree_structure(database, subtree_oid, entry_path, head_tree)?;
                             }
                         }
                     }
                 }
             }
         }
+        
+        Ok(())
     }
-    
-    Ok(())
-}
 
     /// Improved method to check index entries against the HEAD tree
     fn check_index_against_head_tree(
@@ -503,15 +512,8 @@ fn traverse_tree_structure(
 
     // Helper method to determine if a mode string represents a directory
     fn is_directory_from_mode(mode_str: &str) -> bool {
-        // Convert from octal string to number
-        let mode = if mode_str.trim().starts_with('0') {
-            u32::from_str_radix(&mode_str.trim()[1..], 8).unwrap_or(0)
-        } else {
-            u32::from_str_radix(mode_str.trim(), 8).unwrap_or(0)
-        };
-        
-        // Check against directory mode (040000 in octal)
-        (mode & 0o170000) == TREE_MODE
+        let mode = FileMode::parse(mode_str);
+        mode.is_directory()
     }
     
     /// Check if a path is a parent of tracked files
@@ -691,7 +693,7 @@ fn traverse_tree_structure(
         
         let elapsed = start_time.elapsed();
         if !porcelain {
-            println!("\nStatus completed in {:.2}s", elapsed.as_secs_f32());
+            println!("\n{} {:.2}s", Color::cyan("Status completed in"), elapsed.as_secs_f32());
         }
         
         Ok(())
@@ -801,10 +803,19 @@ fn traverse_tree_structure(
         // Display status for each file
         for path in &all_files {
             if untracked.contains(path) {
-                println!("?? {}", path);
+                println!("{} {}", Color::red("??"), Color::red(path));
             } else {
                 let status = Self::status_for(path, changes);
-                println!("{} {}", status, path);
+                let status_colored = if status.contains('M') {
+                    Color::yellow(&status)
+                } else if status.contains('A') {
+                    Color::green(&status)
+                } else if status.contains('D') {
+                    Color::red(&status)
+                } else {
+                    status.to_string()
+                };
+                println!("{} {}", status_colored, path);
             }
         }
     }
@@ -838,51 +849,62 @@ fn traverse_tree_structure(
             }
         }
         
-        println!("On branch master");
+        println!("On branch {}", Color::green("master"));
         
         // Display changes in index (HEAD -> Index)
         if !changes_to_be_committed.is_empty() {
-            println!("\nChanges to be committed:");
-            println!("  (use \"ash reset HEAD <file>...\" to unstage)");
+            println!("\n{}:", Color::green("Changes to be committed"));
+            println!("  (use \"{}\" to unstage)", Color::cyan("ash reset HEAD <file>..."));
             
             // Sort for consistent output
             changes_to_be_committed.sort();
             
             for (path, status) in &changes_to_be_committed {
-                println!("        {}: {}", status, path);
+                let colored_status = match *status {
+                    "new file" => Color::green("new file"),
+                    "modified" => Color::green("modified"),
+                    "deleted" => Color::green("deleted"),
+                    _ => status.to_string()
+                };
+                println!("        {}: {}", colored_status, Color::green(path));
             }
         }
         
         // Display changes in workspace (Index -> Workspace)
         if !changes_not_staged.is_empty() {
-            println!("\nChanges not staged for commit:");
-            println!("  (use \"ash add <file>...\" to update what will be committed)");
-            println!("  (use \"ash checkout -- <file>...\" to discard changes in working directory)");
+            println!("\n{}:", Color::red("Changes not staged for commit"));
+            println!("  (use \"{}\" to update what will be committed)", Color::cyan("ash add <file>..."));
+            println!("  (use \"{}\" to discard changes in working directory)", Color::cyan("ash checkout -- <file>..."));
             
             // Sort for consistent output
             changes_not_staged.sort();
             
             for (path, status) in &changes_not_staged {
-                println!("        {}: {}", status, path);
+                let colored_status = match *status {
+                    "modified" => Color::red("modified"),
+                    "deleted" => Color::red("deleted"),
+                    _ => status.to_string()
+                };
+                println!("        {}: {}", colored_status, Color::red(path));
             }
         }
         
         // Display untracked files
         if !untracked.is_empty() {
-            println!("\nUntracked files:");
-            println!("  (use \"ash add <file>...\" to include in what will be committed)");
+            println!("\n{}:", Color::red("Untracked files"));
+            println!("  (use \"{}\" to include in what will be committed)", Color::cyan("ash add <file>..."));
             
             let mut sorted_untracked: Vec<&String> = untracked.iter().collect();
             sorted_untracked.sort();
             
             for path in sorted_untracked {
-                println!("        {}", path);
+                println!("        {}", Color::red(path));
             }
         }
         
         // If no changes, show "working tree clean" message
         if changes_to_be_committed.is_empty() && changes_not_staged.is_empty() && untracked.is_empty() {
-            println!("nothing to commit, working tree clean");
+            println!("{}", Color::green("nothing to commit, working tree clean"));
         }
     }
 }
