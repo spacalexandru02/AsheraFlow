@@ -14,7 +14,9 @@ use crate::core::database::tree::Tree;
 use crate::core::database::commit::Commit;
 use std::any::Any;
 
+use super::entry::DatabaseEntry;
 use super::tree::TreeEntry;
+use super::tree_diff::TreeDiff;
 
 pub struct Database {
     pub pathname: PathBuf,
@@ -369,5 +371,11 @@ fn clone_object(&self, obj: &Box<dyn GitObject>) -> Box<dyn GitObject> {
         } else {
             oid[0..7].to_string()
         }
+    }
+
+    pub fn tree_diff(&mut self, a: Option<&str>, b: Option<&str>) -> Result<HashMap<PathBuf, (Option<DatabaseEntry>, Option<DatabaseEntry>)>, Error> {
+        let mut diff = TreeDiff::new(self);
+        diff.compare_oids(a, b, None)?;
+        Ok(diff.changes)
     }
 }

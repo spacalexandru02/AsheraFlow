@@ -1,14 +1,20 @@
-// src/core/repository.rs
 use std::path::{Path, PathBuf};
 use std::fs;
 use crate::errors::error::Error;
 use crate::core::database::database::Database;
 use crate::core::refs::Refs;
+use crate::core::workspace::Workspace;
+use crate::core::index::index::Index;
+use std::collections::HashMap;
+use crate::core::database::entry::DatabaseEntry;
+use super::migration::Migration;
 
 pub struct Repository {
     pub path: PathBuf,
     pub database: Database,
     pub refs: Refs,
+    pub workspace: Workspace,
+    pub index: Index,
 }
 
 impl Repository {
@@ -19,13 +25,15 @@ impl Repository {
         
         let git_path = path_buf.join(".ash");
         
-        
         let db_path = git_path.join("objects");
+        let index_path = git_path.join("index");
         
         Ok(Repository {
-            path: path_buf.clone(),
+            workspace: Workspace::new(&path_buf),
+            index: Index::new(index_path),
             database: Database::new(db_path),
             refs: Refs::new(&git_path),
+            path: path_buf,
         })
     }
 
@@ -45,4 +53,13 @@ impl Repository {
         })
     }
     
+    /// Create a migration for moving between trees
+    pub fn migration<'a>(&'a mut self, tree_diff: HashMap<PathBuf, (Option<DatabaseEntry>, Option<DatabaseEntry>)>) -> Migration<'a, 'a> {
+        Migration::new(self, tree_diff)
+    }
+    
+    /// Create a tree diff between two commits or trees
+    pub fn tree_diff(&mut self, a_oid: Option<&str>, b_oid: Option<&str>) -> Result<HashMap<PathBuf, (Option<DatabaseEntry>, Option<DatabaseEntry>)>, Error> {
+        self.database.tree_diff(a_oid, b_oid)
+    }
 }

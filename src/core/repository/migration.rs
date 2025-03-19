@@ -2,7 +2,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use crate::errors::error::Error;
-use crate::core::repository::Repository;
+use crate::core::repository::repository::Repository;
 use crate::core::database::entry::DatabaseEntry;
 use crate::core::repository::inspector::Inspector;
 
@@ -27,24 +27,27 @@ impl std::fmt::Display for Conflict {
 
 impl std::error::Error for Conflict {}
 
-pub struct Migration<'a> {
-    pub repo: &'a Repository,
+// Use separate lifetimes for the repo and the inspector
+pub struct Migration<'a, 'b> {
+    pub repo: &'a mut Repository,
     pub diff: HashMap<PathBuf, (Option<DatabaseEntry>, Option<DatabaseEntry>)>,
-    pub changes: HashMap<String, Vec<(PathBuf, Option<DatabaseEntry>)>>,
+    pub changes: HashMap<&'static str, Vec<(PathBuf, Option<DatabaseEntry>)>>,
     pub mkdirs: HashSet<PathBuf>,
     pub rmdirs: HashSet<PathBuf>,
     pub errors: Vec<String>,
     pub conflicts: HashMap<ConflictType, HashSet<String>>,
-    pub inspector: Inspector<'a>,
+    pub inspector: Inspector<'b>,
 }
 
-impl<'a> Migration<'a> {
-    pub fn new(repo: &'a Repository, tree_diff: HashMap<PathBuf, (Option<DatabaseEntry>, Option<DatabaseEntry>)>) -> Self {
+impl<'a, 'b> Migration<'a, 'b> {
+    // The new method needs to ensure 'b lifetime is at least as long as 'a
+    pub fn new(repo: &'a mut Repository, tree_diff: HashMap<PathBuf, (Option<DatabaseEntry>, Option<DatabaseEntry>)>) -> Self 
+    where 'a: 'b /* 'a outlives 'b */ {
         // Initialize the Migration with empty change structures
         let mut changes = HashMap::new();
-        changes.insert("create".to_string(), Vec::new());
-        changes.insert("update".to_string(), Vec::new());
-        changes.insert("delete".to_string(), Vec::new());
+        changes.insert("create", Vec::new());
+        changes.insert("update", Vec::new());
+        changes.insert("delete", Vec::new());
         
         // Initialize conflict types
         let mut conflicts = HashMap::new();
@@ -52,6 +55,13 @@ impl<'a> Migration<'a> {
         conflicts.insert(ConflictType::StaleDirectory, HashSet::new());
         conflicts.insert(ConflictType::UntrackedOverwritten, HashSet::new());
         conflicts.insert(ConflictType::UntrackedRemoved, HashSet::new());
+        
+        // Create an inspector with borrowed components
+        // Use separate references for inspector that are not tied to the repo's lifetime
+        let workspace = &repo.workspace;
+        let index = &repo.index;
+        let database = &repo.database;
+        let inspector = Inspector::new(workspace, index, database);
         
         Migration {
             repo,
@@ -61,13 +71,17 @@ impl<'a> Migration<'a> {
             rmdirs: HashSet::new(),
             errors: Vec::new(),
             conflicts,
-            inspector: Inspector::new(repo),
+            inspector,
         }
     }
-    
+
+    // The rest of the implementation remains the same...
     // Main method to apply the migration
     pub fn apply_changes(&mut self) -> Result<(), Error> {
-        self.plan_changes()?;
+        // Clone the diff to avoid borrowing issues
+        let diff_clone = self.diff.clone();
+        self.plan_changes_improved(diff_clone)?;
+        
         self.collect_errors()?;
         
         // Only if no conflicts were found do we continue with the application
@@ -77,11 +91,14 @@ impl<'a> Migration<'a> {
         Ok(())
     }
     
-    // Plan all the changes needed based on the tree diff
-    pub fn plan_changes(&mut self) -> Result<(), Error> {
-        for (path, (old_item, new_item)) in &self.diff {
-            self.check_for_conflict(path, old_item, new_item)?;
-            self.record_change(path, old_item, new_item);
+    // Improved version that avoids borrowing issues
+    pub fn plan_changes_improved(&mut self, diff: HashMap<PathBuf, (Option<DatabaseEntry>, Option<DatabaseEntry>)>) -> Result<(), Error> {
+        for (path, (old_item, new_item)) in diff {
+            // Check for conflicts first
+            self.check_for_conflict(&path, &old_item, &new_item)?;
+            
+            // Then record the change
+            self.record_change(&path, &old_item, &new_item);
         }
         
         Ok(())
@@ -93,16 +110,20 @@ impl<'a> Migration<'a> {
         let entry = self.repo.index.get_entry(&path.to_string_lossy().to_string());
         
         // Check if index differs from both old and new trees
-        if self.index_differs_from_trees(entry.as_ref(), old_item, new_item)? {
+        if self.index_differs_from_trees(entry, old_item, new_item)? {
             self.conflicts.get_mut(&ConflictType::StaleFile).unwrap().insert(path.to_string_lossy().to_string());
             return Ok(());
         }
         
         // Check if path exists in workspace
-        let stat = self.repo.workspace.stat_file(path);
+        let stat_result = self.repo.workspace.stat_file(path);
+        let stat = match &stat_result {
+            Ok(s) => Some(s),
+            Err(_) => None,
+        };
         
         // Get the appropriate error type for this situation
-        let conflict_type = self.get_error_type(&stat, entry.as_ref(), new_item);
+        let conflict_type = self.get_error_type(&stat, entry, new_item);
         
         if stat.is_none() {
             // Check for untracked parent that would be overwritten
@@ -114,15 +135,15 @@ impl<'a> Migration<'a> {
                     self.conflicts.get_mut(&conflict_type).unwrap().insert(parent_str);
                 }
             }
-        } else if stat.as_ref().unwrap().is_file() {
+        } else if stat.unwrap().is_file() {
             // Check if workspace file has uncommitted changes
-            let changed = self.inspector.compare_index_to_workspace(entry.as_ref(), stat.as_ref())?;
+            let changed = self.inspector.compare_index_to_workspace(entry, stat)?;
             if changed.is_some() {
                 self.conflicts.get_mut(&conflict_type).unwrap().insert(path.to_string_lossy().to_string());
             }
-        } else if stat.as_ref().unwrap().is_dir() {
+        } else if stat.unwrap().is_dir() {
             // Check if directory contains untracked files
-            let trackable = self.inspector.trackable_file(path, stat.as_ref().unwrap())?;
+            let trackable = self.inspector.trackable_file(path, stat.unwrap())?;
             if trackable {
                 self.conflicts.get_mut(&conflict_type).unwrap().insert(path.to_string_lossy().to_string());
             }
@@ -132,7 +153,8 @@ impl<'a> Migration<'a> {
     }
     
     // Check if the index entry differs from both old and new tree entries
-    fn index_differs_from_trees(&self, entry: Option<&crate::core::index::entry::Entry>, 
+    fn index_differs_from_trees(&self, 
+                               entry: Option<&crate::core::index::entry::Entry>, 
                                old_item: &Option<DatabaseEntry>, 
                                new_item: &Option<DatabaseEntry>) -> Result<bool, Error> {
         let differs_from_old = self.inspector.compare_tree_to_index(old_item.as_ref(), entry).is_some();
@@ -168,10 +190,13 @@ impl<'a> Migration<'a> {
     }
     
     // Determine the error type based on the state of the path
-    fn get_error_type(&self, stat: &Option<std::fs::Metadata>, entry: Option<&crate::core::index::entry::Entry>, item: &Option<DatabaseEntry>) -> ConflictType {
+    fn get_error_type(&self, 
+                      stat: &Option<&std::fs::Metadata>, 
+                      entry: Option<&crate::core::index::entry::Entry>, 
+                      item: &Option<DatabaseEntry>) -> ConflictType {
         if entry.is_some() {
             ConflictType::StaleFile
-        } else if stat.as_ref().map_or(false, |s| s.is_dir()) {
+        } else if stat.map_or(false, |s| s.is_dir()) {
             ConflictType::StaleDirectory
         } else if item.is_some() {
             ConflictType::UntrackedOverwritten
@@ -202,27 +227,30 @@ impl<'a> Migration<'a> {
     // Add all parent directories to mkdirs for creation
     fn add_parent_dirs_to_mkdirs(&mut self, path: &Path) {
         if let Some(parent) = path.parent() {
-            self.add_dirs_recursively_to_set(&mut self.mkdirs, parent);
+            // Directly add directories without recursion to avoid borrowing issues
+            let mut current = Some(parent);
+            while let Some(p) = current {
+                if p.as_os_str().is_empty() || p.to_string_lossy() == "." {
+                    break;
+                }
+                self.mkdirs.insert(p.to_path_buf());
+                current = p.parent();
+            }
         }
     }
     
     // Add all parent directories to rmdirs for potential deletion
     fn add_parent_dirs_to_rmdirs(&mut self, path: &Path) {
         if let Some(parent) = path.parent() {
-            self.add_dirs_recursively_to_set(&mut self.rmdirs, parent);
-        }
-    }
-    
-    // Add a directory and all its parents to a set
-    fn add_dirs_recursively_to_set(&mut self, set: &mut HashSet<PathBuf>, path: &Path) {
-        if path.as_os_str().is_empty() || path.to_string_lossy() == "." {
-            return;
-        }
-        
-        set.insert(path.to_path_buf());
-        
-        if let Some(parent) = path.parent() {
-            self.add_dirs_recursively_to_set(set, parent);
+            // Directly add directories without recursion to avoid borrowing issues
+            let mut current = Some(parent);
+            while let Some(p) = current {
+                if p.as_os_str().is_empty() || p.to_string_lossy() == "." {
+                    break;
+                }
+                self.rmdirs.insert(p.to_path_buf());
+                current = p.parent();
+            }
         }
     }
     
@@ -285,7 +313,7 @@ impl<'a> Migration<'a> {
     }
     
     // Update the workspace with planned changes
-    fn update_workspace(&self) -> Result<(), Error> {
+    fn update_workspace(&mut self) -> Result<(), Error> {
         // Handle deletions first
         for (path, _) in &self.changes["delete"] {
             self.repo.workspace.remove_file(path)?;
@@ -307,24 +335,42 @@ impl<'a> Migration<'a> {
         }
         
         // Handle updates
-        for (path, entry) in &self.changes["update"] {
-            if let Some(entry) = entry {
-                self.write_file_to_workspace(path, entry)?;
-            }
+        // Fix borrowing conflicts by cloning entries and processing them one at a time
+        let updates_to_process: Vec<_> = self.changes["update"].iter()
+            .filter_map(|(path, entry)| {
+                if let Some(entry) = entry {
+                    Some((path.clone(), entry.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        
+        for (path, entry) in updates_to_process {
+            self.write_file_to_workspace(&path, &entry)?;
         }
         
         // Handle creations
-        for (path, entry) in &self.changes["create"] {
-            if let Some(entry) = entry {
-                self.write_file_to_workspace(path, entry)?;
-            }
+        // Fix borrowing conflicts by cloning entries and processing them one at a time
+        let creates_to_process: Vec<_> = self.changes["create"].iter()
+            .filter_map(|(path, entry)| {
+                if let Some(entry) = entry {
+                    Some((path.clone(), entry.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        
+        for (path, entry) in creates_to_process {
+            self.write_file_to_workspace(&path, &entry)?;
         }
         
         Ok(())
     }
     
     // Write a file to the workspace
-    fn write_file_to_workspace(&self, path: &Path, entry: &DatabaseEntry) -> Result<(), Error> {
+    fn write_file_to_workspace(&mut self, path: &Path, entry: &DatabaseEntry) -> Result<(), Error> {
         // Get the blob data from the database
         let blob = self.repo.database.load(&entry.oid)?;
         let data = blob.to_bytes();
@@ -336,7 +382,7 @@ impl<'a> Migration<'a> {
     }
     
     // Update the index with planned changes
-    fn update_index(&self) -> Result<(), Error> {
+    fn update_index(&mut self) -> Result<(), Error> {
         // Handle deletions
         for (path, _) in &self.changes["delete"] {
             self.repo.index.remove(&path.to_string_lossy().to_string())?;
@@ -344,11 +390,19 @@ impl<'a> Migration<'a> {
         
         // Handle creations and updates
         for action in &["create", "update"] {
-            for (path, entry) in &self.changes[action] {
-                if let Some(entry) = entry {
-                    let stat = self.repo.workspace.stat_file(path)?;
-                    self.repo.index.add(path, &entry.oid, &stat)?;
-                }
+            let entries_to_process: Vec<_> = self.changes[*action].iter()
+                .filter_map(|(path, entry)| {
+                    if let Some(entry) = entry {
+                        Some((path.clone(), entry.clone()))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            
+            for (path, entry) in entries_to_process {
+                let stat = self.repo.workspace.stat_file(&path)?;
+                self.repo.index.add(&path, &entry.oid, &stat)?;
             }
         }
         
@@ -356,7 +410,7 @@ impl<'a> Migration<'a> {
     }
     
     // Get blob data from the database
-    pub fn blob_data(&self, oid: &str) -> Result<Vec<u8>, Error> {
+    pub fn blob_data(&mut self, oid: &str) -> Result<Vec<u8>, Error> {
         let blob = self.repo.database.load(oid)?;
         Ok(blob.to_bytes())
     }

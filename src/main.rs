@@ -3,6 +3,7 @@ use std::process;
 use cli::args::CliArgs;
 use cli::args::Command;
 use cli::parser::CliParser;
+use commands::checkout::CheckoutCommand;
 use commands::commit::CommitCommand;
 use commands::diff::DiffCommand;
 use commands::init::InitCommand;
@@ -33,6 +34,7 @@ fn handle_command(cli_args: CliArgs) {
         Command::Status { porcelain, color } => handle_status_command(porcelain, &color),
         Command::Diff { paths, cached } => handle_diff_command(&paths, cached),
         Command::Branch { name, start_point } => handle_branch_command(&name, start_point.as_deref()),
+        Command::Checkout { target } => handle_checkout_command(&target),
         Command::Unknown { name } => exit_with_error(&format!("'{}' is not a ash command", name)),
     }
 }
@@ -77,6 +79,13 @@ fn handle_diff_command(paths: &[String], cached: bool) {
 
 fn handle_branch_command(name: &str, start_point: Option<&str>) {
     match BranchCommand::execute(name, start_point) {
+        Ok(_) => process::exit(0),
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
+    }
+}
+
+fn handle_checkout_command(target: &str) {
+    match CheckoutCommand::execute(target) {
         Ok(_) => process::exit(0),
         Err(e) => exit_with_error(&format!("fatal: {}", e)),
     }

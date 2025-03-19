@@ -111,6 +111,19 @@ impl CliParser {
                     },
                 }
             },
+            "checkout" => {
+                if args.len() < 3 {
+                    return Err(Error::Generic("No checkout target specified".to_string()));
+                }
+                
+                let target = args[2].clone();
+                
+                CliArgs {
+                    command: Command::Checkout {
+                        target,
+                    },
+                }
+            },
             _ => CliArgs {
                 command: Command::Unknown { name: command },
             },
@@ -121,7 +134,7 @@ impl CliParser {
 
     pub fn format_help() -> String {
         format!(
-            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
             "Usage: ash <command> [options]",
             "Commands:",
             "  init [path]                      Initialize a new repository",
@@ -131,9 +144,10 @@ impl CliParser {
             "         --porcelain               Machine-readable output",
             "         --color=<when>            Colorize output (always|auto|never)",
             "  diff [--cached] [paths...]      Show changes between commits, commit and working tree, etc",
-            "  branch <name> [start-point]     Create a new branch",
-            "         <name>                    Name of the branch to create",
-            "         [start-point]             Revision to start the branch at (defaults to HEAD)"
+            "  branch <n> [start-point]        Create a new branch",
+            "         <n>                       Name of the branch to create",
+            "         [start-point]             Revision to start the branch at (defaults to HEAD)",
+            "  checkout <target>                Switch branches or restore working tree files"
         )
     }
 }

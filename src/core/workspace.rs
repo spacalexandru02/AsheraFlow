@@ -312,8 +312,85 @@ impl Workspace {
             }
         }
     }
+
     pub fn path_exists(&self, path: &Path) -> Result<bool, Error> {
         let file_path = self.root_path.join(path);
         Ok(file_path.exists())
+    }
+
+    pub fn write_file(&self, path: &Path, data: &[u8]) -> Result<(), Error> {
+        let full_path = self.root_path.join(path);
+        
+        // Make sure parent directory exists
+        if let Some(parent) = full_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                Error::IO(e)
+            })?;
+        }
+        
+        // Write the file data
+        std::fs::write(&full_path, data).map_err(|e| {
+            Error::IO(e)
+        })
+    }
+
+    /// Remove a file from the workspace
+    pub fn remove_file(&self, path: &Path) -> Result<(), Error> {
+        let full_path = self.root_path.join(path);
+        
+        if full_path.exists() {
+            if full_path.is_file() {
+                std::fs::remove_file(&full_path).map_err(|e| {
+                    Error::IO(e)
+                })?;
+            } else if full_path.is_dir() {
+                // Remove directory and all its contents
+                std::fs::remove_dir_all(&full_path).map_err(|e| {
+                    Error::IO(e)
+                })?;
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Try to remove a directory (only if empty)
+    pub fn remove_directory(&self, path: &Path) -> Result<(), Error> {
+        let full_path = self.root_path.join(path);
+        
+        if full_path.exists() && full_path.is_dir() {
+            // Only remove if directory is empty
+            if let Ok(entries) = std::fs::read_dir(&full_path) {
+                if entries.count() == 0 {
+                    std::fs::remove_dir(&full_path).map_err(|e| {
+                        Error::IO(e)
+                    })?;
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Create a directory if it doesn't exist
+    pub fn make_directory(&self, path: &Path) -> Result<(), Error> {
+        let full_path = self.root_path.join(path);
+        
+        if full_path.exists() {
+            if full_path.is_file() {
+                // Remove file to replace with directory
+                std::fs::remove_file(&full_path).map_err(|e| {
+                    Error::IO(e)
+                })?;
+            } else {
+                // Already a directory, nothing to do
+                return Ok(());
+            }
+        }
+        
+        // Create the directory
+        std::fs::create_dir_all(&full_path).map_err(|e| {
+            Error::IO(e)
+        })
     }
 }

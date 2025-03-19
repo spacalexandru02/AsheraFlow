@@ -421,13 +421,41 @@ impl Index {
     pub fn tracked(&self, path: &str) -> bool {
         self.entries.contains_key(path)
     }
-    pub fn remove_entry(&mut self, path: &str) -> Result<(), Error> {
+
+    pub fn remove(&mut self, path: &str) -> Result<(), Error> {
+        // Remove the exact entry
+        self.remove_entry(path);
+        
+        // Remove any entries that are children of this path (for directories)
+        self.remove_children(path);
+        
+        // Mark the index as changed
+        self.changed = true;
+        
+        Ok(())
+    }
+    
+    /// Remove a specific entry from the index
+    fn remove_entry(&mut self, path: &str) {
         if self.entries.remove(path).is_some() {
             self.keys.remove(path);
-            self.changed = true;
-            Ok(())
-        } else {
-            Err(Error::Generic(format!("Entry not found for path: {}", path)))
+        }
+    }
+    
+    /// Remove all entries that are children of the given path
+    fn remove_children(&mut self, path: &str) {
+        let path_prefix = format!("{}/", path);
+        
+        // Collect keys to remove (can't modify while iterating)
+        let keys_to_remove: Vec<String> = self.keys.iter()
+            .filter(|key| key.starts_with(&path_prefix))
+            .cloned()
+            .collect();
+        
+        // Remove each entry
+        for key in keys_to_remove {
+            self.entries.remove(&key);
+            self.keys.remove(&key);
         }
     }
 }
