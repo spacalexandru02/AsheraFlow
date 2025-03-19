@@ -112,7 +112,7 @@ fn clone_object(&self, obj: &Box<dyn GitObject>) -> Box<dyn GitObject> {
             let mut new_commit = Commit::new(
                 commit.get_parent().cloned(),
                 commit.get_tree().to_string(),
-                commit.get_author().clone(),
+                commit.get_author().unwrap().clone(),
                 commit.get_message().to_string()
             );
             
@@ -318,5 +318,56 @@ fn clone_object(&self, obj: &Box<dyn GitObject>) -> Box<dyn GitObject> {
         full_content.extend(data);
         
         self.hash_content(&full_content)
+    }
+
+    pub fn prefix_match(&self, prefix: &str) -> Result<Vec<String>, Error> {
+        // Validate prefix is a valid hex string
+        if !prefix.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Ok(Vec::new());
+        }
+        
+        // Ensure prefix is at least 2 characters (for directory)
+        if prefix.len() < 2 {
+            return Ok(Vec::new());
+        }
+        
+        // Get the directory path for this prefix
+        let dir_name = &prefix[0..2];
+        let dir_path = self.pathname.join(dir_name);
+        
+        if !dir_path.exists() || !dir_path.is_dir() {
+            return Ok(Vec::new());
+        }
+        
+        // Read all files in the directory
+        let entries = std::fs::read_dir(&dir_path).map_err(|e| Error::IO(e))?;
+        
+        // Filter files that match our prefix
+        let mut matches = Vec::new();
+        for entry_result in entries {
+            match entry_result {
+                Ok(entry) => {
+                    let file_name = entry.file_name().to_string_lossy().to_string();
+                    let full_id = format!("{}{}", dir_name, file_name);
+                    
+                    // Check if this ID starts with our prefix
+                    if full_id.starts_with(prefix) {
+                        matches.push(full_id);
+                    }
+                },
+                Err(_) => continue,
+            }
+        }
+        
+        Ok(matches)
+    }
+    
+    /// Get a short representation of an object ID
+    pub fn short_oid(&self, oid: &str) -> String {
+        if oid.len() <= 7 {
+            oid.to_string()
+        } else {
+            oid[0..7].to_string()
+        }
     }
 }

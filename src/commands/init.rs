@@ -1,4 +1,4 @@
-use crate::core::repository::Repository;
+use crate::core::repository::repository::Repository;
 use crate::errors::error::Error;
 use crate::validators::path_validator::PathValidator;
 

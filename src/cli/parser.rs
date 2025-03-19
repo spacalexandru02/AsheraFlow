@@ -92,6 +92,25 @@ impl CliParser {
                     },
                 }
             },
+            "branch" => {
+                if args.len() < 3 {
+                    return Err(Error::Generic("Branch name is required".to_string()));
+                }
+                
+                let name = args[2].clone();
+                let start_point = if args.len() > 3 {
+                    Some(args[3].clone())
+                } else {
+                    None
+                };
+                
+                CliArgs {
+                    command: Command::Branch {
+                        name,
+                        start_point,
+                    },
+                }
+            },
             _ => CliArgs {
                 command: Command::Unknown { name: command },
             },
@@ -102,7 +121,7 @@ impl CliParser {
 
     pub fn format_help() -> String {
         format!(
-            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
             "Usage: ash <command> [options]",
             "Commands:",
             "  init [path]                      Initialize a new repository",
@@ -111,7 +130,10 @@ impl CliParser {
             "  status [--porcelain] [--color=<when>]   Show the working tree status",
             "         --porcelain               Machine-readable output",
             "         --color=<when>            Colorize output (always|auto|never)",
-            "  diff [--cached] [paths...]  Show changes between commits, commit and working tree, etc"
+            "  diff [--cached] [paths...]      Show changes between commits, commit and working tree, etc",
+            "  branch <name> [start-point]     Create a new branch",
+            "         <name>                    Name of the branch to create",
+            "         [start-point]             Revision to start the branch at (defaults to HEAD)"
         )
     }
 }
