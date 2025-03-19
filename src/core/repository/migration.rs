@@ -27,8 +27,8 @@ impl std::fmt::Display for Conflict {
 
 impl std::error::Error for Conflict {}
 
-// Use separate lifetimes for the repo and the inspector
-pub struct Migration<'a, 'b> {
+// Modified to own the components it needs from repo instead of borrowing them
+pub struct Migration<'a> {
     pub repo: &'a mut Repository,
     pub diff: HashMap<PathBuf, (Option<DatabaseEntry>, Option<DatabaseEntry>)>,
     pub changes: HashMap<&'static str, Vec<(PathBuf, Option<DatabaseEntry>)>>,
@@ -36,13 +36,11 @@ pub struct Migration<'a, 'b> {
     pub rmdirs: HashSet<PathBuf>,
     pub errors: Vec<String>,
     pub conflicts: HashMap<ConflictType, HashSet<String>>,
-    pub inspector: Inspector<'b>,
+    // Remove the Inspector field since it's causing borrowing conflicts
 }
 
-impl<'a, 'b> Migration<'a, 'b> {
-    // The new method needs to ensure 'b lifetime is at least as long as 'a
-    pub fn new(repo: &'a mut Repository, tree_diff: HashMap<PathBuf, (Option<DatabaseEntry>, Option<DatabaseEntry>)>) -> Self 
-    where 'a: 'b /* 'a outlives 'b */ {
+impl<'a> Migration<'a> {
+    pub fn new(repo: &'a mut Repository, tree_diff: HashMap<PathBuf, (Option<DatabaseEntry>, Option<DatabaseEntry>)>) -> Self {
         // Initialize the Migration with empty change structures
         let mut changes = HashMap::new();
         changes.insert("create", Vec::new());
@@ -56,13 +54,6 @@ impl<'a, 'b> Migration<'a, 'b> {
         conflicts.insert(ConflictType::UntrackedOverwritten, HashSet::new());
         conflicts.insert(ConflictType::UntrackedRemoved, HashSet::new());
         
-        // Create an inspector with borrowed components
-        // Use separate references for inspector that are not tied to the repo's lifetime
-        let workspace = &repo.workspace;
-        let index = &repo.index;
-        let database = &repo.database;
-        let inspector = Inspector::new(workspace, index, database);
-        
         Migration {
             repo,
             diff: tree_diff,
@@ -71,11 +62,9 @@ impl<'a, 'b> Migration<'a, 'b> {
             rmdirs: HashSet::new(),
             errors: Vec::new(),
             conflicts,
-            inspector,
         }
     }
 
-    // The rest of the implementation remains the same...
     // Main method to apply the migration
     pub fn apply_changes(&mut self) -> Result<(), Error> {
         // Clone the diff to avoid borrowing issues
@@ -106,11 +95,14 @@ impl<'a, 'b> Migration<'a, 'b> {
     
     // Check if a change would cause a conflict
     fn check_for_conflict(&mut self, path: &Path, old_item: &Option<DatabaseEntry>, new_item: &Option<DatabaseEntry>) -> Result<(), Error> {
+        // Create a temporary inspector for this method call
+        let inspector = Inspector::new(&self.repo.workspace, &self.repo.index, &self.repo.database);
+        
         // Get the entry from the index
         let entry = self.repo.index.get_entry(&path.to_string_lossy().to_string());
         
         // Check if index differs from both old and new trees
-        if self.index_differs_from_trees(entry, old_item, new_item)? {
+        if self.index_differs_from_trees(&inspector, entry, old_item, new_item)? {
             self.conflicts.get_mut(&ConflictType::StaleFile).unwrap().insert(path.to_string_lossy().to_string());
             return Ok(());
         }
@@ -127,7 +119,7 @@ impl<'a, 'b> Migration<'a, 'b> {
         
         if stat.is_none() {
             // Check for untracked parent that would be overwritten
-            if let Some(parent) = self.untracked_parent(path)? {
+            if let Some(parent) = self.untracked_parent(&inspector, path)? {
                 let parent_str = parent.to_string_lossy().to_string();
                 if entry.is_some() {
                     self.conflicts.get_mut(&conflict_type).unwrap().insert(path.to_string_lossy().to_string());
@@ -137,13 +129,13 @@ impl<'a, 'b> Migration<'a, 'b> {
             }
         } else if stat.unwrap().is_file() {
             // Check if workspace file has uncommitted changes
-            let changed = self.inspector.compare_index_to_workspace(entry, stat)?;
+            let changed = inspector.compare_index_to_workspace(entry, stat)?;
             if changed.is_some() {
                 self.conflicts.get_mut(&conflict_type).unwrap().insert(path.to_string_lossy().to_string());
             }
         } else if stat.unwrap().is_dir() {
             // Check if directory contains untracked files
-            let trackable = self.inspector.trackable_file(path, stat.unwrap())?;
+            let trackable = inspector.trackable_file(path, stat.unwrap())?;
             if trackable {
                 self.conflicts.get_mut(&conflict_type).unwrap().insert(path.to_string_lossy().to_string());
             }
@@ -153,18 +145,21 @@ impl<'a, 'b> Migration<'a, 'b> {
     }
     
     // Check if the index entry differs from both old and new tree entries
-    fn index_differs_from_trees(&self, 
-                               entry: Option<&crate::core::index::entry::Entry>, 
-                               old_item: &Option<DatabaseEntry>, 
-                               new_item: &Option<DatabaseEntry>) -> Result<bool, Error> {
-        let differs_from_old = self.inspector.compare_tree_to_index(old_item.as_ref(), entry).is_some();
-        let differs_from_new = self.inspector.compare_tree_to_index(new_item.as_ref(), entry).is_some();
+    fn index_differs_from_trees(
+        &self,
+        inspector: &Inspector,
+        entry: Option<&crate::core::index::entry::Entry>, 
+        old_item: &Option<DatabaseEntry>, 
+        new_item: &Option<DatabaseEntry>
+    ) -> Result<bool, Error> {
+        let differs_from_old = inspector.compare_tree_to_index(old_item.as_ref(), entry).is_some();
+        let differs_from_new = inspector.compare_tree_to_index(new_item.as_ref(), entry).is_some();
         
         Ok(differs_from_old && differs_from_new)
     }
     
     // Check for untracked parent directories that would be overwritten
-    fn untracked_parent(&self, path: &Path) -> Result<Option<PathBuf>, Error> {
+    fn untracked_parent(&self, inspector: &Inspector, path: &Path) -> Result<Option<PathBuf>, Error> {
         // Start from the parent and go up the directory tree
         let mut current = path.parent().map(|p| p.to_path_buf());
         
@@ -176,7 +171,7 @@ impl<'a, 'b> Migration<'a, 'b> {
             if let Ok(parent_stat) = self.repo.workspace.stat_file(&parent) {
                 if parent_stat.is_file() {
                     // Parent exists and is a file - this would be a conflict
-                    if self.inspector.trackable_file(&parent, &parent_stat)? {
+                    if inspector.trackable_file(&parent, &parent_stat)? {
                         return Ok(Some(parent));
                     }
                 }
