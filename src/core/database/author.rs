@@ -1,4 +1,4 @@
-// Actualizare pentru src/core/database/author.rs
+// src/core/database/author.rs
 use chrono::{DateTime, TimeZone, Utc};
 use std::fmt;
 use regex::Regex;
@@ -19,9 +19,9 @@ impl Author {
         }
     }
     
-    /// Parsează un autor din formatul "Name <email> timestamp timezone"
+    /// Parse an author from the format "Name <email> timestamp timezone"
     pub fn parse(author_str: &str) -> Result<Self, String> {
-        // Folosim un regex pentru a parsa formatul
+        // Use a regex to parse the format
         let re = Regex::new(r"^(.*) <(.*)> (\d+) (.*)$").unwrap();
         
         match re.captures(author_str) {
@@ -30,13 +30,13 @@ impl Author {
                 let email = caps.get(2).unwrap().as_str().to_string();
                 let timestamp_str = caps.get(3).unwrap().as_str();
                 
-                // Parsează timestamp-ul ca i64
+                // Parse timestamp as i64
                 let timestamp_i64 = match timestamp_str.parse::<i64>() {
                     Ok(ts) => ts,
                     Err(_) => return Err(format!("Invalid timestamp: {}", timestamp_str)),
                 };
                 
-                // Creează DateTime din timestamp
+                // Create DateTime from timestamp
                 let timestamp = match Utc.timestamp_opt(timestamp_i64, 0) {
                     chrono::LocalResult::Single(dt) => dt,
                     _ => return Err(format!("Invalid timestamp value: {}", timestamp_i64)),
@@ -50,6 +50,11 @@ impl Author {
             },
             None => Err(format!("Invalid author format: {}", author_str)),
         }
+    }
+    
+    /// Format the author's date in short format (YYYY-MM-DD)
+    pub fn short_date(&self) -> String {
+        self.timestamp.format("%Y-%m-%d").to_string()
     }
 }
 

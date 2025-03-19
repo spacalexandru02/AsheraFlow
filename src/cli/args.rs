@@ -5,6 +5,8 @@ pub enum Command {
     Add { paths: Vec<String> },
     Status { porcelain: bool, color: String }, 
     Diff { paths: Vec<String>, cached: bool },
+    Branch { name: String, start_point: Option<String> },
+    Checkout { target: String },
     Unknown { name: String },
 }
 

@@ -42,6 +42,23 @@ impl Commit {
         }
     }
 
+    pub fn title_line(&self) -> String {
+        self.message.lines().next().unwrap_or("").to_string()
+    }
+    
+    // Ensure these methods are implemented
+    pub fn get_parent(&self) -> Option<&String> {
+        self.parent.as_ref()
+    }
+    
+    pub fn get_author(&self) -> Option<&Author> {
+        Some(&self.author)
+    }
+    
+    pub fn get_message(&self) -> &str {
+        &self.message
+    }
+
     pub fn get_oid(&self) -> Option<&String> {
         self.oid.as_ref()
     }
@@ -50,17 +67,6 @@ impl Commit {
         &self.tree
     }
     
-    pub fn get_parent(&self) -> Option<&String> {
-        self.parent.as_ref()
-    }
-    
-    pub fn get_author(&self) -> &Author {
-        &self.author
-    }
-    
-    pub fn get_message(&self) -> &str {
-        &self.message
-    }
 
     pub fn to_bytes(&self) -> Vec<u8> {
         let timestamp = self.author.timestamp.timestamp();
@@ -135,9 +141,11 @@ impl Commit {
             .ok_or_else(|| Error::Generic("Missing author in commit".to_string()))?;
         
         // Parsează autor - implementare simplificată
-        let author = Author::parse(author_str)
-            .map_err(|_| Error::Generic("Invalid author format".to_string()))?;
-        
+        let author = match Author::parse(author_str) {
+            Ok(author) => author,
+            Err(_) => return Err(Error::Generic("Invalid author format".to_string())),
+        };
+
         Ok(Commit {
             oid: None,
             parent,
