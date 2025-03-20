@@ -54,7 +54,7 @@ impl Repository {
     }
     
     /// Create a migration for moving between trees
-    pub fn migration<'a>(&'a mut self, tree_diff: HashMap<PathBuf, (Option<DatabaseEntry>, Option<DatabaseEntry>)>) -> Migration<'a, 'a> {
+    pub fn migration<'a>(&'a mut self, tree_diff: HashMap<PathBuf, (Option<DatabaseEntry>, Option<DatabaseEntry>)>) -> Migration<'a> {
         Migration::new(self, tree_diff)
     }
     

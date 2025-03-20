@@ -5,7 +5,7 @@ use regex::Regex;
 use crate::errors::error::Error;
 
 pub struct Workspace {
-    root_path: PathBuf,
+    pub root_path: PathBuf,
 }
 
 impl Workspace {
