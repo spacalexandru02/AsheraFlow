@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use crate::core::file_mode::FileMode;
 use crate::errors::error::Error;
 use crate::core::database::database::{Database, GitObject};
 use crate::core::database::tree::{Tree, TreeEntry};
@@ -154,37 +155,42 @@ impl<'a> TreeDiff<'a> {
     }
     
     /// Detect files that were added
-    fn detect_additions(
-        &mut self,
-        a_entries: &HashMap<String, DatabaseEntry>,
-        b_entries: &HashMap<String, DatabaseEntry>,
-        prefix: &Path,
-    ) -> Result<(), Error> {
-        for (name, b_entry) in b_entries {
-            let path = prefix.join(name);
-            
-            // Skip if entry exists in a (already handled by detect_deletions)
-            if a_entries.contains_key(name) {
-                continue;
-            }
-            
-            // Check if entry is a tree
-            if b_entry.get_mode() == "040000" {
-                // It's a tree, compare recursively with empty a-side
-                self.compare_oids(
-                    None,
-                    Some(b_entry.get_oid()),
-                    Some(path),
-                )?;
-            } else {
-                // Record the addition
-                self.changes.insert(
-                    path,
-                    (None, Some(b_entry.clone())),
-                );
-            }
+    // In TreeDiff::detect_additions or similar method
+fn detect_additions(
+    &mut self,
+    a_entries: &HashMap<String, DatabaseEntry>,
+    b_entries: &HashMap<String, DatabaseEntry>,
+    prefix: &Path,
+) -> Result<(), Error> {
+    for (name, b_entry) in b_entries {
+        let path = prefix.join(name);
+        
+        // Skip if entry exists in a (already handled by detect_deletions)
+        if a_entries.contains_key(name) {
+            continue;
         }
         
-        Ok(())
+        // THIS IS THE KEY FIX: Check if entry is a tree by mode, not just by looking at "040000"
+        // The issue might be that you're not correctly identifying directories by their mode
+        if b_entry.get_mode() == "040000" || FileMode::parse(b_entry.get_mode()).is_directory() {
+            // It's a tree, compare recursively with empty a-side
+            println!("DEBUG: Processing directory: {} (mode: {})", path.display(), b_entry.get_mode());
+            
+            self.compare_oids(
+                None,
+                Some(b_entry.get_oid()),
+                Some(path),
+            )?;
+        } else {
+            // Record the addition of a file
+            println!("DEBUG: Recording file: {} (mode: {})", path.display(), b_entry.get_mode());
+            self.changes.insert(
+                path,
+                (None, Some(b_entry.clone())),
+            );
+        }
     }
+    
+    Ok(())
+}
 }
