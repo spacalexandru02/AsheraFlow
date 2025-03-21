@@ -1,54 +1,40 @@
 // src/core/repository/migration.rs
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use crate::core::database::blob::Blob;
 use crate::core::database::tree::{Tree, TreeEntry};
 use crate::core::file_mode::FileMode;
 use crate::errors::error::Error;
 use crate::core::repository::repository::Repository;
 use crate::core::database::entry::DatabaseEntry;
-use crate::core::repository::inspector::Inspector;
+use crate::core::repository::inspector::{Inspector, ChangeType};
 
 // Define conflict types for different error scenarios
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum ConflictType {
-    StaleFile,
-    StaleDirectory,
-    UntrackedOverwritten,
-    UntrackedRemoved,
+    StaleFile,           // Local changes would be overwritten
+    StaleDirectory,      // Directory contains modified files
+    UntrackedOverwritten, // Untracked file would be overwritten
+    UntrackedRemoved,    // Untracked file would be removed
 }
 
-// Custom error for conflicts
-#[derive(Debug)]
-pub struct Conflict;
-
-impl std::fmt::Display for Conflict {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Conflicts prevented checkout")
-    }
-}
-
-impl std::error::Error for Conflict {}
-
-// Modified to own the components it needs from repo instead of borrowing them
 pub struct Migration<'a> {
     pub repo: &'a mut Repository,
     pub diff: HashMap<PathBuf, (Option<DatabaseEntry>, Option<DatabaseEntry>)>,
-    pub changes: HashMap<&'static str, Vec<(PathBuf, Option<DatabaseEntry>)>>,
-    pub mkdirs: HashSet<PathBuf>,
-    pub rmdirs: HashSet<PathBuf>,
     pub errors: Vec<String>,
-    pub conflicts: HashMap<ConflictType, HashSet<String>>,
-    // Remove the Inspector field since it's causing borrowing conflicts
+    conflicts: HashMap<ConflictType, HashSet<String>>,
+    changes_to_make: Vec<Change>,
+}
+
+#[derive(Clone)]
+enum Change {
+    Create { path: PathBuf, entry: DatabaseEntry },
+    Update { path: PathBuf, entry: DatabaseEntry },
+    Delete { path: PathBuf },
 }
 
 impl<'a> Migration<'a> {
     pub fn new(repo: &'a mut Repository, tree_diff: HashMap<PathBuf, (Option<DatabaseEntry>, Option<DatabaseEntry>)>) -> Self {
-        // Initialize the Migration with empty change structures
-        let mut changes = HashMap::new();
-        changes.insert("create", Vec::new());
-        changes.insert("update", Vec::new());
-        changes.insert("delete", Vec::new());
-        
         // Initialize conflict types
         let mut conflicts = HashMap::new();
         conflicts.insert(ConflictType::StaleFile, HashSet::new());
@@ -59,260 +45,146 @@ impl<'a> Migration<'a> {
         Migration {
             repo,
             diff: tree_diff,
-            changes,
-            mkdirs: HashSet::new(),
-            rmdirs: HashSet::new(),
             errors: Vec::new(),
             conflicts,
+            changes_to_make: Vec::new(),
         }
     }
-
-    // Main method to apply the migration
+    
     pub fn apply_changes(&mut self) -> Result<(), Error> {
-        // Clone the diff to avoid borrowing issues
+        // Analyze changes using Inspector to detect conflicts
+        self.analyze_changes()?;
+        
+        // Check if there are any conflicts that would prevent checkout
+        self.check_conflicts()?;
+        
+        // Apply the planned changes
+        self.execute_changes()?;
+        
+        Ok(())
+    }
+    
+    fn analyze_changes(&mut self) -> Result<(), Error> {
+        println!("Analyzing changes for migration");
+        
+        // Create Inspector to help analyze the repository state
+        let inspector = Inspector::new(
+            &self.repo.workspace,
+            &self.repo.index,
+            &self.repo.database
+        );
+        
+        // First, find all files in current state that should be deleted
+        let mut current_paths = HashSet::new();
+        let mut target_paths = HashSet::new();
+        
+        // Clone diff to avoid borrowing issues
         let diff_clone = self.diff.clone();
-        self.plan_changes_improved(diff_clone)?;
         
-        self.collect_errors()?;
+        // Populate current and target path sets
+        for (path, (old_entry, new_entry)) in &diff_clone {
+            if old_entry.is_some() {
+                current_paths.insert(path.clone());
+            }
+            if new_entry.is_some() {
+                target_paths.insert(path.clone());
+            }
+        }
         
-        // Only if no conflicts were found do we continue with the application
-        self.update_workspace()?;
-        self.update_index()?;
+        // Find files that should be deleted (in current but not in target)
+        let deleted_files: Vec<_> = current_paths.difference(&target_paths).cloned().collect();
         
-        Ok(())
-    }
-    
-    // Improved version that avoids borrowing issues
-    pub fn plan_changes_improved(&mut self, diff: HashMap<PathBuf, (Option<DatabaseEntry>, Option<DatabaseEntry>)>) -> Result<(), Error> {
-        for (path, (old_item, new_item)) in diff {
-            // Check for conflicts first
-            self.check_for_conflict(&path, &old_item, &new_item)?;
+        // Add deletions to our change list
+        for path in deleted_files {
+            println!("Planning deletion for file: {}", path.display());
+            self.changes_to_make.push(Change::Delete { path });
+        }
+        
+        // Now process all other changes
+        for (path, (old_entry, new_entry)) in diff_clone {
+            // Skip files that we're already planning to delete
+            if new_entry.is_none() && old_entry.is_some() {
+                // This is a deletion, already handled above
+                continue;
+            }
             
-            // Then record the change
-            self.record_change(&path, &old_item, &new_item);
-        }
-        
-        Ok(())
-    }
-    
-    // Check if a change would cause a conflict
-    fn check_for_conflict(&mut self, path: &Path, old_item: &Option<DatabaseEntry>, new_item: &Option<DatabaseEntry>) -> Result<(), Error> {
-        // Get the entry from the index
-        let entry = self.repo.index.get_entry(&path.to_string_lossy().to_string());
-        
-        // Skip conflict check for directories and handle them specially
-        if new_item.as_ref().map_or(false, |e| e.get_mode() == "040000" || FileMode::parse(e.get_mode()).is_directory()) {
-            // For directories, recursively check each file inside
-            if let Some(item) = new_item {
-                return self.check_directory_conflicts(path, &item.get_oid());
-            }
-            return Ok(());
-        }
-        
-        // Check if index differs from both old and new trees - you need to use the method signature you actually have
-        // This line needs to match your existing method
-        if self.compare_trees_to_index(entry, old_item, new_item)? {
-            self.conflicts.get_mut(&ConflictType::StaleFile).unwrap().insert(path.to_string_lossy().to_string());
-            return Ok(());
-        }
-        
-        // Check if path exists in workspace
-        let stat_result = self.repo.workspace.stat_file(path);
-        let stat = match &stat_result {
-            Ok(s) => Some(s),
-            Err(_) => None,
-        };
-        
-        // Get the appropriate error type for this situation
-        let conflict_type = self.get_error_type(&stat, entry, new_item);
-        
-        if stat.is_none() {
-            // Check for untracked parent that would be overwritten
-            // Update this to match your existing method signature
-            if let Some(parent) = self.check_untracked_parent(path)? {
-                let parent_str = parent.to_string_lossy().to_string();
-                if entry.is_some() {
-                    self.conflicts.get_mut(&conflict_type).unwrap().insert(path.to_string_lossy().to_string());
-                } else {
-                    self.conflicts.get_mut(&conflict_type).unwrap().insert(parent_str);
-                }
-            }
-        } else if stat.unwrap().is_file() {
-            // Check if workspace file has uncommitted changes
-            // Update this to use your existing method or implement directly
-            let changed = self.compare_workspace_to_index(entry, stat)?;
-            if changed {
-                self.conflicts.get_mut(&conflict_type).unwrap().insert(path.to_string_lossy().to_string());
-            }
-        } else if stat.unwrap().is_dir() {
-            // Check if directory contains untracked files
-            // Update this to use your existing method or implement directly
-            let trackable = self.check_directory_trackable(path, stat.unwrap())?;
-            if trackable {
-                self.conflicts.get_mut(&conflict_type).unwrap().insert(path.to_string_lossy().to_string());
-            }
-        }
-        
-        Ok(())
-    }
-
-    fn check_directory_conflicts(&mut self, dir_path: &Path, dir_oid: &str) -> Result<(), Error> {
-        println!("DEBUG: Checking conflicts in directory: {} (OID: {})", dir_path.display(), dir_oid);
-        
-        // Load the tree object for this directory
-        let obj = match self.repo.database.load(dir_oid) {
-            Ok(o) => o,
-            Err(e) => {
-                println!("DEBUG: Error loading directory object: {}", e);
-                return Ok(());
-            }
-        };
-        
-        // Verify it's a tree
-        if obj.get_type() != "tree" {
-            println!("DEBUG: Object is not a tree: {}", obj.get_type());
-            return Ok(());
-        }
-        
-        // Check each entry in the tree
-        if let Some(tree) = obj.as_any().downcast_ref::<Tree>() {
-            for (name, entry) in tree.get_entries() {
-                let entry_path = dir_path.join(name);
+            // Skip directories from conflict check
+            let is_directory = new_entry.as_ref().map_or(false, |e| {
+                e.get_mode() == "040000" || FileMode::parse(e.get_mode()).is_directory()
+            });
+            
+            if !is_directory {
+                // Check for conflicts using Inspector
+                let path_str = path.to_string_lossy().to_string();
+                let entry = self.repo.index.get_entry(&path_str);
                 
-                match entry {
-                    TreeEntry::Blob(oid, mode) => {
-                        // Create a DatabaseEntry for this file
-                        let db_entry = DatabaseEntry::new(
-                            entry_path.to_string_lossy().to_string(),
-                            oid.clone(),
-                            &mode.to_octal_string()
-                        );
-                        
-                        // Check for conflicts with this specific file
-                        println!("DEBUG: Checking file conflict: {}", entry_path.display());
-                        self.check_for_conflict(&entry_path, &None, &Some(db_entry))?;
-                    },
-                    TreeEntry::Tree(subtree) => {
-                        if let Some(subtree_oid) = subtree.get_oid() {
-                            // Recursively check this subdirectory
-                            println!("DEBUG: Checking subdirectory: {}", entry_path.display());
-                            self.check_directory_conflicts(&entry_path, subtree_oid)?;
+                // Check if index differs from both old and new versions
+                if let Some(index_entry) = entry {
+                    // Using Inspector to check tree-to-index relationships
+                    let changed_from_old = inspector.compare_tree_to_index(old_entry.as_ref(), Some(index_entry));
+                    let changed_from_new = inspector.compare_tree_to_index(new_entry.as_ref(), Some(index_entry));
+                    
+                    if changed_from_old.is_some() && changed_from_new.is_some() {
+                        // Index has changes compared to both old and new - conflict
+                        println!("Index entry for {} differs from both old and new trees", path_str);
+                        self.conflicts.get_mut(&ConflictType::StaleFile).unwrap().insert(path_str.clone());
+                        continue;
+                    }
+                }
+                
+                // Check workspace-to-index relationship for uncommitted changes
+                if let Some(index_entry) = entry {
+                    // Using Inspector to check for uncommitted changes
+                    if inspector.has_uncommitted_changes(&path)? {
+                        println!("Uncommitted changes in workspace file: {}", path_str);
+                        self.conflicts.get_mut(&ConflictType::StaleFile).unwrap().insert(path_str.clone());
+                        continue;
+                    }
+                } else if self.repo.workspace.path_exists(&path)? {
+                    // Untracked file in workspace - check for conflict
+                    let stat = self.repo.workspace.stat_file(&path)?;
+                    
+                    if stat.is_file() {
+                        if new_entry.is_some() {
+                            // Would overwrite untracked file
+                            println!("Untracked file would be overwritten: {}", path_str);
+                            self.conflicts.get_mut(&ConflictType::UntrackedOverwritten).unwrap().insert(path_str.clone());
+                            continue;
+                        }
+                    } else if stat.is_dir() {
+                        // Check for untracked files in directory using Inspector
+                        if inspector.trackable_file(&path, &stat)? {
+                            println!("Directory contains untracked files: {}", path_str);
+                            self.conflicts.get_mut(&ConflictType::StaleDirectory).unwrap().insert(path_str.clone());
+                            continue;
                         }
                     }
                 }
             }
+            
+            // No conflicts, plan the change
+            if let Some(entry) = new_entry {
+                if old_entry.is_some() {
+                    // Update existing file
+                    self.changes_to_make.push(Change::Update {
+                        path: path.clone(),
+                        entry,
+                    });
+                } else {
+                    // Create new file
+                    self.changes_to_make.push(Change::Create {
+                        path: path.clone(),
+                        entry,
+                    });
+                }
+            }
         }
         
         Ok(())
     }
-
-    // Check if the index entry differs from both old and new tree entries
-    fn index_differs_from_trees(
-        &self,
-        inspector: &Inspector,
-        entry: Option<&crate::core::index::entry::Entry>, 
-        old_item: &Option<DatabaseEntry>, 
-        new_item: &Option<DatabaseEntry>
-    ) -> Result<bool, Error> {
-        let differs_from_old = inspector.compare_tree_to_index(old_item.as_ref(), entry).is_some();
-        let differs_from_new = inspector.compare_tree_to_index(new_item.as_ref(), entry).is_some();
-        
-        Ok(differs_from_old && differs_from_new)
-    }
     
-    // Check for untracked parent directories that would be overwritten
-    fn untracked_parent(&self, inspector: &Inspector, path: &Path) -> Result<Option<PathBuf>, Error> {
-        // Start from the parent and go up the directory tree
-        let mut current = path.parent().map(|p| p.to_path_buf());
-        
-        while let Some(parent) = current {
-            if parent.as_os_str().is_empty() || parent.to_string_lossy() == "." {
-                break;
-            }
-            
-            if let Ok(parent_stat) = self.repo.workspace.stat_file(&parent) {
-                if parent_stat.is_file() {
-                    // Parent exists and is a file - this would be a conflict
-                    if inspector.trackable_file(&parent, &parent_stat)? {
-                        return Ok(Some(parent));
-                    }
-                }
-            }
-            
-            // Move up to the next parent
-            current = parent.parent().map(|p| p.to_path_buf());
-        }
-        
-        Ok(None)
-    }
-    
-    // Determine the error type based on the state of the path
-    fn get_error_type(&self, 
-                      stat: &Option<&std::fs::Metadata>, 
-                      entry: Option<&crate::core::index::entry::Entry>, 
-                      item: &Option<DatabaseEntry>) -> ConflictType {
-        if entry.is_some() {
-            ConflictType::StaleFile
-        } else if stat.map_or(false, |s| s.is_dir()) {
-            ConflictType::StaleDirectory
-        } else if item.is_some() {
-            ConflictType::UntrackedOverwritten
-        } else {
-            ConflictType::UntrackedRemoved
-        }
-    }
-    
-    // Record a change for the given path
-    fn record_change(&mut self, path: &Path, old_item: &Option<DatabaseEntry>, new_item: &Option<DatabaseEntry>) {
-        let action = if old_item.is_none() {
-            // Add all parent directories to mkdirs
-            self.add_parent_dirs_to_mkdirs(path);
-            "create"
-        } else if new_item.is_none() {
-            // Add all parent directories to rmdirs
-            self.add_parent_dirs_to_rmdirs(path);
-            "delete"
-        } else {
-            // Update - we still need the directories
-            self.add_parent_dirs_to_mkdirs(path);
-            "update"
-        };
-        
-        self.changes.get_mut(action).unwrap().push((path.to_path_buf(), new_item.clone()));
-    }
-    
-    // Add all parent directories to mkdirs for creation
-    fn add_parent_dirs_to_mkdirs(&mut self, path: &Path) {
-        if let Some(parent) = path.parent() {
-            // Directly add directories without recursion to avoid borrowing issues
-            let mut current = Some(parent);
-            while let Some(p) = current {
-                if p.as_os_str().is_empty() || p.to_string_lossy() == "." {
-                    break;
-                }
-                self.mkdirs.insert(p.to_path_buf());
-                current = p.parent();
-            }
-        }
-    }
-    
-    // Add all parent directories to rmdirs for potential deletion
-    fn add_parent_dirs_to_rmdirs(&mut self, path: &Path) {
-        if let Some(parent) = path.parent() {
-            // Directly add directories without recursion to avoid borrowing issues
-            let mut current = Some(parent);
-            while let Some(p) = current {
-                if p.as_os_str().is_empty() || p.to_string_lossy() == "." {
-                    break;
-                }
-                self.rmdirs.insert(p.to_path_buf());
-                current = p.parent();
-            }
-        }
-    }
-    
-    // Collect all errors from conflicts
-    fn collect_errors(&mut self) -> Result<(), Error> {
+    // Check for conflicts and return appropriate error if any found
+    fn check_conflicts(&mut self) -> Result<(), Error> {
         // Error messages for each conflict type
         let messages = HashMap::from([
             (ConflictType::StaleFile, (
@@ -343,8 +215,11 @@ impl<'a> Migration<'a> {
             let (header, footer) = messages.get(conflict_type).unwrap();
             
             // Format the paths
+            let mut sorted_paths: Vec<_> = paths.iter().collect();
+            sorted_paths.sort();
+            
             let mut lines = Vec::new();
-            for path in paths {
+            for path in sorted_paths {
                 lines.push(format!("\t{}", path));
             }
             
@@ -363,305 +238,196 @@ impl<'a> Migration<'a> {
         
         // If we have errors, we cannot proceed
         if !self.errors.is_empty() {
-            return Err(Error::Generic(format!("Checkout failed due to conflicts")));
+            return Err(Error::Generic("Checkout failed due to conflicts".to_string()));
         }
         
         Ok(())
     }
     
-    // Update the workspace with planned changes
-    fn update_workspace(&mut self) -> Result<(), Error> {
-        // Handle deletions first
-        for (path, _) in &self.changes["delete"] {
-            println!("DEBUG: Removing file: {}", path.display());
-            self.repo.workspace.remove_file(path)?;
+    // Execute all planned changes
+    fn execute_changes(&mut self) -> Result<(), Error> {
+        println!("Executing {} changes", self.changes_to_make.len());
+        
+        // Clone the changes to avoid borrowing issues
+        let changes_clone = self.changes_to_make.clone();
+        
+        // First, handle deletions
+        for change in &changes_clone {
+            if let Change::Delete { path } = change {
+                println!("Removing file: {}", path.display());
+                self.repo.workspace.remove_file(path)?;
+                
+                // Also remove from index
+                let path_str = path.to_string_lossy().to_string();
+                self.repo.index.remove(&path_str)?;
+            }
         }
         
-        // Remove any empty directories (in reverse order)
-        let mut rmdirs: Vec<_> = self.rmdirs.iter().collect();
-        rmdirs.sort();
-        rmdirs.reverse();
-        for dir in rmdirs {
-            println!("DEBUG: Removing directory: {}", dir.display());
-            self.repo.workspace.remove_directory(dir)?;
+        // Find all directories needed for new/updated files
+        let mut needed_dirs = HashSet::new();
+        for change in &changes_clone {
+            match change {
+                Change::Create { path, .. } | Change::Update { path, .. } => {
+                    // Add all parent directories
+                    let mut current = path.parent();
+                    while let Some(parent) = current {
+                        if parent.as_os_str().is_empty() || parent.to_string_lossy() == "." {
+                            break;
+                        }
+                        needed_dirs.insert(parent.to_path_buf());
+                        current = parent.parent();
+                    }
+                },
+                _ => {}
+            }
         }
         
-        // Create necessary directories
-        let mut mkdirs: Vec<_> = self.mkdirs.iter().collect();
-        mkdirs.sort();
-        for dir in mkdirs {
-            println!("DEBUG: Creating directory: {}", dir.display());
-            self.repo.workspace.make_directory(dir)?;
+        // Sort the directories by path length to ensure we create them in order
+        let mut dir_list: Vec<_> = needed_dirs.into_iter().collect();
+        dir_list.sort_by_key(|p| p.to_string_lossy().len());
+        
+        // Create all needed directories
+        for dir in dir_list {
+            println!("Creating directory: {}", dir.display());
+            self.repo.workspace.make_directory(&dir)?;
         }
         
-        // Handle updates and creations with proper directory handling
-        for action in &["update", "create"] {
-            let entries_to_process: Vec<_> = self.changes[*action].iter()
-                .filter_map(|(path, entry)| {
-                    if let Some(entry) = entry {
-                        Some((path.clone(), entry.clone()))
+        // Now apply file creations and updates
+        for change in changes_clone {
+            match change {
+                Change::Create { path, entry } | Change::Update { path, entry } => {
+                    // Check if this is a directory entry
+                    if entry.get_mode() == "040000" || FileMode::parse(entry.get_mode()).is_directory() {
+                        println!("Creating directory: {}", path.display());
+                        self.repo.workspace.make_directory(&path)?;
+                        
+                        // Process directory contents
+                        self.process_directory_contents(&path, &entry.get_oid())?;
                     } else {
-                        None
+                        // Write the file and update index
+                        println!("Writing file: {}", path.display());
+                        self.write_file(&path, &entry)?;
                     }
-                })
-                .collect();
-            
-            for (path, entry) in entries_to_process {
-                // Check if this is a directory entry
-                if entry.get_mode() == "040000" || FileMode::parse(entry.get_mode()).is_directory() {
-                    println!("DEBUG: Creating directory from {}: {}", action, path.display());
-                    self.repo.workspace.make_directory(&path)?;
-                    
-                    // Recursively process directory contents
-                    println!("DEBUG: Processing directory contents: {}", path.display());
-                    self.process_directory_contents(&path, &entry.get_oid())?;
-                    continue;
-                }
-                
-                // For files, ensure parent directory exists
-                if let Some(parent) = path.parent() {
-                    if !parent.as_os_str().is_empty() && parent.to_string_lossy() != "." {
-                        println!("DEBUG: Ensuring parent directory: {}", parent.display());
-                        self.repo.workspace.make_directory(parent)?;
-                    }
-                }
-                
-                // Write the file
-                println!("DEBUG: Writing file from {}: {}", action, path.display());
-                self.write_file_to_workspace(&path, &entry)?;
+                },
+                _ => {}
             }
         }
         
         Ok(())
     }
-
-    // Write a file to the workspace
-    fn write_file_to_workspace(&mut self, path: &Path, entry: &DatabaseEntry) -> Result<(), Error> {
-        println!("DEBUG: Writing file: {} (mode: {}, OID: {})", 
-                 path.display(), entry.get_mode(), entry.get_oid());
-        
-        // Get the blob data from the database
-        let blob_obj = match self.repo.database.load(&entry.get_oid()) {
-            Ok(obj) => obj,
-            Err(e) => {
-                println!("ERROR: Failed to load blob {}: {}", entry.get_oid(), e);
-                return Err(e);
-            }
-        };
-        
-        // Convert to blob
+    
+    // Write a file to the workspace and update the index
+    fn write_file(&mut self, path: &Path, entry: &DatabaseEntry) -> Result<(), Error> {
+        // Get blob contents
+        let blob_obj = self.repo.database.load(&entry.get_oid())?;
         let blob_data = blob_obj.to_bytes();
         
-        // Write the file
-        match self.repo.workspace.write_file(path, &blob_data) {
-            Ok(_) => {
-                println!("DEBUG: Successfully wrote file: {}", path.display());
-                Ok(())
-            },
-            Err(e) => {
-                println!("ERROR: Failed to write file {}: {}", path.display(), e);
-                Err(e)
-            }
-        }
-    }
-    
-    // Update the index with planned changes
-    fn update_index(&mut self) -> Result<(), Error> {
-        // Handle deletions
-        for (path, _) in &self.changes["delete"] {
-            self.repo.index.remove(&path.to_string_lossy().to_string())?;
+        // Write to workspace
+        self.repo.workspace.write_file(path, &blob_data)?;
+        
+        // Update index
+        if let Ok(stat) = self.repo.workspace.stat_file(path) {
+            self.repo.index.add(path, &entry.get_oid(), &stat)?;
         }
         
-        // Handle creations and updates
-        for action in &["create", "update"] {
-            let entries_to_process: Vec<_> = self.changes[*action].iter()
-                .filter_map(|(path, entry)| {
-                    if let Some(entry) = entry {
-                        Some((path.clone(), entry.clone()))
-                    } else {
-                        None
-                    }
-                })
-                .collect();
+        Ok(())
+    }
+    
+    // Process a directory's contents recursively
+    fn process_directory_contents(&mut self, directory_path: &Path, directory_oid: &str) -> Result<(), Error> {
+        println!("Processing directory contents: {}", directory_path.display());
+        
+        // Load the tree object
+        let obj = self.repo.database.load(directory_oid)?;
+        
+        // Create inspector to help track files
+        let inspector = Inspector::new(
+            &self.repo.workspace,
+            &self.repo.index,
+            &self.repo.database
+        );
+        
+        // Find all current files in this directory from index
+        let current_files = self.get_current_files_in_dir(directory_path)?;
+        
+        // Make sure it's a tree
+        if let Some(tree) = obj.as_any().downcast_ref::<Tree>() {
+            // Track which files we process in the new tree
+            let mut processed_files = HashSet::new();
             
-            for (path, entry) in entries_to_process {
-                let stat = self.repo.workspace.stat_file(&path)?;
-                self.repo.index.add(&path, &entry.oid, &stat)?;
+            // Process each entry
+            for (name, entry) in tree.get_entries() {
+                let entry_path = directory_path.join(name);
+                processed_files.insert(entry_path.clone());
+                
+                match entry {
+                    TreeEntry::Blob(oid, mode) => {
+                        // Check if this is a directory stored as a blob
+                        if *mode == FileMode::DIRECTORY || mode.is_directory() {
+                            // It's a directory, handle it recursively
+                            println!("Creating directory (from blob): {}", entry_path.display());
+                            self.repo.workspace.make_directory(&entry_path)?;
+                            self.process_directory_contents(&entry_path, oid)?;
+                        } else {
+                            // It's a file
+                            println!("Writing file: {}", entry_path.display());
+                            
+                            // Get and write the blob content
+                            let blob_obj = self.repo.database.load(oid)?;
+                            let blob_data = blob_obj.to_bytes();
+                            self.repo.workspace.write_file(&entry_path, &blob_data)?;
+                            
+                            // Update index
+                            if let Ok(stat) = self.repo.workspace.stat_file(&entry_path) {
+                                self.repo.index.add(&entry_path, oid, &stat)?;
+                            }
+                        }
+                    },
+                    TreeEntry::Tree(subtree) => {
+                        if let Some(subtree_oid) = subtree.get_oid() {
+                            // Create directory
+                            println!("Creating directory: {}", entry_path.display());
+                            self.repo.workspace.make_directory(&entry_path)?;
+                            
+                            // Process contents recursively
+                            self.process_directory_contents(&entry_path, subtree_oid)?;
+                        }
+                    }
+                }
+            }
+            
+            // Delete files that exist in current state but not in target state
+            for file_path in current_files {
+                if !processed_files.contains(&file_path) {
+                    println!("Removing file that doesn't exist in target: {}", file_path.display());
+                    self.repo.workspace.remove_file(&file_path)?;
+                    
+                    // Also remove from index
+                    let path_str = file_path.to_string_lossy().to_string();
+                    self.repo.index.remove(&path_str)?;
+                }
             }
         }
         
         Ok(())
     }
     
-    // Get blob data from the database
-    pub fn blob_data(&mut self, oid: &str) -> Result<Vec<u8>, Error> {
-        let blob = self.repo.database.load(oid)?;
-        Ok(blob.to_bytes())
-    }
-
-    // In Migration implementation
-    // Add this function to your Migration implementation
-fn process_directory_contents(&mut self, directory_path: &Path, directory_oid: &str) -> Result<(), Error> {
-    println!("DEBUG: Processing contents of directory: {} (OID: {})", directory_path.display(), directory_oid);
-    
-    // Load the tree object
-    let obj = self.repo.database.load(directory_oid)?;
-    
-    // Make sure it's a tree
-    if let Some(tree) = obj.as_any().downcast_ref::<Tree>() {
-        // Process each entry
-        for (name, entry) in tree.get_entries() {
-            let entry_path = directory_path.join(name);
+    // Get all current files in a specific directory
+    fn get_current_files_in_dir(&self, dir_path: &Path) -> Result<HashSet<PathBuf>, Error> {
+        let mut files = HashSet::new();
+        let dir_prefix = dir_path.to_string_lossy().to_string();
+        
+        // Get files from index that match this directory
+        for entry in self.repo.index.each_entry() {
+            let path = PathBuf::from(entry.get_path());
             
-            match entry {
-                TreeEntry::Blob(oid, mode) => {
-                    // It's a file, write it
-                    println!("DEBUG: Writing file: {}", entry_path.display());
-                    
-                    // Get blob content
-                    let blob_obj = self.repo.database.load(oid)?;
-                    let data = blob_obj.to_bytes();
-                    
-                    // Write file
-                    self.repo.workspace.write_file(&entry_path, &data)?;
-                },
-                TreeEntry::Tree(subtree) => {
-                    if let Some(subtree_oid) = subtree.get_oid() {
-                        // Create directory
-                        println!("DEBUG: Creating directory: {}", entry_path.display());
-                        self.repo.workspace.make_directory(&entry_path)?;
-                        
-                        // Process contents recursively
-                        self.process_directory_contents(&entry_path, subtree_oid)?;
-                    }
-                }
+            if (path.starts_with(dir_path) || 
+                entry.get_path().starts_with(&dir_prefix)) &&
+               path != *dir_path {
+                files.insert(path);
             }
         }
-    }
-    
-    Ok(())
-}
-    fn compare_trees_to_index(&self, entry: Option<&crate::core::index::entry::Entry>, 
-        old_item: &Option<DatabaseEntry>, 
-        new_item: &Option<DatabaseEntry>) -> Result<bool, Error> {
-    // Implement the comparison logic here based on your existing code
-    // This should return true if the index entry differs from both old and new trees
-    let differs_from_old = self.compare_tree_to_index(old_item.as_ref(), entry);
-    let differs_from_new = self.compare_tree_to_index(new_item.as_ref(), entry);
-
-    Ok(differs_from_old && differs_from_new)
-    }
-
-    fn compare_tree_to_index(&self, item: Option<&DatabaseEntry>, entry: Option<&crate::core::index::entry::Entry>) -> bool {
-    // Implement based on your existing code
-    // This should return true if the item differs from the entry
-    match (item, entry) {
-    (Some(item), Some(entry)) => {
-    let mode_match = item.get_mode() == entry.mode_octal();
-    let oid_match = item.get_oid() == entry.oid;
-    !mode_match || !oid_match
-    },
-    (Some(_), None) | (None, Some(_)) => true,
-    (None, None) => false,
-    }
-    }
-
-    fn check_untracked_parent(&self, path: &Path) -> Result<Option<PathBuf>, Error> {
-    // Implement based on your existing untracked_parent method
-    // Start from the parent and go up the directory tree
-    let mut current = path.parent().map(|p| p.to_path_buf());
-
-    while let Some(parent) = current {
-    if parent.as_os_str().is_empty() || parent.to_string_lossy() == "." {
-    break;
-    }
-
-    if let Ok(parent_stat) = self.repo.workspace.stat_file(&parent) {
-    if parent_stat.is_file() {
-    // Parent exists and is a file - this would be a conflict
-    if self.check_directory_trackable(&parent, &parent_stat)? {
-    return Ok(Some(parent));
-    }
-    }
-    }
-
-    // Move up to the next parent
-    current = parent.parent().map(|p| p.to_path_buf());
-    }
-
-    Ok(None)
-    }
-
-    fn compare_workspace_to_index(&self, entry: Option<&crate::core::index::entry::Entry>, 
-            stat: Option<&std::fs::Metadata>) -> Result<bool, Error> {
-    // Implement based on your existing code for comparing workspace to index
-    if entry.is_none() {
-    return Ok(false); // No change if not in index
-    }
-
-    let entry = entry.unwrap();
-
-    if stat.is_none() {
-    return Ok(true); // Changed if file doesn't exist in workspace
-    }
-
-    let stat = stat.unwrap();
-
-    // Check file metadata (size, mode)
-    if entry.size as u64 != stat.len() {
-    return Ok(true);
-    }
-
-    // Check file mode
-    if !entry.mode_match(stat) {
-    return Ok(true);
-    }
-
-    // If timestamps match, assume content is the same
-    if entry.time_match(stat) {
-    return Ok(false);
-    }
-
-    // Check content by reading and hashing the file
-    let path = Path::new(&entry.path);
-    let data = self.repo.workspace.read_file(path)?;
-    let oid = self.repo.database.hash_file_data(&data);
-
-    Ok(entry.oid != oid)
-    }
-
-    fn check_directory_trackable(&self, path: &Path, stat: &std::fs::Metadata) -> Result<bool, Error> {
-    // Implement based on your existing trackable_file method
-    if !stat.is_dir() {
-    return Ok(false);
-    }
-
-    // Check for untracked files in the directory
-    match std::fs::read_dir(path) {
-    Ok(entries) => {
-    for entry in entries {
-    if let Ok(entry) = entry {
-    let entry_path = entry.path();
-    let rel_path = entry_path.strip_prefix(self.repo.workspace.root_path.clone())
-        .unwrap_or(&entry_path);
-    let rel_path_str = rel_path.to_string_lossy().to_string();
-    
-    if !self.repo.index.tracked(&rel_path_str) {
-        return Ok(true);
-    }
-    
-    if entry_path.is_dir() {
-        if let Ok(subdir_stat) = entry_path.metadata() {
-            if self.check_directory_trackable(&entry_path, &subdir_stat)? {
-                return Ok(true);
-            }
-        }
-    }
-    }
-    }
-    Ok(false)
-    },
-    Err(_) => Ok(false),
-    }
+        
+        Ok(files)
     }
 }
