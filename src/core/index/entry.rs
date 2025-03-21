@@ -270,16 +270,18 @@ impl Entry {
     
     // Check if file timestamps match the entry's timestamps
     pub fn time_match(&self, stat: &std::fs::Metadata) -> bool {
+        // We'll be more lenient with timestamp comparisons to avoid false positives
+        // This is just an optimization, as we always check content hashes anyway
         #[cfg(unix)]
         {
             use std::os::unix::fs::MetadataExt;
             
             // Convert to seconds and nanoseconds for comparison
             let stat_mtime_sec = stat.mtime() as u32;
-            let stat_mtime_nsec = stat.mtime_nsec() as u32;
             
-            // Compare modification times
-            self.get_mtime() == stat_mtime_sec && self.get_mtime_nsec() == stat_mtime_nsec
+            // Instead of comparing nanoseconds, just check seconds
+            // This avoids issues with filesystem timestamp precision
+            self.get_mtime() == stat_mtime_sec
         }
         
         #[cfg(not(unix))]
