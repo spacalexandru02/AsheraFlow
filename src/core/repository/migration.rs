@@ -16,6 +16,7 @@ pub enum ConflictType {
     StaleDirectory,      // Directory contains modified files
     UntrackedOverwritten, // Untracked file would be overwritten
     UntrackedRemoved,    // Untracked file would be removed
+    UncommittedChanges,  // Added a new type for uncommitted changes
 }
 
 pub struct Migration<'a> {
@@ -41,6 +42,7 @@ impl<'a> Migration<'a> {
         conflicts.insert(ConflictType::StaleDirectory, HashSet::new());
         conflicts.insert(ConflictType::UntrackedOverwritten, HashSet::new());
         conflicts.insert(ConflictType::UntrackedRemoved, HashSet::new());
+        conflicts.insert(ConflictType::UncommittedChanges, HashSet::new()); // Add the new conflict type
         
         Migration {
             repo,
@@ -74,7 +76,30 @@ impl<'a> Migration<'a> {
             &self.repo.database
         );
         
-        // First, find all files in current state that should be deleted
+        // First, check if there are uncommitted changes in the workspace
+        // This is the key improvement - using the analyze_workspace_changes method
+        let workspace_changes = inspector.analyze_workspace_changes()?;
+        
+        // If there are any uncommitted changes, record them as conflicts
+        if !workspace_changes.is_empty() {
+            println!("Found uncommitted changes in workspace:");
+            for (path, change_type) in &workspace_changes {
+                match change_type {
+                    ChangeType::Modified | ChangeType::Added | ChangeType::Deleted => {
+                        println!("  {} - {:?}", path, change_type);
+                        self.conflicts.get_mut(&ConflictType::UncommittedChanges).unwrap().insert(path.clone());
+                    },
+                    _ => {} // Ignore untracked files here
+                }
+            }
+            
+            // If we found uncommitted changes, we can exit early
+            if !self.conflicts.get(&ConflictType::UncommittedChanges).unwrap().is_empty() {
+                return Ok(());
+            }
+        }
+        
+        // Next, find all files in current state that should be deleted
         let mut current_paths = HashSet::new();
         let mut target_paths = HashSet::new();
         
@@ -130,15 +155,14 @@ impl<'a> Migration<'a> {
                         self.conflicts.get_mut(&ConflictType::StaleFile).unwrap().insert(path_str.clone());
                         continue;
                     }
-                }
-                
-                // Check workspace-to-index relationship for uncommitted changes
-                if let Some(index_entry) = entry {
-                    // Using Inspector to check for uncommitted changes
-                    if inspector.has_uncommitted_changes(&path)? {
-                        println!("Uncommitted changes in workspace file: {}", path_str);
-                        self.conflicts.get_mut(&ConflictType::StaleFile).unwrap().insert(path_str.clone());
-                        continue;
+                    
+                    // Use compare_workspace_vs_blob to check if workspace content matches the indexed content
+                    if let Ok(has_changes) = inspector.compare_workspace_vs_blob(&path, index_entry.get_oid()) {
+                        if has_changes {
+                            println!("Uncommitted changes in workspace file: {}", path_str);
+                            self.conflicts.get_mut(&ConflictType::StaleFile).unwrap().insert(path_str.clone());
+                            continue;
+                        }
                     }
                 } else if self.repo.workspace.path_exists(&path)? {
                     // Untracked file in workspace - check for conflict
@@ -202,6 +226,10 @@ impl<'a> Migration<'a> {
             (ConflictType::UntrackedRemoved, (
                 "The following untracked working tree files would be removed by checkout:",
                 "Please move or remove them before you switch branches."
+            )),
+            (ConflictType::UncommittedChanges, (
+                "You have uncommitted changes in your working tree:",
+                "Please commit your changes or stash them before you switch branches."
             ))
         ]);
         
