@@ -259,6 +259,7 @@ impl Refs {
                 \.\.|             # contains ..
                 ^/|               # starts with /
                 /$|               # ends with /
+                /|                # contains slash anywhere
                 \.lock$|          # ends with .lock
                 @\{|              # contains @{
                 [\x00-\x20*:?\[\\\^~\x7f] # contains control chars or special chars

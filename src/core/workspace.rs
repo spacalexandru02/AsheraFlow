@@ -355,22 +355,56 @@ impl Workspace {
     }
     
     /// Try to remove a directory (only if empty)
-    pub fn remove_directory(&self, path: &Path) -> Result<(), Error> {
-        let full_path = self.root_path.join(path);
+    // In src/core/workspace.rs
+// Improved remove_directory method to be more aggressive about cleaning up
+
+/// Try to remove a directory and recursively check parent directories
+pub fn remove_directory(&self, path: &Path) -> Result<(), Error> {
+    let full_path = self.root_path.join(path);
+    
+    if full_path.exists() && full_path.is_dir() {
+        // First check if it's empty
+        let is_empty = match std::fs::read_dir(&full_path) {
+            Ok(entries) => {
+                // Count visible entries (skip hidden files)
+                let visible_entries: Vec<_> = entries
+                    .filter_map(Result::ok)
+                    .filter(|e| {
+                        let name = e.file_name();
+                        let name_str = name.to_string_lossy();
+                        !name_str.starts_with('.')
+                    })
+                    .collect();
+                
+                visible_entries.is_empty()
+            },
+            Err(_) => false, // If we can't read the directory, assume it's not empty
+        };
         
-        if full_path.exists() && full_path.is_dir() {
-            // Only remove if directory is empty
-            if let Ok(entries) = std::fs::read_dir(&full_path) {
-                if entries.count() == 0 {
-                    std::fs::remove_dir(&full_path).map_err(|e| {
-                        Error::IO(e)
-                    })?;
-                }
+        if is_empty {
+            println!("Removing empty directory: {}", full_path.display());
+            if let Err(e) = std::fs::remove_dir(&full_path) {
+                println!("Warning: Failed to remove directory {}: {}", full_path.display(), e);
+                // Don't return error - continue with other operations
             }
+            
+            // After removing this directory, check if its parent is now empty
+            if let Some(parent) = path.parent() {
+                if parent.as_os_str().is_empty() || parent.to_string_lossy() == "." {
+                    // Don't try to remove root
+                    return Ok(());
+                }
+                
+                // Recursively check parent directory
+                return self.remove_directory(parent);
+            }
+        } else {
+            println!("Directory not empty, skipping removal: {}", full_path.display());
         }
-        
-        Ok(())
     }
+    
+    Ok(())
+}
     
     /// Create a directory if it doesn't exist
     pub fn make_directory(&self, path: &Path) -> Result<(), Error> {
@@ -392,5 +426,68 @@ impl Workspace {
         std::fs::create_dir_all(&full_path).map_err(|e| {
             Error::IO(e)
         })
+    }
+
+    // In src/core/workspace.rs
+// Add a force_remove_directory method for complete removal
+
+/// Force remove a directory and all its contents
+    pub fn force_remove_directory(&self, path: &Path) -> Result<(), Error> {
+        let full_path = self.root_path.join(path);
+        
+        if full_path.exists() && full_path.is_dir() {
+            println!("Force removing directory and contents: {}", full_path.display());
+            
+            // First try to remove all files in the directory
+            if let Ok(entries) = std::fs::read_dir(&full_path) {
+                for entry in entries.filter_map(Result::ok) {
+                    let entry_path = entry.path();
+                    if entry_path.is_file() {
+                        if let Err(e) = std::fs::remove_file(&entry_path) {
+                            println!("Warning: Failed to remove file {}: {}", entry_path.display(), e);
+                        }
+                    } else if entry_path.is_dir() {
+                        // Recursively remove subdirectories
+                        let rel_path = entry_path.strip_prefix(&self.root_path)
+                            .unwrap_or(&entry_path);
+                        if let Err(e) = self.force_remove_directory(rel_path) {
+                            println!("Warning: Failed to remove directory {}: {}", rel_path.display(), e);
+                        }
+                    }
+                }
+            }
+            
+            // Now try to remove the directory itself
+            if let Err(e) = std::fs::remove_dir(&full_path) {
+                println!("Warning: Failed to remove directory {}: {}", full_path.display(), e);
+                
+                // If we can't remove it normally, try one more approach - remove hidden files
+                if let Ok(entries) = std::fs::read_dir(&full_path) {
+                    for entry in entries.filter_map(Result::ok) {
+                        let entry_path = entry.path();
+                        let name = entry.file_name();
+                        let name_str = name.to_string_lossy();
+                        
+                        // Force remove hidden files
+                        if name_str.starts_with('.') {
+                            if entry_path.is_file() {
+                                if let Err(e) = std::fs::remove_file(&entry_path) {
+                                    println!("Warning: Failed to remove hidden file {}: {}", entry_path.display(), e);
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Try once more to remove the directory
+                if let Err(e) = std::fs::remove_dir(&full_path) {
+                    return Err(Error::Generic(format!(
+                        "Failed to remove directory {}: {}", full_path.display(), e
+                    )));
+                }
+            }
+        }
+        
+        Ok(())
     }
 }
