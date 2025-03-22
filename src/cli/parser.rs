@@ -93,21 +93,60 @@ impl CliParser {
                 }
             },
             "branch" => {
-                if args.len() < 3 {
-                    return Err(Error::Generic("Branch name is required".to_string()));
+                // Parse branch options
+                let mut name = String::new();
+                let mut start_point = None;
+                let mut verbose = false;
+                let mut delete = false;
+                let mut force = false;
+                
+                // Process all arguments for options
+                let mut i = 2;
+                while i < args.len() {
+                    let arg = &args[i];
+                    match arg.as_str() {
+                        "-v" | "--verbose" => {
+                            verbose = true;
+                            i += 1;
+                        },
+                        "-d" | "--delete" => {
+                            delete = true;
+                            i += 1;
+                        },
+                        "-f" | "--force" => {
+                            force = true;
+                            i += 1;
+                        },
+                        "-D" => {
+                            delete = true;
+                            force = true;
+                            i += 1;
+                        },
+                        a if a.starts_with("-") => {
+                            return Err(Error::Generic(format!("Unknown option: {}", a)));
+                        },
+                        _ => {
+                            // If name is not set, this is the branch name
+                            if name.is_empty() {
+                                name = arg.clone();
+                            } else if start_point.is_none() {
+                                // If name is set but start_point isn't, this is the start point
+                                start_point = Some(arg.clone());
+                            }
+                            i += 1;
+                        }
+                    }
                 }
                 
-                let name = args[2].clone();
-                let start_point = if args.len() > 3 {
-                    Some(args[3].clone())
-                } else {
-                    None
-                };
+                // When listing branches (no name specified), name could be empty
                 
                 CliArgs {
                     command: Command::Branch {
                         name,
                         start_point,
+                        verbose,
+                        delete,
+                        force
                     },
                 }
             },

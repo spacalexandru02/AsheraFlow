@@ -264,11 +264,10 @@ impl CommitCommand {
         let commit_oid = commit.get_oid()
             .ok_or(Error::Generic("Commit OID not set after storage".into()))?;
         
-        // Update HEAD
+        // Update HEAD, following symbolic references if needed
         if let Err(e) = refs.update_head(commit_oid) {
             return Err(Error::Generic(format!("Failed to update HEAD: {}", e)));
         }
-        
         // Numără doar fișierele care s-au schimbat efectiv
         let mut changed_files = 0;
         

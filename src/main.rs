@@ -33,7 +33,8 @@ fn handle_command(cli_args: CliArgs) {
         Command::Add { paths } => handle_add_command(&paths),
         Command::Status { porcelain, color } => handle_status_command(porcelain, &color),
         Command::Diff { paths, cached } => handle_diff_command(&paths, cached),
-        Command::Branch { name, start_point } => handle_branch_command(&name, start_point.as_deref()),
+        Command::Branch { name, start_point, verbose, delete, force } => 
+            handle_branch_command(&name, start_point.as_deref(), verbose, delete, force),
         Command::Checkout { target } => handle_checkout_command(&target),
         Command::Unknown { name } => exit_with_error(&format!("'{}' is not a ash command", name)),
     }
@@ -77,7 +78,18 @@ fn handle_diff_command(paths: &[String], cached: bool) {
     }
 }
 
-fn handle_branch_command(name: &str, start_point: Option<&str>) {
+fn handle_branch_command(name: &str, start_point: Option<&str>, verbose: bool, delete: bool, force: bool) {
+    // Set environment variables to pass flag information
+    if verbose {
+        std::env::set_var("ASH_BRANCH_VERBOSE", "1");
+    }
+    if delete {
+        std::env::set_var("ASH_BRANCH_DELETE", "1");
+    }
+    if force {
+        std::env::set_var("ASH_BRANCH_FORCE", "1");
+    }
+    
     match BranchCommand::execute(name, start_point) {
         Ok(_) => process::exit(0),
         Err(e) => exit_with_error(&format!("fatal: {}", e)),

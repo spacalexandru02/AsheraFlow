@@ -24,6 +24,16 @@ pub struct Database {
     objects: HashMap<String, Box<dyn GitObject>>,
 }
 
+impl Clone for Database {
+    fn clone(&self) -> Self {
+        Database {
+            pathname: self.pathname.clone(),
+            temp_chars: self.temp_chars.clone(),
+            objects: HashMap::new(), // We don't clone the objects cache
+        }
+    }
+}
+
 pub trait GitObject {
     fn get_type(&self) -> &str;
     fn to_bytes(&self) -> Vec<u8>;
