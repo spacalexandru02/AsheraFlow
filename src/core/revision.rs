@@ -6,11 +6,17 @@ use crate::core::repository::repository::Repository;
 use crate::core::database::database::Database;
 use crate::core::database::commit::Commit;
 
+// Constants for revision types
+pub const HEAD: &str = "HEAD";
+pub const COMMIT: &str = "commit";
+
 // Define the revision node types for AST representation
 enum RevisionNode {
     Ref(String),
     Parent(Box<RevisionNode>),
     Ancestor(Box<RevisionNode>, usize),
+    Range(Box<RevisionNode>, Box<RevisionNode>),
+    Exclude(Box<RevisionNode>),
 }
 
 // Structure to hold errors with hints
@@ -21,19 +27,19 @@ pub struct HintedError {
 
 // Main Revision class
 pub struct Revision<'a> {
-    repo: &'a mut Repository,
+    database: &'a mut Database,
     expr: String,
     query: Option<RevisionNode>,
     pub errors: Vec<HintedError>,
 }
 
 impl<'a> Revision<'a> {
-    pub fn new(repo: &'a mut Repository, expression: &str) -> Self {
+    pub fn new(database: &'a mut Database, expression: &str) -> Self {
         let expr = expression.to_string();
         let query = Self::parse(&expr);
         
         Revision {
-            repo,
+            database,
             expr,
             query,
             errors: Vec::new(),
@@ -46,6 +52,8 @@ impl<'a> Revision<'a> {
         lazy_static::lazy_static! {
             static ref PARENT_PATTERN: Regex = Regex::new(r"^(.+)\^$").unwrap();
             static ref ANCESTOR_PATTERN: Regex = Regex::new(r"^(.+)~(\d+)$").unwrap();
+            static ref RANGE_PATTERN: Regex = Regex::new(r"^(.*)\.\.(.*)$").unwrap();
+            static ref EXCLUDE_PATTERN: Regex = Regex::new(r"^\^(.+)$").unwrap();
             static ref INVALID_NAME: Regex = Regex::new(r"(?x)
                 ^\.|
                 /\.|
@@ -62,6 +70,34 @@ impl<'a> Revision<'a> {
                 m.insert("@", "HEAD");
                 m
             };
+        }
+        
+        // Check for range notation (A..B)
+        if let Some(captures) = RANGE_PATTERN.captures(revision) {
+            let start = captures.get(1).unwrap().as_str();
+            let end = captures.get(2).unwrap().as_str();
+            
+            let start_node = if start.is_empty() {
+                Self::parse(HEAD)
+            } else {
+                Self::parse(start)
+            };
+            
+            let end_node = if end.is_empty() {
+                Self::parse(HEAD)
+            } else {
+                Self::parse(end)
+            };
+            
+            if let (Some(start_rev), Some(end_rev)) = (start_node, end_node) {
+                return Some(RevisionNode::Range(Box::new(start_rev), Box::new(end_rev)));
+            }
+        }
+        
+        // Check for exclude notation (^A)
+        if let Some(captures) = EXCLUDE_PATTERN.captures(revision) {
+            let rev = captures.get(1).unwrap().as_str();
+            return Self::parse(rev).map(|node| RevisionNode::Exclude(Box::new(node)));
         }
         
         // Check for parent notation (rev^)
@@ -88,7 +124,12 @@ impl<'a> Revision<'a> {
     }
     
     // Resolve a revision to an object ID
-    pub fn resolve(&mut self, expected_type: &str) -> Result<String, Error> {
+    pub fn resolve(&mut self) -> Result<String, Error> {
+        self.resolve_to_type(COMMIT)
+    }
+    
+    // Resolve a revision to an object ID of a specific type
+    pub fn resolve_to_type(&mut self, expected_type: &str) -> Result<String, Error> {
         let query_clone = self.query.clone();
         if let Some(node) = query_clone {
             // Resolve the AST to an object ID
@@ -123,18 +164,62 @@ impl<'a> Revision<'a> {
                 }
                 Ok(oid)
             },
+            RevisionNode::Range(start, end) => {
+                // For a range A..B, we return B and mark A as excluded
+                // This matches Git's behavior where log A..B shows commits reachable from B but not from A
+                // Actual range exclusion is handled by the RevList structure
+                let _start_oid = self.resolve_node(start)?; // We don't use this directly
+                let end_oid = self.resolve_node(end)?;
+                
+                // Range handling will be done by the RevList
+                Ok(end_oid)
+            },
+            RevisionNode::Exclude(rev) => {
+                // For ^A, we exclude all commits reachable from A
+                // This is handled by the RevList structure
+                self.resolve_node(rev)
+            },
         }
     }
     
     // Get a reference value or try to match an abbreviated object ID
     fn read_ref(&mut self, name: &str) -> Result<String, Error> {
         // First try to read as a reference
-        if let Ok(Some(oid)) = self.repo.refs.read_ref(name) {
-            return Ok(oid);
+        // In a real implementation, this would use a refs object to look up references
+        // For now, we'll just handle HEAD specially
+        if name == HEAD {
+            // Return HEAD reference (would normally be implemented via refs system)
+            // For our example, we'll try to load HEAD from an expected location
+            let head_file = std::path::Path::new(".ash/HEAD");
+            if head_file.exists() {
+                if let Ok(content) = std::fs::read_to_string(head_file) {
+                    let content = content.trim();
+                    if content.starts_with("ref: ") {
+                        let ref_path = content.strip_prefix("ref: ").unwrap();
+                        let ref_file = std::path::Path::new(".ash").join(ref_path);
+                        if ref_file.exists() {
+                            if let Ok(oid) = std::fs::read_to_string(ref_file) {
+                                return Ok(oid.trim().to_string());
+                            }
+                        }
+                    } else {
+                        return Ok(content.to_string());
+                    }
+                }
+            }
+        }
+        
+        // Try as a branch reference
+        let ref_path = format!(".ash/refs/heads/{}", name);
+        let ref_file = std::path::Path::new(&ref_path);
+        if ref_file.exists() {
+            if let Ok(oid) = std::fs::read_to_string(ref_file) {
+                return Ok(oid.trim().to_string());
+            }
         }
         
         // Then try as an abbreviated object ID
-        let candidates = self.repo.database.prefix_match(name)?;
+        let candidates = self.database.prefix_match(name)?;
         
         match candidates.len() {
             0 => Err(Error::Generic(format!("Not a valid object name: '{}'", name))),
@@ -150,7 +235,7 @@ impl<'a> Revision<'a> {
     // Get the parent of a commit
     fn commit_parent(&mut self, oid: &str) -> Result<String, Error> {
         // Ensure it's a commit
-        let commit = self.load_typed_object(oid, "commit")?;
+        let commit = self.load_typed_object(oid, COMMIT)?;
         
         // Get its parent
         if let Some(commit) = commit.as_any().downcast_ref::<Commit>() {
@@ -168,7 +253,7 @@ impl<'a> Revision<'a> {
             return Err(Error::Generic("Empty object ID".to_string()));
         }
         
-        let object = self.repo.database.load(oid)?;
+        let object = self.database.load(oid)?;
         
         // Check if the object is of the expected type
         if object.get_type() != expected_type {
@@ -188,7 +273,7 @@ impl<'a> Revision<'a> {
     
     // Just verify the object type without loading the full object
     fn verify_object_type(&mut self, oid: &str, expected_type: &str) -> Result<bool, Error> {
-        let object = self.repo.database.load(oid)?;
+        let object = self.database.load(oid)?;
         
         if object.get_type() != expected_type {
             let message = format!("object {} is a {}, not a {}", 
@@ -209,7 +294,7 @@ impl<'a> Revision<'a> {
         let mut hints = vec![String::from("The candidates are:")];
         
         for oid in candidates {
-            let obj = self.repo.database.load(oid)?;
+            let obj = self.database.load(oid)?;
             let short_oid = &oid[0..std::cmp::min(7, oid.len())];
             let obj_type = obj.get_type();
             
@@ -234,16 +319,5 @@ impl<'a> Revision<'a> {
         
         self.errors.push(HintedError { message, hint: hints });
         Ok(())
-    }
-}
-
-// Add Clone for RevisionNode
-impl Clone for RevisionNode {
-    fn clone(&self) -> Self {
-        match self {
-            RevisionNode::Ref(name) => RevisionNode::Ref(name.clone()),
-            RevisionNode::Parent(rev) => RevisionNode::Parent(rev.clone()),
-            RevisionNode::Ancestor(rev, n) => RevisionNode::Ancestor(rev.clone(), *n),
-        }
     }
 }

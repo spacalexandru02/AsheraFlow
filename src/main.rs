@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::env;
 use std::process;
 use cli::args::CliArgs;
@@ -8,6 +9,7 @@ use commands::commit::CommitCommand;
 use commands::diff::DiffCommand;
 use commands::init::InitCommand;
 use commands::add::AddCommand;
+use commands::log::LogCommand;
 use commands::status::StatusCommand;
 use commands::branch::BranchCommand;
 
@@ -36,6 +38,8 @@ fn handle_command(cli_args: CliArgs) {
         Command::Branch { name, start_point, verbose, delete, force } => 
             handle_branch_command(&name, start_point.as_deref(), verbose, delete, force),
         Command::Checkout { target } => handle_checkout_command(&target),
+        Command::Log { revisions, abbrev, format, patch, decorate } => 
+            handle_log_command(&revisions, abbrev, &format, patch, &decorate),
         Command::Unknown { name } => exit_with_error(&format!("'{}' is not a ash command", name)),
     }
 }
@@ -91,6 +95,21 @@ fn handle_branch_command(name: &str, start_point: Option<&str>, verbose: bool, d
     }
     
     match BranchCommand::execute(name, start_point) {
+        Ok(_) => process::exit(0),
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
+    }
+}
+
+
+fn handle_log_command(revisions: &[String], abbrev: bool, format: &str, patch: bool, decorate: &str) {
+    // Convert options to HashMap for easier handling
+    let mut options = HashMap::new();
+    options.insert("abbrev".to_string(), abbrev.to_string());
+    options.insert("format".to_string(), format.to_string());
+    options.insert("patch".to_string(), patch.to_string());
+    options.insert("decorate".to_string(), decorate.to_string());
+    
+    match LogCommand::execute(revisions, &options) {
         Ok(_) => process::exit(0),
         Err(e) => exit_with_error(&format!("fatal: {}", e)),
     }

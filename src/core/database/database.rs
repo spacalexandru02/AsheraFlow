@@ -383,9 +383,9 @@ fn clone_object(&self, obj: &Box<dyn GitObject>) -> Box<dyn GitObject> {
         }
     }
 
-    pub fn tree_diff(&mut self, a: Option<&str>, b: Option<&str>) -> Result<HashMap<PathBuf, (Option<DatabaseEntry>, Option<DatabaseEntry>)>, Error> {
+    pub fn tree_diff(&mut self, a: Option<&str>, b: Option<&str>, filter: &crate::core::path_filter::PathFilter) -> Result<HashMap<PathBuf, (Option<DatabaseEntry>, Option<DatabaseEntry>)>, Error> {
         let mut diff = TreeDiff::new(self);
-        diff.compare_oids(a, b, None)?;
+        diff.compare_oids(a, b, filter)?;
         Ok(diff.changes)
     }
 }

@@ -163,6 +163,87 @@ impl CliParser {
                     },
                 }
             },
+            "log" => {
+                // Parse log command options
+                let mut revisions = Vec::new();
+                let mut abbrev = false;
+                let mut format = "medium".to_string();
+                let mut patch = false;
+                let mut decorate = "auto".to_string();
+                
+                // Process arguments
+                let mut i = 2;
+                while i < args.len() {
+                    let arg = &args[i];
+                    match arg.as_str() {
+                        "--abbrev-commit" => {
+                            abbrev = true;
+                            i += 1;
+                        },
+                        "--no-abbrev-commit" => {
+                            abbrev = false;
+                            i += 1;
+                        },
+                        "--pretty" | "--format" => {
+                            if i + 1 < args.len() {
+                                format = args[i + 1].clone();
+                                i += 2;
+                            } else {
+                                i += 1;
+                            }
+                        },
+                        a if a.starts_with("--pretty=") || a.starts_with("--format=") => {
+                            let value = arg.split('=').nth(1).unwrap_or("medium");
+                            format = value.to_string();
+                            i += 1;
+                        },
+                        "--oneline" => {
+                            format = "oneline".to_string();
+                            abbrev = true;
+                            i += 1;
+                        },
+                        "-p" | "-u" | "--patch" => {
+                            patch = true;
+                            i += 1;
+                        },
+                        "-s" | "--no-patch" => {
+                            patch = false;
+                            i += 1;
+                        },
+                        "--decorate" => {
+                            decorate = "short".to_string();
+                            i += 1;
+                        },
+                        a if a.starts_with("--decorate=") => {
+                            let value = arg.split('=').nth(1).unwrap_or("short");
+                            decorate = value.to_string();
+                            i += 1;
+                        },
+                        "--no-decorate" => {
+                            decorate = "no".to_string();
+                            i += 1;
+                        },
+                        a if a.starts_with("-") => {
+                            return Err(Error::Generic(format!("Unknown option: {}", a)));
+                        },
+                        _ => {
+                            // This is a revision specifier
+                            revisions.push(arg.clone());
+                            i += 1;
+                        }
+                    }
+                }
+                
+                CliArgs {
+                    command: Command::Log {
+                        revisions,
+                        abbrev,
+                        format,
+                        patch,
+                        decorate,
+                    },
+                }
+            },
             _ => CliArgs {
                 command: Command::Unknown { name: command },
             },
