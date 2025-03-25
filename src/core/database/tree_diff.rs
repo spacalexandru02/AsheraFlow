@@ -6,6 +6,7 @@ use crate::core::database::database::{Database, GitObject};
 use crate::core::database::tree::{Tree, TreeEntry};
 use crate::core::database::commit::Commit;
 use crate::core::database::entry::DatabaseEntry;
+use crate::core::path_filter::PathFilter;
 
 pub struct TreeDiff<'a> {
     database: &'a mut Database,
@@ -21,9 +22,7 @@ impl<'a> TreeDiff<'a> {
     }
     
     /// Compare two object IDs (trees or commits) and find the differences
-    pub fn compare_oids(&mut self, a: Option<&str>, b: Option<&str>, prefix: Option<PathBuf>) -> Result<(), Error> {
-        let prefix = prefix.unwrap_or_else(|| PathBuf::new());
-        
+    pub fn compare_oids(&mut self, a: Option<&str>, b: Option<&str>, filter: &PathFilter) -> Result<(), Error> {
         // If both IDs are the same, there are no differences
         if a == b {
             return Ok(());
@@ -43,10 +42,10 @@ impl<'a> TreeDiff<'a> {
         };
         
         // Find deletions and modifications
-        self.detect_deletions(&a_entries, &b_entries, &prefix)?;
+        self.detect_deletions(&a_entries, &b_entries, filter)?;
         
         // Find additions
-        self.detect_additions(&a_entries, &b_entries, &prefix)?;
+        self.detect_additions(&a_entries, &b_entries, filter)?;
         
         Ok(())
     }
@@ -117,11 +116,12 @@ impl<'a> TreeDiff<'a> {
         &mut self,
         a_entries: &HashMap<String, DatabaseEntry>,
         b_entries: &HashMap<String, DatabaseEntry>,
-        prefix: &Path,
+        filter: &PathFilter,
     ) -> Result<(), Error> {
-        for (name, a_entry) in a_entries {
-            let path = prefix.join(name);
-            
+        // Use the filter to get only the relevant entries
+        let filtered_entries = filter.filter_entries(a_entries);
+        
+        for (name, a_entry) in filtered_entries {
             // Check if entry exists in b
             let b_entry = b_entries.get(name);
             
@@ -135,17 +135,20 @@ impl<'a> TreeDiff<'a> {
             let a_is_tree = a_entry.get_mode() == "040000";
             let b_is_tree = b_entry.map_or(false, |e| e.get_mode() == "040000");
             
+            // Create a new filter for this path
+            let sub_filter = filter.join(name);
+            
             if a_is_tree && b_is_tree {
                 // Both are trees, compare recursively
                 self.compare_oids(
                     Some(a_entry.get_oid()),
                     Some(b_entry.unwrap().get_oid()),
-                    Some(path),
+                    &sub_filter,
                 )?;
             } else {
                 // Record the change
                 self.changes.insert(
-                    path,
+                    sub_filter.path().to_path_buf(),
                     (Some(a_entry.clone()), b_entry.cloned()),
                 );
             }
@@ -155,42 +158,41 @@ impl<'a> TreeDiff<'a> {
     }
     
     /// Detect files that were added
-    // In TreeDiff::detect_additions or similar method
-fn detect_additions(
-    &mut self,
-    a_entries: &HashMap<String, DatabaseEntry>,
-    b_entries: &HashMap<String, DatabaseEntry>,
-    prefix: &Path,
-) -> Result<(), Error> {
-    for (name, b_entry) in b_entries {
-        let path = prefix.join(name);
+    fn detect_additions(
+        &mut self,
+        a_entries: &HashMap<String, DatabaseEntry>,
+        b_entries: &HashMap<String, DatabaseEntry>,
+        filter: &PathFilter,
+    ) -> Result<(), Error> {
+        // Use the filter to get only the relevant entries
+        let filtered_entries = filter.filter_entries(b_entries);
         
-        // Skip if entry exists in a (already handled by detect_deletions)
-        if a_entries.contains_key(name) {
-            continue;
-        }
-        
-        // THIS IS THE KEY FIX: Check if entry is a tree by mode, not just by looking at "040000"
-        // The issue might be that you're not correctly identifying directories by their mode
-        if b_entry.get_mode() == "040000" || FileMode::parse(b_entry.get_mode()).is_directory() {
-            // It's a tree, compare recursively with empty a-side
-            println!("DEBUG: Processing directory: {} (mode: {})", path.display(), b_entry.get_mode());
+        for (name, b_entry) in filtered_entries {
+            // Skip if entry exists in a (already handled by detect_deletions)
+            if a_entries.contains_key(name) {
+                continue;
+            }
             
-            self.compare_oids(
-                None,
-                Some(b_entry.get_oid()),
-                Some(path),
-            )?;
-        } else {
-            // Record the addition of a file
-            println!("DEBUG: Recording file: {} (mode: {})", path.display(), b_entry.get_mode());
-            self.changes.insert(
-                path,
-                (None, Some(b_entry.clone())),
-            );
+            // Create a new filter for this path
+            let sub_filter = filter.join(name);
+            
+            // Check if entry is a tree by mode
+            if b_entry.get_mode() == "040000" || FileMode::parse(b_entry.get_mode()).is_directory() {
+                // It's a tree, compare recursively with empty a-side
+                self.compare_oids(
+                    None,
+                    Some(b_entry.get_oid()),
+                    &sub_filter,
+                )?;
+            } else {
+                // Record the addition of a file
+                self.changes.insert(
+                    sub_filter.path().to_path_buf(),
+                    (None, Some(b_entry.clone())),
+                );
+            }
         }
+        
+        Ok(())
     }
-    
-    Ok(())
-}
 }

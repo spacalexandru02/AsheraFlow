@@ -9,3 +9,5 @@ pub mod color;
 pub mod diff;
 pub mod pager;
 pub mod revision;
+pub mod path_filter;
+pub mod revlist;

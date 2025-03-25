@@ -13,6 +13,13 @@ pub enum Command {
         force: bool
     },
     Checkout { target: String },
+    Log {
+        revisions: Vec<String>,
+        abbrev: bool,
+        format: String,
+        patch: bool,
+        decorate: String,
+    },
     Unknown { name: String },
 }
 
