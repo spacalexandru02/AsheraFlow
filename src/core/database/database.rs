@@ -8,6 +8,7 @@ use sha1::{Digest, Sha1};
 use flate2::write::ZlibEncoder;
 use flate2::read::ZlibDecoder;
 use flate2::Compression;
+use crate::core::path_filter::PathFilter;
 use crate::errors::error::Error;
 use crate::core::database::blob::Blob;
 use crate::core::database::tree::Tree;
@@ -15,7 +16,6 @@ use crate::core::database::commit::Commit;
 use std::any::Any;
 
 use super::entry::DatabaseEntry;
-use super::tree::TreeEntry;
 use super::tree_diff::TreeDiff;
 
 pub struct Database {
@@ -34,11 +34,12 @@ impl Clone for Database {
     }
 }
 
-pub trait GitObject {
+pub trait GitObject: Any {
     fn get_type(&self) -> &str;
     fn to_bytes(&self) -> Vec<u8>;
     fn set_oid(&mut self, oid: String);
     fn as_any(&self) -> &dyn Any;
+    fn clone_box(&self) -> Box<dyn GitObject>;
 }
 
 impl Database {
@@ -63,81 +64,23 @@ impl Database {
     pub fn load(&mut self, oid: &str) -> Result<Box<dyn GitObject>, Error> {
         // Verifică dacă obiectul e deja în cache
         if let Some(obj) = self.objects.get(oid) {
-            // Clone the object to return it
-            return Ok(self.clone_object(obj));
+            // Clone the object using clone_box instead of direct clone
+            return Ok(obj.clone_box());
         }
 
         // Citește obiectul și pune-l în cache
         let object = self.read_object(oid)?;
-        let result = self.clone_object(&object);
+        let result = object.clone_box();
         self.objects.insert(oid.to_string(), object);
         
         Ok(result)
     }
 
     /// Metodă privată de clonare a unui obiect - implementare de bază
-    /// Metodă privată de clonare a unui obiect
-fn clone_object(&self, obj: &Box<dyn GitObject>) -> Box<dyn GitObject> {
-    match obj.get_type() {
-        "blob" => {
-            let blob = obj.as_any().downcast_ref::<Blob>().unwrap();
-            let mut new_blob = Blob::new(blob.to_bytes());
-            if let Some(oid) = blob.get_oid() {
-                new_blob.set_oid(oid.clone());
-            }
-            Box::new(new_blob)
-        },
-        "tree" => {
-            let tree = obj.as_any().downcast_ref::<Tree>().unwrap();
-            
-            // Creăm un nou tree
-            let mut new_tree = Tree::new();
-            
-            // Copiem intrările folosind metodele publice
-            for (name, entry) in tree.get_entries() {
-                match entry {
-                    TreeEntry::Blob(oid, mode) => {
-                        new_tree.insert_entry(name.clone(), TreeEntry::Blob(oid.clone(), *mode));
-                    },
-                    TreeEntry::Tree(subtree) => {
-                        // Pentru simplificare, doar copiem referința OID a subtree-ului
-                        let mut new_subtree = Tree::new();
-                        if let Some(oid) = subtree.get_oid() {
-                            new_subtree.set_oid(oid.clone());
-                        }
-                        new_tree.insert_entry(name.clone(), TreeEntry::Tree(Box::new(new_subtree)));
-                    }
-                }
-            }
-            
-            // Setăm OID-ul dacă există
-            if let Some(oid) = tree.get_oid() {
-                new_tree.set_oid(oid.clone());
-            }
-            
-            Box::new(new_tree)
-        },
-        "commit" => {
-            let commit = obj.as_any().downcast_ref::<Commit>().unwrap();
-            
-            // Creăm un nou commit cu aceleași date
-            let mut new_commit = Commit::new(
-                commit.get_parent().cloned(),
-                commit.get_tree().to_string(),
-                commit.get_author().unwrap().clone(),
-                commit.get_message().to_string()
-            );
-            
-            // Setăm OID-ul dacă există
-            if let Some(oid) = commit.get_oid() {
-                new_commit.set_oid(oid.clone());
-            }
-            
-            Box::new(new_commit)
-        },
-        _ => panic!("Unknown object type"),
+    fn clone_object(&self, obj: &Box<dyn GitObject>) -> Box<dyn GitObject> {
+        // Use the new clone_box method instead of manual cloning
+        obj.clone_box()
     }
-}
 
     /// Stochează un obiect git în baza de date
     pub fn store(&mut self, object: &mut impl GitObject) -> Result<String, Error> {
@@ -383,7 +326,7 @@ fn clone_object(&self, obj: &Box<dyn GitObject>) -> Box<dyn GitObject> {
         }
     }
 
-    pub fn tree_diff(&mut self, a: Option<&str>, b: Option<&str>, filter: &crate::core::path_filter::PathFilter) -> Result<HashMap<PathBuf, (Option<DatabaseEntry>, Option<DatabaseEntry>)>, Error> {
+    pub fn tree_diff(&mut self, a: Option<&str>, b: Option<&str>, filter: &PathFilter) -> Result<HashMap<PathBuf, (Option<DatabaseEntry>, Option<DatabaseEntry>)>, Error> {
         let mut diff = TreeDiff::new(self);
         diff.compare_oids(a, b, filter)?;
         Ok(diff.changes)

@@ -1,10 +1,11 @@
-// Actualizare pentru src/core/database/commit.rs
+// src/core/database/commit.rs with clone_box implementation
 use super::{author::Author, database::GitObject};
 use crate::errors::error::Error;
 use std::any::Any;
 use std::str;
 use std::collections::HashMap;
 
+#[derive(Clone)]
 pub struct Commit {
     oid: Option<String>,
     parent: Option<String>,
@@ -19,7 +20,29 @@ impl GitObject for Commit {
     }
 
     fn to_bytes(&self) -> Vec<u8> {
-        self.to_bytes()
+        let timestamp = self.author.timestamp.timestamp();
+        let author_line = format!(
+            "{} <{}> {} +0000", 
+            self.author.name, 
+            self.author.email, 
+            timestamp
+        );
+    
+        let mut lines = Vec::with_capacity(5);
+        
+        lines.push(format!("tree {}", self.tree));
+        
+        if let Some(parent) = &self.parent {
+            lines.push(format!("parent {}", parent));
+        }
+        
+        lines.push(format!("author {}", author_line));
+        lines.push(format!("committer {}", author_line));
+    
+        lines.push(String::new()); // Empty line before message
+        lines.push(self.message.clone());
+    
+        lines.join("\n").into_bytes()
     }
 
     fn set_oid(&mut self, oid: String) {
@@ -28,6 +51,11 @@ impl GitObject for Commit {
     
     fn as_any(&self) -> &dyn Any {
         self
+    }
+    
+    // Implementation of clone_box to properly clone the object
+    fn clone_box(&self) -> Box<dyn GitObject> {
+        Box::new(self.clone())
     }
 }
 
@@ -155,5 +183,3 @@ impl Commit {
         })
     }
 }
-
-// Adaugă imports-ul necesar

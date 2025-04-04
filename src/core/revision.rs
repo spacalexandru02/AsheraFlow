@@ -11,6 +11,7 @@ pub const HEAD: &str = "HEAD";
 pub const COMMIT: &str = "commit";
 
 // Define the revision node types for AST representation
+#[derive(Debug, Clone)]
 enum RevisionNode {
     Ref(String),
     Parent(Box<RevisionNode>),
@@ -27,19 +28,19 @@ pub struct HintedError {
 
 // Main Revision class
 pub struct Revision<'a> {
-    database: &'a mut Database,
+    repo: &'a mut Repository,  // Changed from database to repo
     expr: String,
     query: Option<RevisionNode>,
     pub errors: Vec<HintedError>,
 }
 
 impl<'a> Revision<'a> {
-    pub fn new(database: &'a mut Database, expression: &str) -> Self {
+    pub fn new(repo: &'a mut Repository, expression: &str) -> Self {
         let expr = expression.to_string();
         let query = Self::parse(&expr);
         
         Revision {
-            database,
+            repo,
             expr,
             query,
             errors: Vec::new(),
@@ -124,16 +125,18 @@ impl<'a> Revision<'a> {
     }
     
     // Resolve a revision to an object ID
-    pub fn resolve(&mut self) -> Result<String, Error> {
-        self.resolve_to_type(COMMIT)
+    pub fn resolve(&mut self, expected_type: &str) -> Result<String, Error> {
+        self.resolve_to_type(expected_type)
     }
     
     // Resolve a revision to an object ID of a specific type
     pub fn resolve_to_type(&mut self, expected_type: &str) -> Result<String, Error> {
-        let query_clone = self.query.clone();
-        if let Some(node) = query_clone {
+        if let Some(node) = &self.query {
+            // Clone the node to avoid borrowing issues
+            let node_clone = node.clone();
+            
             // Resolve the AST to an object ID
-            match self.resolve_node(&node) {
+            match self.resolve_node(&node_clone) {
                 Ok(oid) => {
                     // Verify the object type if specified
                     if self.verify_object_type(&oid, expected_type)? {
@@ -219,7 +222,7 @@ impl<'a> Revision<'a> {
         }
         
         // Then try as an abbreviated object ID
-        let candidates = self.database.prefix_match(name)?;
+        let candidates = self.repo.database.prefix_match(name)?;
         
         match candidates.len() {
             0 => Err(Error::Generic(format!("Not a valid object name: '{}'", name))),
@@ -253,7 +256,7 @@ impl<'a> Revision<'a> {
             return Err(Error::Generic("Empty object ID".to_string()));
         }
         
-        let object = self.database.load(oid)?;
+        let object = self.repo.database.load(oid)?;
         
         // Check if the object is of the expected type
         if object.get_type() != expected_type {
@@ -273,7 +276,7 @@ impl<'a> Revision<'a> {
     
     // Just verify the object type without loading the full object
     fn verify_object_type(&mut self, oid: &str, expected_type: &str) -> Result<bool, Error> {
-        let object = self.database.load(oid)?;
+        let object = self.repo.database.load(oid)?;
         
         if object.get_type() != expected_type {
             let message = format!("object {} is a {}, not a {}", 
@@ -294,7 +297,7 @@ impl<'a> Revision<'a> {
         let mut hints = vec![String::from("The candidates are:")];
         
         for oid in candidates {
-            let obj = self.database.load(oid)?;
+            let obj = self.repo.database.load(oid)?;
             let short_oid = &oid[0..std::cmp::min(7, oid.len())];
             let obj_type = obj.get_type();
             

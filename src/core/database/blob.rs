@@ -1,4 +1,4 @@
-// Actualizare pentru src/core/database/blob.rs
+// src/core/database/blob.rs with clone_box implementation
 use super::database::GitObject;
 use std::any::Any;
 
@@ -23,6 +23,11 @@ impl GitObject for Blob {
     
     fn as_any(&self) -> &dyn Any {
         self
+    }
+    
+    // Implementation of clone_box to properly clone the object
+    fn clone_box(&self) -> Box<dyn GitObject> {
+        Box::new(self.clone())
     }
 }
 
