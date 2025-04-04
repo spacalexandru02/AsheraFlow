@@ -57,9 +57,11 @@ impl Repository {
     pub fn migration<'a>(&'a mut self, tree_diff: HashMap<PathBuf, (Option<DatabaseEntry>, Option<DatabaseEntry>)>) -> Migration<'a> {
         Migration::new(self, tree_diff)
     }
-    
-    /// Create a tree diff between two commits or trees
+
     pub fn tree_diff(&mut self, a_oid: Option<&str>, b_oid: Option<&str>) -> Result<HashMap<PathBuf, (Option<DatabaseEntry>, Option<DatabaseEntry>)>, Error> {
-        self.database.tree_diff(a_oid, b_oid)
+        // Create a default PathFilter that includes everything
+        let path_filter = crate::core::path_filter::PathFilter::new();
+        self.database.tree_diff(a_oid, b_oid, &path_filter)
     }
+    
 }

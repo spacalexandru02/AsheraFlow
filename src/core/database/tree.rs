@@ -34,6 +34,7 @@ impl GitObject for Tree {
     }
 
     fn to_bytes(&self) -> Vec<u8> {
+        // Existing implementation...
         let mut result = Vec::new();
         
         // Sort entries by name to ensure consistent output
@@ -105,6 +106,11 @@ impl GitObject for Tree {
     
     fn as_any(&self) -> &dyn Any {
         self
+    }
+    
+    // Implementation of clone_box to properly clone the object
+    fn clone_box(&self) -> Box<dyn GitObject> {
+        Box::new(self.clone())
     }
 }
 

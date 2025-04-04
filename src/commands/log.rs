@@ -1,3 +1,4 @@
+// src/commands/log.rs with all fixes applied
 use std::time::Instant;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -31,9 +32,11 @@ impl LogCommand {
         
         // Parse options
         let abbrev = options.get("abbrev").map_or(false, |v| v == "true");
-        let format = options.get("format").unwrap_or(&"medium".to_string());
+        let format_default = "medium".to_string();
+        let format = options.get("format").unwrap_or(&format_default);
         let patch = options.get("patch").map_or(false, |v| v == "true");
-        let decorate = options.get("decorate").unwrap_or(&"auto".to_string());
+        let decorate_default = "auto".to_string();
+        let decorate = options.get("decorate").unwrap_or(&decorate_default);
         
         // Initialize pager for output
         let mut pager = Pager::new();
@@ -44,8 +47,9 @@ impl LogCommand {
             refs.read_head()?.ok_or_else(|| Error::Generic("No HEAD commit found. Repository may be empty.".to_string()))?
         } else {
             // Resolve the requested revision to a commit ID
-            let mut revision = Revision::new(&mut database, &revisions[0]);
-            revision.resolve()?
+            let mut repo = crate::core::repository::repository::Repository::new(".")?;
+            let mut revision = Revision::new(&mut repo, &revisions[0]);
+            revision.resolve("commit")?
         };
         
         // Check for path filtering
@@ -94,7 +98,11 @@ impl LogCommand {
                 let parent_oid = commit.get_parent();
                 
                 // Get diff between this commit and parent
-                let diff = database.tree_diff(parent_oid.as_deref(), Some(&oid), &path_filter)?;
+                let diff = database.tree_diff(
+                    parent_oid.as_deref().map(|s| s.as_str()), 
+                    Some(&oid), 
+                    &path_filter
+                )?;
                 
                 // If diff is empty, this commit doesn't affect any of the paths
                 !diff.is_empty()
@@ -129,7 +137,13 @@ impl LogCommand {
                     
                     // Get diff with possible path filtering
                     let parent_oid = commit.get_parent();
-                    show_patch(&mut pager, &mut database, parent_oid.as_deref(), &oid, &path_filter)?;
+                    show_patch(
+                        &mut pager, 
+                        &mut database, 
+                        parent_oid.as_deref().map(|s| s.as_str()), 
+                        &oid, 
+                        &path_filter
+                    )?;
                 }
             }
             
@@ -197,7 +211,8 @@ fn show_commit_medium(
             if oid.len() > 7 { oid[0..7].to_string() } else { oid.clone() }
         })
     } else {
-        commit.get_oid().unwrap_or_default().clone()
+        // Fix: Use cloned().unwrap_or_default() instead of unwrap_or_default().clone()
+        commit.get_oid().cloned().unwrap_or_default()
     };
     
     // Add decoration if needed
@@ -240,7 +255,8 @@ fn show_commit_oneline(
             if oid.len() > 7 { oid[0..7].to_string() } else { oid.clone() }
         })
     } else {
-        commit.get_oid().unwrap_or_default().clone()
+        // Fix: Use cloned().unwrap_or_default() instead of unwrap_or_default().clone()
+        commit.get_oid().cloned().unwrap_or_default()
     };
     
     // Add decoration if needed
@@ -253,8 +269,8 @@ fn show_commit_oneline(
     // Get the first line of the commit message
     let title = commit.title_line();
     
-    // Display the single line
-    pager.write(&format!("{} {}{} {}\n", Color::yellow(oid), decoration, "", title))?;
+    // Display the single line - Fix: use &oid for Color::yellow
+    pager.write(&format!("{} {}{} {}\n", Color::yellow(&oid), decoration, "", title))?;
     
     Ok(())
 }
