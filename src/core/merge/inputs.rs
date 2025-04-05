@@ -3,7 +3,8 @@ use crate::errors::error::Error;
 use crate::core::merge::bases::Bases;
 use crate::core::database::database::Database;
 use crate::core::refs::Refs;
-use crate::core::revision::Revision;
+// Eliminăm importul Revision dacă nu este folosit direct aici
+// import crate::core::revision::Revision;
 
 pub trait MergeInputs {
     fn left_name(&self) -> String;
@@ -24,18 +25,26 @@ pub struct Inputs {
 
 impl Inputs {
     pub fn new(
-        database: &mut Database, 
+        database: &mut Database,
         refs: &Refs,
-        left_name: String, 
+        left_name: String,
         right_name: String
     ) -> Result<Self, Error> {
         // Resolve the OIDs for the left and right revisions
         let left_oid = Self::resolve_rev(database, refs, &left_name)?;
         let right_oid = Self::resolve_rev(database, refs, &right_name)?;
-        
+
         // Find the common base(s) between the two commits
-        let mut common = Bases::new(database, &left_oid, &right_oid)?;
-        let base_oids = common.find()?;
+        // --- FIX APPLIED HERE ---
+        // 1. Call Bases::new with only the database argument
+        let mut common = Bases::new(database)?;
+        let base_oids = common.find(&left_oid, &right_oid)?;
+        println!("DEBUG: Found base_oids: {:?}", base_oids); // <-- Adaugă aici
+        println!("DEBUG: left_oid: {}", left_oid); // <-- Adaugă aici
+        let is_ff = base_oids == vec![left_oid.clone()]; // <-- Verifică logica
+        println!("DEBUG: is_fast_forward check result: {}", is_ff); 
+        // 2. Call common.find with the left_oid and right_oid arguments
+        let base_oids = common.find(&left_oid, &right_oid)?;
 
         Ok(Self {
             left_name,
@@ -56,23 +65,38 @@ impl Inputs {
         self.base_oids == vec![self.left_oid.clone()]
     }
 
+    // Această funcție probabil ar trebui să folosească structura Revision dacă
+    // vrei să gestionezi sintaxe mai complexe gen "HEAD~1" etc.
+    // Am păstrat implementarea simplă de mai devreme pentru moment.
     fn resolve_rev(database: &mut Database, refs: &Refs, rev: &str) -> Result<String, Error> {
-        // First check if it's a direct ref
+        // First check if it's a direct ref (like HEAD)
         if let Ok(Some(oid)) = refs.read_ref(rev) {
             return Ok(oid);
         }
-        
-        // Next check if it's a branch name
+
+        // Next check if it's a branch name (e.g., "master")
         let branch_path = format!("refs/heads/{}", rev);
         if let Ok(Some(oid)) = refs.read_ref(&branch_path) {
             return Ok(oid);
         }
-        
-        // Last, check if it's a valid object ID
+
+        // Last, check if it's a valid object ID (full or abbreviated)
+        // Ar trebui să folosim Revision::resolve pentru a gestiona și OID-uri abreviate
+        // Dar pentru moment, verificăm doar existența ca OID complet.
         if database.exists(rev) {
-            return Ok(rev.to_string());
+             // Ideal ar fi să verificăm dacă este un commit aici.
+             // let obj = database.load(rev)?;
+             // if obj.get_type() == "commit" {
+                 return Ok(rev.to_string());
+             // }
         }
-        
+
+        // If none of the above, try using Revision to resolve more complex cases
+        // This requires passing the Repository struct, which isn't directly available here.
+        // You might need to refactor how Repository/Database/Refs are passed around,
+        // or pass the Repository itself to Inputs::new.
+        // For now, we'll stick to the simpler resolution logic.
+
         // Could not resolve revision
         Err(Error::Generic(format!("Not a valid revision: '{}'", rev)))
     }

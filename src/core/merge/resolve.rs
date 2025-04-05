@@ -59,6 +59,8 @@ impl<'a, T: MergeInputs> Resolve<'a, T> {
 
         // Write any untracked files (e.g., from rename conflicts)
         self.write_untracked_files()?;
+        
+        Ok(())
     }
     
     fn file_dir_conflict(
@@ -250,17 +252,6 @@ impl<'a, T: MergeInputs> Resolve<'a, T> {
         }
     }
 
-        self.apply_clean_changes()?;
-
-        // Add conflicts to index
-        self.add_conflicts_to_index();
-
-        // Write any untracked files (e.g., from rename conflicts)
-        self.write_untracked_files()?;
-
-        Ok(())
-    }
-
     fn merge_blobs(
         &mut self,
         base_oid: Option<&str>,
@@ -402,15 +393,6 @@ impl<'a, T: MergeInputs> Resolve<'a, T> {
             }
         }
         
-        // Apply the changes to workspace and index
-        self.apply_clean_changes()?;
-        
-        // Add conflicts to index
-        self.add_conflicts_to_index();
-        
-        // Write any untracked files (e.g., from rename conflicts)
-        self.write_untracked_files()?;
-        
         Ok(())
     }
     
@@ -485,3 +467,4 @@ impl<'a, T: MergeInputs> Resolve<'a, T> {
         
         Ok(())
     }
+}
