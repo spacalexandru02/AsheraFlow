@@ -1,4 +1,8 @@
+// src/commands/merge.rs
 use std::time::Instant;
+use std::env;
+use std::path::{Path, PathBuf};
+use std::collections::HashMap;
 
 use crate::errors::error::Error;
 use crate::core::merge::inputs::Inputs;
@@ -7,6 +11,8 @@ use crate::core::refs::Refs;
 use crate::core::database::database::Database;
 use crate::core::database::commit::Commit;
 use crate::core::database::author::Author;
+use crate::core::path_filter::PathFilter;
+use crate::core::workspace::Workspace;
 
 const MERGE_MSG: &str = "\
 Merge branch '%s'
@@ -27,7 +33,7 @@ impl MergeCommand {
         println!("Merge started...");
         
         // Initialize repository components
-        let root_path = std::path::Path::new(".");
+        let root_path = Path::new(".");
         let git_path = root_path.join(".ash");
         
         // Verify .ash directory exists
@@ -35,7 +41,7 @@ impl MergeCommand {
             return Err(Error::Generic("Not an ash repository (or any of the parent directories): .ash directory not found".into()));
         }
         
-        let workspace = crate::core::workspace::Workspace::new(root_path);
+        let workspace = Workspace::new(root_path);
         let mut database = Database::new(git_path.join("objects"));
         let mut index = crate::core::index::index::Index::new(git_path.join("index"));
         let refs = Refs::new(&git_path);
@@ -60,7 +66,7 @@ impl MergeCommand {
         // Check for already merged or fast-forward cases
         if inputs.already_merged() {
             println!("Already up to date.");
-            return Err(Error::Generic("Already up to date.".into()));
+            return Ok(());
         }
         
         if inputs.is_fast_forward() {
@@ -93,29 +99,39 @@ impl MergeCommand {
         
         // Commit the successful merge
         let commit_message = message.map(|s| s.to_string()).unwrap_or_else(|| {
-            format!("Merge branch '{}'", inputs.right_name)
+            format!("Merge branch '{}'", revision)
         });
         
         // Create author
         let author = Author::new(
-            String::from("A. U. Thor"), // Replace with configured user name
-            String::from("author@example.com"), // Replace with configured email
+            env::var("GIT_AUTHOR_NAME").unwrap_or_else(|_| "A. U. Thor".to_string()),
+            env::var("GIT_AUTHOR_EMAIL").unwrap_or_else(|_| "author@example.com".to_string()),
         );
         
-        // Create commit
+        // Get tree from index
+        let tree_oid = Self::write_tree_from_index(&mut database, &mut index)?;
+        
+        // Create commit with two parents
         let mut commit = Commit::new(
-            Some(inputs.left_oid.clone()),
-            "tree_placeholder".to_string(), // Will be calculated during store
-            author.clone(),
+            Some(head_oid.clone()),
+            tree_oid,
+            author,
             commit_message,
         );
         
         // Add the second parent - the branch we're merging in
-        // Note: This assumes your Commit struct supports multiple parents
-        if let Some(parent_ref) = commit.get_parent_mut() {
-            let mut parents = vec![parent_ref.clone(), inputs.right_oid.clone()];
-            *parent_ref = parents.remove(0);
-            // Add the additional parent - this may need to be adjusted based on your Commit implementation
+        // Hack: For now, since our Commit doesn't support multiple parents directly, 
+        // we'll store them in the message with a special marker
+        let special_message = format!("{}\n__PARENT2__:{}", commit.get_message().to_string(), inputs.right_oid);
+        if let Some(parent) = commit.get_parent() {
+            // Store the second parent information in a way that our code can interpret
+            // In a real implementation, we would modify the Commit struct to support multiple parents
+            commit = Commit::new(
+                Some(parent.to_string()),
+                tree_oid,
+                author.clone(),
+                special_message
+            );
         }
         
         // Store the commit
@@ -131,27 +147,58 @@ impl MergeCommand {
         Ok(())
     }
     
+    // Handle fast-forward merge
     fn handle_fast_forward(
         database: &mut Database,
-        workspace: &crate::core::workspace::Workspace,
+        workspace: &Workspace,
         index: &mut crate::core::index::index::Index,
         refs: &Refs,
         current_oid: &str,
         target_oid: &str,
     ) -> Result<(), Error> {
         // Log fast-forward status
-        let a = Database::short_oid(current_oid);
-        let b = Database::short_oid(target_oid);
+        let a = &current_oid[0..8];  // Use first 8 chars as short OID
+        let b = &target_oid[0..8];   // Use first 8 chars as short OID
         
         println!("Updating {}..{}", a, b);
         println!("Fast-forward");
         
-        // Get tree diff between current and target
-        let tree_diff = database.tree_diff(Some(current_oid), Some(target_oid), None)?;
+        // Create a PathFilter for the tree_diff call
+        let path_filter = PathFilter::new();
         
-        // Create migration to apply changes
-        let mut migration = crate::core::repository::migration::Migration::new(database, tree_diff);
-        migration.apply_changes()?;
+        // Get tree diff between current and target
+        let tree_diff = database.tree_diff(Some(current_oid), Some(target_oid), &path_filter)?;
+        
+        // Apply changes to workspace and index
+        for (path, (old_entry, new_entry)) in &tree_diff {
+            if let Some(entry) = new_entry {
+                // File being added or modified
+                let blob_obj = database.load(&entry.get_oid())?;
+                let content = blob_obj.to_bytes();
+                
+                // Create any necessary parent directories
+                if let Some(parent) = path.parent() {
+                    if !parent.as_os_str().is_empty() {
+                        workspace.make_directory(parent)?;
+                    }
+                }
+                
+                // Write file to workspace
+                workspace.write_file(path, &content)?;
+                
+                // Update index
+                if let Ok(stat) = workspace.stat_file(path) {
+                    index.add(path, &entry.get_oid(), &stat)?;
+                }
+            } else if old_entry.is_some() {
+                // File being deleted
+                workspace.remove_file(path)?;
+                
+                // Remove from index
+                let path_str = path.to_string_lossy().to_string();
+                index.remove(&path_str)?;
+            }
+        }
         
         // Write updates to index
         index.write_updates()?;
@@ -160,5 +207,32 @@ impl MergeCommand {
         refs.update_head(target_oid)?;
         
         Ok(())
+    }
+    
+    // Function to write tree from current index state
+    fn write_tree_from_index(database: &mut Database, index: &mut crate::core::index::index::Index) -> Result<String, Error> {
+        // Convert index entries to database entries
+        let database_entries: Vec<_> = index.each_entry()
+            .filter(|entry| entry.stage == 0) // Only include regular entries, not conflict entries
+            .map(|index_entry| {
+                crate::core::database::entry::DatabaseEntry::new(
+                    index_entry.get_path().to_string(),
+                    index_entry.get_oid().to_string(),
+                    &index_entry.mode_octal()
+                )
+            })
+            .collect();
+        
+        // Build tree from index entries
+        let mut root = crate::core::database::tree::Tree::build(database_entries.iter())?;
+        
+        // Store all trees in the database
+        root.traverse(|tree| database.store(tree))?;
+        
+        // Get the root tree OID
+        let tree_oid = root.get_oid()
+            .ok_or(Error::Generic("Tree OID not set after storage".into()))?;
+            
+        Ok(tree_oid.clone())
     }
 }

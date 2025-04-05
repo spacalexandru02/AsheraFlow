@@ -9,18 +9,18 @@ const MAX_PATH_SIZE: u16 = 0xfff;
 #[derive(Debug, Clone)]
 pub struct Entry {
     // Existing fields...
-    ctime: u32,
-    ctime_nsec: u32,
-    mtime: u32,
-    mtime_nsec: u32,
-    dev: u32,
-    ino: u32,
+    pub ctime: u32,
+    pub ctime_nsec: u32,
+    pub mtime: u32,
+    pub mtime_nsec: u32,
+    pub dev: u32,
+    pub ino: u32,
     pub mode: FileMode,
-    uid: u32,
-    gid: u32,
+    pub uid: u32,
+    pub gid: u32,
     pub size: u32,
     pub oid: String,
-    flags: u16,
+    pub flags: u16,
     pub path: String,
     // Add this field:
     pub stage: u8,  // 0 = normal, 1 = base, 2 = ours, 3 = theirs

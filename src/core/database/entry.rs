@@ -1,7 +1,8 @@
 use std::path::PathBuf;
+
 use crate::core::file_mode::FileMode;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DatabaseEntry {
     pub name: String,
     pub oid: String,
@@ -10,7 +11,7 @@ pub struct DatabaseEntry {
 
 impl DatabaseEntry {
     pub fn new(name: String, oid: String, mode: &str) -> Self {
-        // Standardizează modul folosind FileMode
+        // Standardize mode using FileMode
         let file_mode = FileMode::parse(mode);
         
         DatabaseEntry {

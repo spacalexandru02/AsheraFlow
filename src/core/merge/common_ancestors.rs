@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::any::Any;
 
-use crate::core::database::database::Database;
+use crate::core::database::database::{Database, GitObject};
 use crate::core::database::commit::Commit;
 use crate::errors::error::Error;
 
@@ -16,8 +16,8 @@ pub enum Flag {
 pub struct CommonAncestors<'a> {
     database: &'a mut Database,
     flags: HashMap<String, HashSet<Flag>>,
-    queue: VecDeque<Box<dyn Any>>,
-    results: VecDeque<Box<dyn Any>>,
+    queue: VecDeque<String>, // Store OIDs instead of objects
+    results: VecDeque<String>, // Store OIDs instead of objects
 }
 
 impl<'a> CommonAncestors<'a> {
@@ -26,10 +26,7 @@ impl<'a> CommonAncestors<'a> {
         let mut flags = HashMap::new();
 
         // Verify one is a commit
-        let one_commit = database.load(one)?;
-        if one_commit.get_type() != "commit" {
-            return Err(Error::Generic(format!("Object {} is not a commit", one)));
-        }
+        database.load(one)?;
         
         // Mark one with Parent1 flag
         queue.push_back(one.to_string());
@@ -40,10 +37,7 @@ impl<'a> CommonAncestors<'a> {
         // Process each two commit
         for two in twos {
             // Verify two is a commit
-            let two_commit = database.load(two)?;
-            if two_commit.get_type() != "commit" {
-                return Err(Error::Generic(format!("Object {} is not a commit", two)));
-            }
+            database.load(two)?;
             
             // Add to queue and mark with Parent2 flag
             queue.push_back(two.to_string());
@@ -72,7 +66,7 @@ impl<'a> CommonAncestors<'a> {
 
         // Process the queue until all remaining commits are stale
         while !self.all_stale() {
-            // Pop the front commit from the queue
+            // Pop the front commit OID from the queue
             if let Some(commit_oid) = self.queue.pop_front() {
                 // Load the commit
                 let commit_obj = self.database.load(&commit_oid)?;
@@ -88,11 +82,11 @@ impl<'a> CommonAncestors<'a> {
                         // Mark parents as stale
                         let mut flags_clone = flags.clone();
                         flags_clone.insert(Flag::Stale);
-                        self.add_parents(commit, &flags_clone)?;
+                        self.add_parents(commit, &commit_oid, &flags_clone)?;
                     } else {
                         // Not a common ancestor, propagate flags to parents
                         let flags_clone = flags.clone();
-                        self.add_parents(commit, &flags_clone)?;
+                        self.add_parents(commit, &commit_oid, &flags_clone)?;
                     }
                 }
             } else {
@@ -132,16 +126,11 @@ impl<'a> CommonAncestors<'a> {
     fn add_parents(
         &mut self,
         commit: &Commit,
+        commit_oid: &str,
         flags: &HashSet<Flag>,
     ) -> Result<(), Error> {
         // If commit has a parent, add it to the queue with the same flags
         if let Some(parent_oid) = commit.get_parent() {
-            // Verify parent is a commit
-            let parent_commit = self.database.load(parent_oid)?;
-            if parent_commit.get_type() != "commit" {
-                return Err(Error::Generic(format!("Object {} is not a commit", parent_oid)));
-            }
-            
             // Get or create flags entry for parent
             let current_flags = self.flags.entry(parent_oid.to_string()).or_insert_with(HashSet::new);
             

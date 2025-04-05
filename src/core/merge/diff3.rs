@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 use std::fmt::Write;
-
-use crate::core::diff::diff::{diff, EditType, Line};
 use crate::errors::error::Error;
 
 // Helper to convert a string into a vector of lines with their endings preserved
@@ -38,6 +36,68 @@ impl<'a> Iterator for LinesWithEndings<'a> {
         
         Some(&self.input[start..self.position])
     }
+}
+
+// Simplified representation of edits for our diff3 purposes
+#[derive(Debug, PartialEq)]
+enum EditType {
+    Eql,
+    Add,
+    Del,
+}
+
+#[derive(Debug)]
+struct Edit {
+    r#type: EditType,
+    a_line: Option<LineInfo>,
+    b_line: Option<LineInfo>,
+}
+
+#[derive(Debug)]
+struct LineInfo {
+    number: usize,
+    content: String,
+}
+
+// Function to calculate simple line-by-line diff between two texts
+fn diff(a: &str, b: &str) -> Vec<Edit> {
+    let a_lines: Vec<_> = a.lines().collect();
+    let b_lines: Vec<_> = b.lines().collect();
+    
+    let mut result = Vec::new();
+    let mut i = 0;
+    let mut j = 0;
+    
+    while i < a_lines.len() || j < b_lines.len() {
+        if i < a_lines.len() && j < b_lines.len() && a_lines[i] == b_lines[j] {
+            // Equal lines
+            result.push(Edit {
+                r#type: EditType::Eql,
+                a_line: Some(LineInfo { number: i, content: a_lines[i].to_string() }),
+                b_line: Some(LineInfo { number: j, content: b_lines[j].to_string() }),
+            });
+            i += 1;
+            j += 1;
+        } else if j < b_lines.len() && (i >= a_lines.len() || i < a_lines.len() && a_lines[i] != b_lines[j]) {
+            // Line added in b
+            result.push(Edit {
+                r#type: EditType::Add,
+                a_line: None,
+                b_line: Some(LineInfo { number: j, content: b_lines[j].to_string() }),
+            });
+            j += 1;
+        } else if i < a_lines.len() {
+            // Line deleted from a
+            result.push(Edit {
+                r#type: EditType::Del,
+                a_line: Some(LineInfo { number: i, content: a_lines[i].to_string() }),
+                b_line: None,
+            });
+            i += 1;
+        }
+    }
+    
+    result
 }
 
 /// Performs a three-way merge between original (o), ours (a), and theirs (b) content
@@ -103,45 +163,40 @@ impl Diff3 {
         let o_content = self.o.join("");
         let file_content = file.join("");
         
-        // Custom diff handling that adapts to your core::diff module
-        let edits = diff(&o_content, &file_content);
-        
-        // For each equal section, map the line number in original to line number in file
-        for edit in edits {
-            if let EditType::Eql = edit.r#type {
-                if let (Some(a_line), Some(b_line)) = (edit.a_line, edit.b_line) {
-                    matches.insert(a_line.number, b_line.number);
-                }
+        // Generate diff using our custom diff function
+        for edit in diff(&o_content, &file_content) {
+            match edit.r#type {
+                EditType::Eql => {
+                    if let (Some(a_line), Some(b_line)) = (edit.a_line, edit.b_line) {
+                        matches.insert(a_line.number, b_line.number);
+                    }
+                },
+                _ => {}
             }
         }
 
         matches
     }
 
+    #[allow(clippy::unnecessary_unwrap)]
     fn generate_chunks(&mut self) {
         loop {
-            // Find how many lines are common to all three versions
             let i = self.find_next_mismatch();
 
             if let Some(i) = i {
                 if i == 1 {
-                    // Found a mismatch at the first line
                     let (o, a, b) = self.find_next_match();
 
                     if a.is_some() && b.is_some() {
-                        // Found a match after the mismatch, emit chunk
                         self.emit_chunk(o, a.unwrap(), b.unwrap());
                     } else {
-                        // No more matches, emit final chunk and return
                         self.emit_final_chunk();
                         return;
                     }
                 } else {
-                    // We have some matching lines before the mismatch, emit that chunk
                     self.emit_chunk(self.line_o + i, self.line_a + i, self.line_b + i);
                 }
             } else {
-                // No more mismatches, emit final chunk and return
                 self.emit_final_chunk();
                 return;
             }
@@ -151,7 +206,6 @@ impl Diff3 {
     fn find_next_mismatch(&self) -> Option<usize> {
         let mut i = 1;
 
-        // While we're in bounds and the lines match in all three versions
         while self.in_bounds(i)
             && self.matches(&self.match_a, self.line_a, i)
             && self.matches(&self.match_b, self.line_b, i)

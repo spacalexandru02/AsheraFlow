@@ -9,6 +9,7 @@ use crate::core::lockfile::Lockfile;
 use crate::core::index::entry::Entry;
 use crate::core::index::checksum::Checksum;
 use crate::core::index::checksum::CHECKSUM_SIZE;
+use crate::core::file_mode::FileMode;
 
 const HEADER_FORMAT: &str = "DIRC";
 const VERSION: u32 = 2;
@@ -122,7 +123,7 @@ impl Index {
             }
         };
         
-        // Verifică dimensiunea fișierului
+        // Check file size
         let file_size = match file.metadata() {
             Ok(metadata) => metadata.len(),
             Err(e) => return Err(Error::IO(e)),
@@ -272,7 +273,6 @@ impl Index {
         Ok(true)
     }
 
-
     pub fn rollback(&mut self) -> Result<(), Error> {
         self.changed = false;
         self.lockfile.rollback()
@@ -418,7 +418,7 @@ impl Index {
         Ok(false)
     }
     
-    // Metoda helper pentru a verifica dacă un fișier este indexat
+    // Helper method to check if a file is indexed
     pub fn tracked(&self, path: &str) -> bool {
         self.entries.contains_key(path)
     }
@@ -460,6 +460,7 @@ impl Index {
         }
     }
 
+    // Add conflict entry (for merge conflicts)
     pub fn add_conflict(&mut self, path: &Path, entries: Vec<Option<DatabaseEntry>>) {
         // Create conflict stage entries (1-3) for the conflicting versions
         let path_str = path.to_string_lossy().to_string();
@@ -473,22 +474,19 @@ impl Index {
         // Add each conflict stage entry
         // Stage 1: Base version
         if let Some(entry) = &entries[0] {
-            let mut stage1_entry = Entry::create(path, &entry.get_oid(), &fs::Metadata::default());
-            stage1_entry.stage = 1;
+            let mut stage1_entry = create_stage_entry(path, &entry.get_oid(), 1);
             self.store_entry(stage1_entry);
         }
         
         // Stage 2: "Ours" version
         if let Some(entry) = &entries[1] {
-            let mut stage2_entry = Entry::create(path, &entry.get_oid(), &fs::Metadata::default());
-            stage2_entry.stage = 2;
+            let mut stage2_entry = create_stage_entry(path, &entry.get_oid(), 2);
             self.store_entry(stage2_entry);
         }
         
         // Stage 3: "Theirs" version
         if let Some(entry) = &entries[2] {
-            let mut stage3_entry = Entry::create(path, &entry.get_oid(), &fs::Metadata::default());
-            stage3_entry.stage = 3;
+            let mut stage3_entry = create_stage_entry(path, &entry.get_oid(), 3);
             self.store_entry(stage3_entry);
         }
         
@@ -536,4 +534,31 @@ impl Index {
         self.changed = true;
         Ok(())
     }
+}
+
+// Helper function to create a stage entry with default metadata
+fn create_stage_entry(path: &Path, oid: &str, stage: u8) -> Entry {
+    // Instead of using fs::Metadata::default() which doesn't exist,
+    // we create an Entry with sensible defaults
+    let mut entry = Entry {
+        ctime: 0,
+        ctime_nsec: 0,
+        mtime: 0,
+        mtime_nsec: 0,
+        dev: 0,
+        ino: 0,
+        mode: FileMode::REGULAR,
+        uid: 0,
+        gid: 0,
+        size: 0,
+        oid: oid.to_string(),
+        flags: 0,
+        path: path.to_string_lossy().to_string(),
+        stage,
+    };
+    
+    // Set stage in flags
+    entry.flags = (path.to_string_lossy().len() as u16) | ((stage as u16) << 12);
+    
+    entry
 }
