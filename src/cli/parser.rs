@@ -244,10 +244,61 @@ impl CliParser {
                     },
                 }
             },
-            _ => CliArgs {
-                command: Command::Unknown { name: command },
+            "merge" => {
+                let mut branch = String::new();
+                let mut message = None;
+                let mut abort = false;
+                let mut continue_merge = false;
+                
+                let mut i = 2;
+                while i < args.len() {
+                    let arg = &args[i];
+                    match arg.as_str() {
+                        "--message" | "-m" => {
+                            if i + 1 < args.len() {
+                                message = Some(args[i + 1].clone());
+                                i += 2;
+                            } else {
+                                i += 1;
+                            }
+                        },
+                        "--abort" => {
+                            abort = true;
+                            i += 1;
+                        },
+                        "--continue" => {
+                            continue_merge = true;
+                            i += 1;
+                        },
+                        _ if arg.starts_with("-") => {
+                            // Unknown option
+                            i += 1;
+                        },
+                        _ => {
+                            // Branch name
+                            branch = arg.clone();
+                            i += 1;
+                        }
+                    }
+                }
+                
+                if branch.is_empty() && !abort && !continue_merge {
+                    return Err(Error::Generic("No branch specified for merge".to_string()));
+                }
+                
+                CliArgs {
+                    command: Command::Merge {
+                        branch,
+                        message,
+                        abort,
+                        continue_merge,
+                    },
+                }
             },
-        };
+                _ => CliArgs {
+                    command: Command::Unknown { name: command },
+                },
+            };
 
         Ok(cli_args)
     }

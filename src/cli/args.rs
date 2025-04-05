@@ -20,6 +20,12 @@ pub enum Command {
         patch: bool,
         decorate: String,
     },
+    Merge {
+        branch: String,
+        message: Option<String>,
+        abort: bool,
+        continue_merge: bool,
+    },
     Unknown { name: String },
 }
 

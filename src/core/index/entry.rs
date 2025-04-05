@@ -8,6 +8,7 @@ const MAX_PATH_SIZE: u16 = 0xfff;
 
 #[derive(Debug, Clone)]
 pub struct Entry {
+    // Existing fields...
     ctime: u32,
     ctime_nsec: u32,
     mtime: u32,
@@ -21,6 +22,8 @@ pub struct Entry {
     pub oid: String,
     flags: u16,
     pub path: String,
+    // Add this field:
+    pub stage: u8,  // 0 = normal, 1 = base, 2 = ours, 3 = theirs
 }
 
 impl Entry {
@@ -47,18 +50,18 @@ impl Entry {
             ctime_nsec: ctime_duration.subsec_nanos(),
             mtime: mtime_duration.as_secs() as u32,
             mtime_nsec: mtime_duration.subsec_nanos(),
-            dev: 0,  // These might not be directly available in Rust's fs::Metadata
-            ino: 0,  // We could use libc to get these on Unix systems if needed
+            dev: 0,
+            ino: 0,
             mode,
-            uid: 0,  // Same here, might need platform-specific code
-            gid: 0,  // Same here, might need platform-specific code
+            uid: 0,
+            gid: 0,
             size: stat.len() as u32,
             oid: oid.to_string(),
             flags,
             path,
+            stage: 0,  // Default stage is 0 (normal entry)
         }
     }
-
     pub fn mode_octal(&self) -> String {
         self.mode.to_octal_string()
     }
@@ -155,7 +158,7 @@ impl Entry {
         result.extend_from_slice(&self.mtime_nsec.to_be_bytes());
         result.extend_from_slice(&self.dev.to_be_bytes());
         result.extend_from_slice(&self.ino.to_be_bytes());
-        result.extend_from_slice(&self.mode.0.to_be_bytes()); // Use the inner u32 value
+        result.extend_from_slice(&self.mode.0.to_be_bytes());
         result.extend_from_slice(&self.uid.to_be_bytes());
         result.extend_from_slice(&self.gid.to_be_bytes());
         result.extend_from_slice(&self.size.to_be_bytes());
@@ -168,8 +171,10 @@ impl Entry {
             result.extend_from_slice(&[0; 20]);
         }
         
-        // Add flags
-        result.extend_from_slice(&self.flags.to_be_bytes());
+        // Add flags with stage bits
+        // Stage is stored in the high bits of the flags field
+        let flags_with_stage = self.flags | ((self.stage as u16) << 12);
+        result.extend_from_slice(&flags_with_stage.to_be_bytes());
         
         // Add path
         result.extend_from_slice(self.path.as_bytes());
@@ -182,6 +187,7 @@ impl Entry {
         
         result
     }
+    
     
     pub fn parse(data: &[u8]) -> Result<Self, crate::errors::error::Error> {
         if data.len() < 62 {  // Minimum size without path
@@ -205,7 +211,9 @@ impl Entry {
         let oid = hex::encode(&data[40..60]);
         
         // Flags are 2 bytes
-        let flags = u16::from_be_bytes([data[60], data[61]]);
+        let flags_with_stage = u16::from_be_bytes([data[60], data[61]]);
+        let flags = flags_with_stage & 0x0FFF; // Lower 12 bits
+        let stage = ((flags_with_stage >> 12) & 0x3) as u8; // Upper 2 bits (stage 0-3)
         
         // Path starts at byte 62 and continues until null byte
         let mut path_end = 62;
@@ -236,6 +244,7 @@ impl Entry {
             oid,
             flags,
             path,
+            stage,
         })
     }
     

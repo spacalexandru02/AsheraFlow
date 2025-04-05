@@ -6,3 +6,4 @@ pub mod diff;
 pub mod branch;
 pub mod checkout;
 pub mod log;
+pub mod merge;

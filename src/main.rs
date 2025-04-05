@@ -40,6 +40,19 @@ fn handle_command(cli_args: CliArgs) {
         Command::Checkout { target } => handle_checkout_command(&target),
         Command::Log { revisions, abbrev, format, patch, decorate } => 
             handle_log_command(&revisions, abbrev, &format, patch, &decorate),
+        Command::Merge { branch, message, abort, continue_merge } => {
+                if abort {
+                    // Handle merge abort
+                    println!("Merge abort not implemented yet");
+                    process::exit(1);
+                } else if continue_merge {
+                    // Handle merge continue
+                    println!("Merge continue not implemented yet");
+                    process::exit(1);
+                } else {
+                    handle_merge_command(&branch, message.as_deref())
+                }
+            },
         Command::Unknown { name } => exit_with_error(&format!("'{}' is not a ash command", name)),
     }
 }
@@ -128,4 +141,17 @@ fn exit_with_error(message: &str) -> ! {
         eprintln!("{}", CliParser::format_help());
     }
     process::exit(1);
+}
+
+fn handle_merge_command(branch: &str, message: Option<&str>) {
+    match commands::merge::MergeCommand::execute(branch, message) {
+        Ok(_) => process::exit(0),
+        Err(e) => {
+            if e.to_string() == "Already up to date." {
+                // This is normal output, not an error
+                process::exit(0);
+            }
+            exit_with_error(&format!("merge: {}", e))
+        },
+    }
 }

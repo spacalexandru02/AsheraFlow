@@ -1,8 +1,9 @@
 // src/core/index/index.rs
-use std::collections::{HashMap, BTreeSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
+use crate::core::database::entry::DatabaseEntry;
 use crate::errors::error::Error;
 use crate::core::lockfile::Lockfile;
 use crate::core::index::entry::Entry;
@@ -457,5 +458,82 @@ impl Index {
             self.entries.remove(&key);
             self.keys.remove(&key);
         }
+    }
+
+    pub fn add_conflict(&mut self, path: &Path, entries: Vec<Option<DatabaseEntry>>) {
+        // Create conflict stage entries (1-3) for the conflicting versions
+        let path_str = path.to_string_lossy().to_string();
+        
+        // Clear any existing entry
+        if self.entries.contains_key(&path_str) {
+            self.entries.remove(&path_str);
+            self.keys.remove(&path_str);
+        }
+        
+        // Add each conflict stage entry
+        // Stage 1: Base version
+        if let Some(entry) = &entries[0] {
+            let mut stage1_entry = Entry::create(path, &entry.get_oid(), &fs::Metadata::default());
+            stage1_entry.stage = 1;
+            self.store_entry(stage1_entry);
+        }
+        
+        // Stage 2: "Ours" version
+        if let Some(entry) = &entries[1] {
+            let mut stage2_entry = Entry::create(path, &entry.get_oid(), &fs::Metadata::default());
+            stage2_entry.stage = 2;
+            self.store_entry(stage2_entry);
+        }
+        
+        // Stage 3: "Theirs" version
+        if let Some(entry) = &entries[2] {
+            let mut stage3_entry = Entry::create(path, &entry.get_oid(), &fs::Metadata::default());
+            stage3_entry.stage = 3;
+            self.store_entry(stage3_entry);
+        }
+        
+        self.changed = true;
+    }
+    
+    // Check if the index has conflicts
+    pub fn has_conflict(&self) -> bool {
+        // Check if any entries have a stage > 0
+        for entry in self.each_entry() {
+            if entry.stage > 0 {
+                return true;
+            }
+        }
+        false
+    }
+    
+    // Get paths that have conflicts
+    pub fn conflict_paths(&self) -> Vec<String> {
+        let mut paths = HashSet::new();
+        
+        for entry in self.each_entry() {
+            if entry.stage > 0 {
+                paths.insert(entry.get_path().to_string());
+            }
+        }
+        
+        paths.into_iter().collect()
+    }
+    
+    // Resolve a conflict by setting the given path to the final resolution
+    pub fn resolve_conflict(&mut self, path: &Path, oid: &str, stat: &fs::Metadata) -> Result<(), Error> {
+        let path_str = path.to_string_lossy().to_string();
+        
+        // Remove all conflict stage entries for this path
+        self.entries.retain(|k, v| k != &path_str || v.stage == 0);
+        
+        // Add the resolved entry with stage 0
+        self.add(path, oid, stat)?;
+        
+        // Update keys collection if necessary
+        // Make sure the key is present only once
+        self.keys.insert(path_str);
+        
+        self.changed = true;
+        Ok(())
     }
 }
