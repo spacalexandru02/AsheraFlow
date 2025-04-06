@@ -63,7 +63,6 @@ fn handle_command(cli_args: CliArgs) {
     }
 }
 
-// ... (restul funcțiilor handle_* rămân la fel) ...
 
 fn handle_commit_command(message: &str) {
     match CommitCommand::execute(message) {
@@ -152,6 +151,7 @@ fn exit_with_error(message: &str) -> ! {
     process::exit(1);
 }
 
+// --- Adaugă funcția handle_merge_command ---
 fn handle_merge_command(branch: &str, message: Option<&str>) {
      match MergeCommand::execute(branch, message) {
          Ok(_) => process::exit(0),
