@@ -71,12 +71,6 @@ impl Index {
             Err(Error::Generic(format!("Entry not found for key: {}", path)))
         }
     }
-    
-    pub fn clear(&mut self) {
-        self.entries.clear();
-        self.keys.clear();
-        self.changed = false;
-    }
 
     pub fn add(&mut self, pathname: &Path, oid: &str, stat: &fs::Metadata) -> Result<(), Error> {
         let entry = Entry::create(pathname, oid, stat);
@@ -532,6 +526,42 @@ impl Index {
         self.keys.insert(path_str);
         
         self.changed = true;
+        Ok(())
+    }
+
+    pub fn clear(&mut self) {
+        self.entries.clear();
+        self.keys.clear();
+        self.changed = true;
+    }
+    
+    // Add an entry directly from a database entry
+    pub fn add_from_db(&mut self, path: &Path, entry: &DatabaseEntry) -> Result<(), Error> {
+        let path_str = path.to_string_lossy().to_string();
+        let file_mode = entry.get_file_mode();
+        
+        // Create a new index entry
+        let mut index_entry = Entry {
+            ctime: 0,
+            ctime_nsec: 0,
+            mtime: 0,
+            mtime_nsec: 0,
+            dev: 0,
+            ino: 0,
+            mode: file_mode,
+            uid: 0,
+            gid: 0,
+            size: 0,
+            oid: entry.get_oid().to_string(),
+            flags: path_str.len().min(0xfff) as u16, // Maximum length for flags is 12 bits
+            path: path_str.clone(),
+            stage: 0, // Normal stage (not a conflict)
+        };
+        
+        // Store the entry
+        self.store_entry(index_entry);
+        self.changed = true;
+        
         Ok(())
     }
 }

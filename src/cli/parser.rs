@@ -322,7 +322,82 @@ impl CliParser {
                     },
                 }
             },
-            // --- Sfârșit caz 'merge' ---
+            "reset" => {
+                // Parse reset command options
+                let mut revision = String::new();
+                let mut paths = Vec::new();
+                let mut soft = false;
+                let mut mixed = false; // Default mode
+                let mut hard = false;
+                let mut parsing_paths = false; // Flag to indicate we are past '--'
+
+                let mut i = 2;
+                while i < args.len() {
+                    let arg = &args[i];
+
+                    // Check for '--' separator first
+                    if arg == "--" {
+                        parsing_paths = true;
+                        i += 1; // Move past '--'
+                        continue; // Continue to next iteration
+                    }
+
+                    if parsing_paths {
+                        // Everything after '--' is a path
+                        paths.push(arg.clone());
+                    } else {
+                        // Parse options or revision before '--'
+                        match arg.as_str() {
+                            "--soft" => {
+                                soft = true;
+                            },
+                            "--mixed" => {
+                                mixed = true;
+                            },
+                            "--hard" => {
+                                hard = true;
+                            },
+                            a if a.starts_with('-') => {
+                                // Unknown flag before '--'
+                                return Err(Error::Generic(format!("Unknown option for reset: {}", a)));
+                            },
+                            _ => {
+                                // If revision is not set yet, this is it
+                                if revision.is_empty() {
+                                    revision = arg.clone();
+                                } else {
+                                    // This must be a path (before '--')
+                                    paths.push(arg.clone());
+                                }
+                            }
+                        }
+                    }
+                    i += 1;
+                }
+
+                // If no revision was provided, default to "HEAD" conceptually
+                // (The ResetCommand implementation might handle empty revision as HEAD)
+                // if revision.is_empty() && paths.is_empty() {
+                //     revision = "HEAD".to_string(); // Or let the command handle empty string
+                // }
+
+                 // Validation: Cannot have multiple modes
+                 let mode_count = [soft, mixed, hard].iter().filter(|&&x| x).count();
+                 if mode_count > 1 {
+                     return Err(Error::Generic("Options --soft, --mixed, --hard are mutually exclusive".to_string()));
+                 }
+
+
+                CliArgs {
+                    command: Command::Reset {
+                        revision, // Can be empty, let the command handle it
+                        paths,
+                        soft,
+                        mixed: if mode_count == 0 { true } else { mixed }, // Default to mixed if no mode specified
+                        hard,
+                    },
+                }
+            },
             _ => CliArgs {
                 command: Command::Unknown { name: command },
             },
@@ -332,24 +407,25 @@ impl CliParser {
     }
 
     // Updated format_help to include merge
-     pub fn format_help() -> String {
-         format!(
-             "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}", // Added one {}
-             "Usage: ash <command> [options]",
-             "Commands:",
-             "  init [path]                       Initialize a new repository",
-             "  add <paths...>                    Add file contents to the index",
-             "  commit -m <message>               Commit changes to the repository",
-             "  status [--porcelain] [--color=...] Show the working tree status",
-             "  diff [--cached] [paths...]        Show changes (HEAD vs index or index vs workspace)",
-             "  branch [-v] [-d|-D] [<n> [<sp>]]  Manage branches (list, create, delete)",
-             "  checkout <target>                 Switch branches or restore working tree files",
-             "  log [--oneline] [--decorate=...]  Show commit logs",
-             "  merge <branch> [-m <msg>]         Merge the specified branch into the current branch", // Added merge
-             "        --abort                     Abort the current merge resolution process",
-             "        --continue                  Continue the merge after resolving conflicts (not implemented)",
-             "Common Options:",
-             "  (Options specific to commands listed above)"
-         )
-     }
+    pub fn format_help() -> String {
+        format!(
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}", // Added {} for reset
+            "Usage: ash <command> [options]",
+            "Commands:",
+            "  init [path]                       Initialize a new repository",
+            "  add <paths...>                    Add file contents to the index",
+            "  commit -m <message>               Commit changes to the repository",
+            "  status [--porcelain] [--color=...] Show the working tree status",
+            "  diff [--cached] [paths...]        Show changes (HEAD vs index or index vs workspace)",
+            "  branch [-v] [-d|-D] [<n> [<sp>]]  Manage branches (list, create, delete)",
+            "  checkout <target>                 Switch branches or restore working tree files",
+            "  log [--oneline] [--decorate=...]  Show commit logs",
+            "  merge <branch> [-m <msg>]         Merge the specified branch into the current branch",
+            "        --abort                     Abort the current merge resolution process",
+            "        --continue                  Continue the merge after resolving conflicts (not implemented)",
+            "  reset [--soft|--mixed|--hard] [<rev>] [--] [<paths>...] Reset current HEAD to the specified state", // Added reset
+            "Common Options:",
+            "  (Options specific to commands listed above)"
+        )
+    }
 }
