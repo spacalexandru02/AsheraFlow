@@ -143,31 +143,47 @@ fn handle_checkout_command(target: &str) {
 }
 
 fn exit_with_error(message: &str) -> ! {
-    eprintln!("{}", message);
-    // Display help only if the error suggests a usage problem
-     if message.contains("Usage:") || message.contains("required") || message.contains("Unknown") || message.contains("not a ash command") {
-         eprintln!("\n{}", CliParser::format_help());
-     }
-    process::exit(1);
+    eprintln!("{}", message); // Afișează eroarea pe stderr
+    // Poți adăuga logica de afișare a mesajului de ajutor aici dacă dorești
+    // if message.contains("Usage:") || ... {
+    //     eprintln!("\n{}", CliParser::format_help());
+    // }
+    process::exit(1); // Ieșim cu cod de eroare (1)
 }
 
 // --- Adaugă funcția handle_merge_command ---
 fn handle_merge_command(branch: &str, message: Option<&str>) {
-     match MergeCommand::execute(branch, message) {
-         Ok(_) => process::exit(0),
-         Err(e) => {
-             // Handle specific non-error outputs like "Already up to date"
-             if e.to_string() == "Already up to date." {
-                 println!("{}", e); // Print the message to stdout
-                 process::exit(0); // Exit successfully
-             }
-             // Handle conflict errors specifically
-             if e.to_string().contains("fix conflicts") {
-                 // Print the error message from MergeCommand
-                 exit_with_error(&e.to_string()); // Exit with error status 1
-             }
-             // Handle other generic errors
-             exit_with_error(&format!("fatal: merge failed: {}", e));
-         }
-     }
- }
+    match MergeCommand::execute(branch, message) {
+        // Cazul 1: Merge-ul a reușit fără conflicte sau alte condiții speciale.
+        Ok(_) => {
+            // MergeCommand::execute probabil nu afișează nimic la succes,
+            // deci nu mai afișăm nimic suplimentar aici. Ieșim cu succes.
+            process::exit(0);
+        }
+
+        // Cazul 2: MergeCommand::execute a returnat o eroare.
+        Err(e) => {
+            // Convertim eroarea în string pentru comparații.
+            let error_message = e.to_string();
+
+            // Verificăm întâi cazurile specifice care *nu* sunt erori fatale.
+            if error_message == "Already up to date." {
+                // Tratăm "Already up to date" ca un succes, afișăm pe stdout.
+                println!("{}", error_message); // Afișează mesajul pe ieșirea standard
+                process::exit(0);             // Ieșim cu cod de succes (0).
+            }
+            // Verificăm apoi cazurile de conflict.
+            // Ajustează string-urile dacă mesajele tale de conflict sunt diferite.
+            else if error_message.contains("fix conflicts") || error_message.contains("Automatic merge failed") {
+                // Raportăm eroarea de conflict pe stderr și ieșim cu cod de eroare (1).
+                // Folosim mesajul original al erorii returnat de MergeCommand.
+                exit_with_error(&error_message);
+            }
+            // Tratăm toate celelalte erori ca eșecuri fatale ale merge-ului.
+            else {
+                // Raportăm eșecul generic al merge-ului pe stderr și ieșim cu cod de eroare (1).
+                exit_with_error(&format!("fatal: merge failed: {}", error_message));
+            }
+        }
+    }
+}

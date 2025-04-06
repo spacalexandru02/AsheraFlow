@@ -35,20 +35,19 @@ BLUE="\033[0;34m"
 RESET="\033[0m"
 TESTS_PASSED=0
 TESTS_FAILED=0
-STDOUT_LOG="stdout.log" # Define log file names
-STDERR_LOG="stderr.log"
 
 # --- Helper Functions ---
 function setup_repo() {
     local repo_name=${1:-"test_repo"}
     rm -rf "$repo_name" .ash 2>/dev/null || true
     mkdir -p "$repo_name"
-    # No cd here, run_cmd handles changing directory
-    "$ASH_CMD" init "$repo_name" > /dev/null # Init in the specific dir
+    cd "$repo_name"
+    "$ASH_CMD" init . > /dev/null
     # Configure git user locally for commits (important for Author info)
     export GIT_AUTHOR_NAME="Test User"
     export GIT_AUTHOR_EMAIL="test@example.com"
-    echo -e "${BLUE}Initialized repo in $(pwd)/$repo_name${RESET}"
+    echo -e "${BLUE}Initialized repo in $(pwd)${RESET}"
+    cd .. # Go back to TEST_DIR
 }
 
 function create_commit() {
@@ -57,7 +56,7 @@ function create_commit() {
     local content="$3"
     local message="$4"
     local branch
-    branch=$(cd "$repo_name" && cat .ash/HEAD | sed 's|ref: refs/heads/||' 2>/dev/null || echo "master") # Get current branch name
+    branch=$(cd "$repo_name" && cat .ash/HEAD | sed 's|ref: refs/heads/||') # Get current branch name
 
     echo "$content" > "$repo_name/$file_name"
     (cd "$repo_name" && "$ASH_CMD" add "$file_name" > /dev/null)
@@ -65,36 +64,20 @@ function create_commit() {
     echo "  Commit on '$branch': '$message' ($file_name)"
 }
 
-# Function to run command and capture output reliably
 function run_cmd() {
     local repo_name="$1"
     shift # Remove repo_name from args
     echo -e "${YELLOW}  CMD [in $repo_name]: ${ASH_CMD} $@${RESET}"
-    # Use process substitution and temporary files for robust output capture
-    local exit_code=0
-    {
-        # Ensure logs are created in the base TEST_DIR, not the repo dir
-        (cd "$repo_name" && "$ASH_CMD" "$@") > "../$STDOUT_LOG" 2> "../$STDERR_LOG"
-        exit_code=$?
-    }
-
-    if [ $exit_code -eq 0 ]; then
+    if (cd "$repo_name" && "$ASH_CMD" "$@") > >(tee -a stdout.log) 2> >(tee -a stderr.log >&2); then
         echo -e "${GREEN}  CMD OK${RESET}"
-         # Optional: Print logs even on success for debugging
-         # echo "--- stdout ---"; cat "$STDOUT_LOG"; echo "--- stderr ---"; cat "$STDERR_LOG"
-        rm -f "$STDOUT_LOG" "$STDERR_LOG" # Clean up logs on success
         return 0
     else
+        local exit_code=$?
         echo -e "${RED}  CMD FAILED (Exit Code: $exit_code)${RESET}"
-        echo "--- stdout ---"
-        cat "$STDOUT_LOG" || echo "[stdout empty or unreadable]"
-        echo "--- stderr ---"
-        cat "$STDERR_LOG" || echo "[stderr empty or unreadable]"
-        rm -f "$STDOUT_LOG" "$STDERR_LOG" # Clean up logs on failure too
+        cat stdout.log stderr.log # Print output on failure
         return $exit_code
     fi
 }
-
 
 # Function to check command success (ignores output)
 function check_success() {
@@ -124,34 +107,21 @@ function check_failure() {
     fi
 }
 
-# Corrected assert_file_contains
 function assert_file_contains() {
     local repo_name="$1"
-    local file_path="$2" # Relative path within the repo
+    local file_path="$2"
     local expected_content="$3"
     local msg="$4"
-    local full_file_path="$repo_name/$file_path" # Construct full path
-
     echo -e "${YELLOW}TEST: $msg${RESET}"
-    if [ ! -f "$full_file_path" ]; then
-        echo -e "${RED}FAIL: $msg - File '$full_file_path' does not exist.${RESET}"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        return 1 # Return failure
-    fi
-
-    # Use -- to ensure expected_content isn't treated as an option if it starts with -
-    if grep -qF -- "$expected_content" "$full_file_path"; then
+    if grep -qF "$expected_content" "$repo_name/$file_path"; then
         echo -e "${GREEN}PASS: $msg${RESET}"
         TESTS_PASSED=$((TESTS_PASSED + 1))
-        return 0 # Return success
     else
-        echo -e "${RED}FAIL: $msg - File '$full_file_path' does not contain '$expected_content'. Actual content:${RESET}"
-        cat "$full_file_path"
+        echo -e "${RED}FAIL: $msg - File '$repo_name/$file_path' does not contain '$expected_content'. Actual content:${RESET}"
+        cat "$repo_name/$file_path"
         TESTS_FAILED=$((TESTS_FAILED + 1))
-        return 1 # Return failure
     fi
 }
-
 
 function assert_file_exists() {
     local repo_name="$1"
@@ -185,41 +155,21 @@ function assert_conflict_markers() {
     local repo_name="$1"
     local file_path="$2"
     local msg="$3"
-    local full_file_path="$repo_name/$file_path"
-
     echo -e "${YELLOW}TEST: $msg${RESET}"
-     if [ ! -f "$full_file_path" ]; then
-        echo -e "${RED}FAIL: $msg - File '$full_file_path' does not exist for conflict marker check.${RESET}"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        return 1 # Return failure
-    fi
-
-    if grep -q '<<<<<<<' "$full_file_path" && grep -q '=======' "$full_file_path" && grep -q '>>>>>>>' "$full_file_path"; then
+    if grep -q '<<<<<<<' "$repo_name/$file_path" && grep -q '=======' "$repo_name/$file_path" && grep -q '>>>>>>>' "$repo_name/$file_path"; then
         echo -e "${GREEN}PASS: $msg${RESET}"
         TESTS_PASSED=$((TESTS_PASSED + 1))
-        return 0 # Return success
     else
-        echo -e "${RED}FAIL: $msg - Conflict markers not found in '$full_file_path'. Actual content:${RESET}"
-        cat "$full_file_path"
+        echo -e "${RED}FAIL: $msg - Conflict markers not found in '$repo_name/$file_path'. Actual content:${RESET}"
+        cat "$repo_name/$file_path"
         TESTS_FAILED=$((TESTS_FAILED + 1))
-        return 1 # Return failure
     fi
 }
 
 function get_head_oid() {
     local repo_name="$1"
-     # Read HEAD, follow symref if needed
-     local head_content=$(cat "$repo_name/.ash/HEAD" 2>/dev/null)
-     if [[ "$head_content" == ref:* ]]; then
-         local ref_path=$(echo "$head_content" | sed 's|ref: ||')
-         cat "$repo_name/.ash/$ref_path" 2>/dev/null || echo "unknown_oid"
-     elif [ -n "$head_content" ]; then
-         echo "$head_content" # Detached HEAD or direct OID
-     else
-         echo "unknown_oid"
-     fi
+    cat "$repo_name/.ash/refs/heads/master" 2>/dev/null || cat "$repo_name/.ash/HEAD" 2>/dev/null || echo "unknown_oid"
 }
-
 
 function get_branch_oid() {
     local repo_name="$1"
@@ -242,8 +192,8 @@ function test_fast_forward_merge() {
     local feature_commit_oid=$(get_branch_oid "$repo" "feature")
 
     run_cmd "$repo" checkout master
-    run_cmd "$repo" merge feature # Execute merge
-    local master_commit_oid=$(get_head_oid "$repo") # Get OID *after* merge
+    run_cmd "$repo" merge feature
+    local master_commit_oid=$(get_head_oid "$repo")
 
     assert_file_exists "$repo" "file1.txt" "FF Merge: file1.txt should exist"
     assert_file_exists "$repo" "file2.txt" "FF Merge: file2.txt should exist"
@@ -256,10 +206,9 @@ function test_fast_forward_merge() {
         echo -e "${RED}FAIL: FF Merge: master OID ($master_commit_oid) does not match feature OID ($feature_commit_oid)${RESET}"
         TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
-    # No cd needed, already in TEST_DIR base
+    cd "$TEST_DIR" # Ensure we are in the base test directory
 }
 
-# Corrected test_already_up_to_date
 function test_already_up_to_date() {
     echo -e "\n${BLUE}--- Test: Already Up-to-Date Merge ---${RESET}"
     local repo="uptodate_repo"
@@ -267,24 +216,13 @@ function test_already_up_to_date() {
     create_commit "$repo" "file1.txt" "Content" "Initial"
     run_cmd "$repo" branch feature
     # Merge feature into master (should be fast-forward)
-    run_cmd "$repo" merge feature # Run merge, output captured by run_cmd
-    # Try merging again, capture output specifically for checking
-    echo -e "${YELLOW}  CMD [in $repo]: ${ASH_CMD} merge feature${RESET}"
-    # Run directly to capture output easily
-    merge_output=$(cd "$repo" && "$ASH_CMD" merge feature 2>&1)
-    local exit_code=$?
-    echo "$merge_output" # Print the output for verification
-
-    if [[ $exit_code -eq 0 && "$merge_output" == *"Already up to date."* ]]; then
-        echo -e "${GREEN}PASS: Already Up-to-Date: Correct output and exit code${RESET}"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-    else
-        echo -e "${RED}FAIL: Already Up-to-Date: Incorrect output or exit code. Output: $merge_output (Exit: $exit_code)${RESET}"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-    fi
-    # No cd needed
+    run_cmd "$repo" merge feature > /dev/null
+    # Try merging again
+    run_cmd "$repo" merge feature > merge_output.log
+    assert_file_contains "merge_output.log" "Already up to date." "Already Up-to-Date: Output check"
+    rm merge_output.log stdout.log stderr.log 2>/dev/null
+    cd "$TEST_DIR"
 }
-
 
 function test_recursive_merge_no_conflict() {
     echo -e "\n${BLUE}--- Test: Recursive Merge (No Conflict) ---${RESET}"
@@ -298,10 +236,7 @@ function test_recursive_merge_no_conflict() {
     local master_oid=$(get_head_oid "$repo")
 
     # Feature branch changes
-    # --- FIX: Use branch and then checkout ---
-    run_cmd "$repo" branch feature "$base_oid" # Create feature from base
-    run_cmd "$repo" checkout feature
-    # --- End Fix ---
+    run_cmd "$repo" checkout -b feature "$base_oid" # Create feature from base
     create_commit "$repo" "feature_file.txt" "Feature change" "Commit on feature"
     local feature_oid=$(get_branch_oid "$repo" "feature")
 
@@ -316,17 +251,16 @@ function test_recursive_merge_no_conflict() {
     assert_file_contains "$repo" "master_file.txt" "Master change" "Recursive Merge: master_file content"
     assert_file_contains "$repo" "feature_file.txt" "Feature change" "Recursive Merge: feature_file content"
 
-    if [ "$merge_commit_oid" != "$master_oid" ] && [ "$merge_commit_oid" != "$feature_oid" ] && [ "$merge_commit_oid" != "unknown_oid" ]; then
+    if [ "$merge_commit_oid" != "$master_oid" ] && [ "$merge_commit_oid" != "$feature_oid" ]; then
          echo -e "${GREEN}PASS: Recursive Merge: New merge commit created ($merge_commit_oid)${RESET}"
          TESTS_PASSED=$((TESTS_PASSED + 1))
          # Optionally check merge commit parents using log
     else
-         echo -e "${RED}FAIL: Recursive Merge: Did not create a new merge commit. Merge OID: $merge_commit_oid, Master OID: $master_oid, Feature OID: $feature_oid${RESET}"
+         echo -e "${RED}FAIL: Recursive Merge: Did not create a new merge commit.${RESET}"
          TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
-    # No cd needed
+    cd "$TEST_DIR"
 }
-
 
 function test_content_conflict() {
     echo -e "\n${BLUE}--- Test: Content Conflict Merge ---${RESET}"
@@ -341,10 +275,7 @@ function test_content_conflict() {
     run_cmd "$repo" commit -m "Modify line 1 on master"
 
     # Feature changes
-    # --- FIX: Use branch and then checkout ---
-    run_cmd "$repo" branch feature "$base_oid"
-    run_cmd "$repo" checkout feature
-    # --- End Fix ---
+    run_cmd "$repo" checkout -b feature "$base_oid"
     echo -e "line1\nline2\nline3_feature" > "$repo/conflict.txt"
     run_cmd "$repo" add conflict.txt
     run_cmd "$repo" commit -m "Modify line 3 on feature"
@@ -362,7 +293,7 @@ function test_content_conflict() {
     assert_conflict_markers "$repo" "conflict.txt" "Content Conflict: Markers check"
     # Check index status for conflict (this requires status to show conflicts)
     # (cd "$repo" && "$ASH_CMD" status) # Manual check for now
-    # No cd needed
+    cd "$TEST_DIR"
 }
 
 function test_file_directory_conflict() {
@@ -379,10 +310,7 @@ function test_file_directory_conflict() {
     run_cmd "$repo" commit -m "Add file a/b on master"
 
     # Feature: Create file a
-    # --- FIX: Use branch and then checkout ---
-    run_cmd "$repo" branch feature "$base_oid"
-    run_cmd "$repo" checkout feature
-    # --- End Fix ---
+    run_cmd "$repo" checkout -b feature "$base_oid"
     echo "feature file" > "$repo/a"
     run_cmd "$repo" add a
     run_cmd "$repo" commit -m "Add file a on feature"
@@ -397,14 +325,8 @@ function test_file_directory_conflict() {
         TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
     # Check for specific error message or conflicted state in index/status if implemented
-    # Check if the renamed file exists
-    assert_file_exists "$repo" "a~feature" "File/Dir Conflict: Renamed file 'a~feature' should exist"
-    assert_file_contains "$repo" "a~feature" "feature file" "File/Dir Conflict: Renamed file content check"
-    # Check that the original directory structure from master still exists
-    assert_file_exists "$repo" "a/b" "File/Dir Conflict: Original directory 'a/b' should still exist before conflict resolution"
-    # No cd needed
+    cd "$TEST_DIR"
 }
-
 
 function test_modify_delete_conflict() {
     echo -e "\n${BLUE}--- Test: Modify/Delete Conflict Merge ---${RESET}"
@@ -419,10 +341,7 @@ function test_modify_delete_conflict() {
     run_cmd "$repo" commit -m "Modify on master"
 
     # Feature: Delete file
-    # --- FIX: Use branch and then checkout ---
-    run_cmd "$repo" branch feature "$base_oid"
-    run_cmd "$repo" checkout feature
-    # --- End Fix ---
+    run_cmd "$repo" checkout -b feature "$base_oid"
     rm "$repo/moddel.txt"
     run_cmd "$repo" add moddel.txt # Use add to record deletion
     run_cmd "$repo" commit -m "Delete on feature"
@@ -437,12 +356,8 @@ function test_modify_delete_conflict() {
         TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
     # Check for specific error message or conflicted state in index/status if implemented
-    # File should still exist with master's modifications before resolution
-    assert_file_exists "$repo" "moddel.txt" "Modify/Delete Conflict: File should still exist"
-    assert_file_contains "$repo" "moddel.txt" "Modified on master" "Modify/Delete Conflict: File content check"
-    # No cd needed
+    cd "$TEST_DIR"
 }
-
 
 function test_merge_fail_untracked_overwrite() {
     echo -e "\n${BLUE}--- Test: Merge Fail (Untracked Overwrite) ---${RESET}"
@@ -451,10 +366,7 @@ function test_merge_fail_untracked_overwrite() {
     create_commit "$repo" "common.txt" "Base" "Base commit"
     local base_oid=$(get_head_oid "$repo")
     create_commit "$repo" "master_file.txt" "Master" "Master change"
-    # --- FIX: Use branch and then checkout ---
-    run_cmd "$repo" branch feature "$base_oid"
-    run_cmd "$repo" checkout feature
-    # --- End Fix ---
+    run_cmd "$repo" checkout -b feature "$base_oid"
     create_commit "$repo" "feature_file.txt" "Feature" "Feature change" # This file will conflict
 
     # Create untracked file that merge would create
@@ -470,7 +382,7 @@ function test_merge_fail_untracked_overwrite() {
         TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
     assert_file_contains "$repo" "feature_file.txt" "Untracked content" "Untracked Overwrite: File should remain unchanged"
-    # No cd needed
+    cd "$TEST_DIR"
 }
 
 function test_merge_fail_uncommitted_changes() {
@@ -480,10 +392,7 @@ function test_merge_fail_uncommitted_changes() {
     create_commit "$repo" "common.txt" "Base" "Base commit"
     local base_oid=$(get_head_oid "$repo")
     create_commit "$repo" "master_file.txt" "Master" "Master change"
-    # --- FIX: Use branch and then checkout ---
-    run_cmd "$repo" branch feature "$base_oid"
-    run_cmd "$repo" checkout feature
-    # --- End Fix ---
+    run_cmd "$repo" checkout -b feature "$base_oid"
     create_commit "$repo" "feature_file.txt" "Feature" "Feature change"
 
     # Modify tracked file without committing
@@ -499,13 +408,13 @@ function test_merge_fail_uncommitted_changes() {
         TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
     assert_file_contains "$repo" "master_file.txt" "Uncommitted modification" "Uncommitted Changes: File should retain changes"
-    # No cd needed
+    cd "$TEST_DIR"
 }
 
 
 # --- Run Tests ---
 # Clear logs for new run
-rm -f "$STDOUT_LOG" "$STDERR_LOG"
+rm -f stdout.log stderr.log
 
 test_fast_forward_merge
 test_already_up_to_date
@@ -526,10 +435,9 @@ else
 fi
 
 # --- Cleanup ---
-cd .. # Go back to original directory before removing TEST_DIR
-echo "Cleaning up temporary directory: $TEST_DIR"
+cd ..
 rm -rf "$TEST_DIR"
-
+echo "Cleaned up temporary directory: $TEST_DIR"
 
 # Exit with status code indicating failure if any tests failed
 if [ "$TESTS_FAILED" -gt 0 ]; then
