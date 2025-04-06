@@ -1,5 +1,5 @@
 // src/core/merge/bases.rs
-use std::collections::{HashSet, HashMap}; // Adaugă HashMap dacă nu există deja
+use std::collections::HashSet; // Adaugă HashMap dacă nu există deja
 
 use crate::core::database::database::Database;
 use crate::errors::error::Error;

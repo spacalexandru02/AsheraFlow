@@ -1,7 +1,5 @@
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::any::Any;
-
-use crate::core::database::database::{Database, GitObject};
+use crate::core::database::database::Database;
 use crate::core::database::commit::Commit;
 use crate::errors::error::Error;
 

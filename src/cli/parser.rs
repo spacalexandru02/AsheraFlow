@@ -6,7 +6,11 @@ pub struct CliParser;
 impl CliParser {
     pub fn parse(args: Vec<String>) -> Result<CliArgs, Error> {
         if args.len() < 2 {
-            return Err(Error::Generic("Usage: ash <command> [options]".to_string()));
+            // Return help message if no command is provided
+             return Err(Error::Generic(format!("{}\n\n{}",
+                 "Usage: ash <command> [options]",
+                 Self::format_help() // Include help format on basic usage error
+             )));
         }
 
         let command = args[1].to_lowercase();
@@ -17,31 +21,33 @@ impl CliParser {
                 },
             },
             "commit" => {
-                let mut message = String::new();
+                let mut message = None; // Use Option for message initially
                 let mut i = 2;
                 while i < args.len() {
-                    if args[i] == "--message" || args[i] == "-m" {
-                        if i + 1 < args.len() {
-                            message = args[i + 1].to_owned();
-                            break;
-                        }
+                    if (args[i] == "--message" || args[i] == "-m") && i + 1 < args.len() {
+                        message = Some(args[i + 1].to_owned());
+                        i += 2; // Skip both flag and value
+                    } else {
+                        // Handle potential unknown flags or arguments here if needed
+                        i += 1;
                     }
-                    i += 1;
                 }
-                
-                if message.is_empty() {
+
+                if message.is_none() {
+                     // Try reading from standard input or editor if no -m is provided (like git)
+                     // For now, require the message flag
                     return Err(Error::Generic("Commit message is required. Use --message <msg> or -m <msg>".to_string()));
                 }
-                
+
                 CliArgs {
                     command: Command::Commit {
-                        message,
+                        message: message.unwrap(), // Unwrap is safe here due to check above
                     },
                 }
             },
             "add" => {
                 if args.len() < 3 {
-                    return Err(Error::Generic("File path is required for add command".to_string()));
+                    return Err(Error::Generic("File path(s) are required for add command".to_string()));
                 }
                 CliArgs {
                     command: Command::Add {
@@ -55,15 +61,16 @@ impl CliParser {
 
                 // Check for --color option
                 let color = args.iter().skip(2).enumerate().find_map(|(i, arg)| {
-                    if arg == "--color" && i + 1 < args.len() - 2 {
-                        Some(args[i + 3].clone())
+                    // Correct index check for color value
+                    if arg == "--color" && i + 2 < args.len() { // Look at index i+2 relative to args start
+                        Some(args[i + 2 + 1].clone()) // Argument is at i+2, value at i+3 (relative to args start)
                     } else if arg.starts_with("--color=") {
-                        Some(arg.split('=').nth(1).unwrap_or("auto").to_string())
+                        Some(arg.splitn(2, '=').nth(1).unwrap_or("auto").to_string())
                     } else {
                         None
                     }
-                }).unwrap_or_else(|| "auto".to_string());
-                
+                }).unwrap_or_else(|| "auto".to_string()); // Default to auto
+
                 CliArgs {
                     command: Command::Status {
                         porcelain,
@@ -75,16 +82,19 @@ impl CliParser {
                 // Parse diff command arguments
                 let mut paths = Vec::new();
                 let mut cached = false;
-                
+
                 // Check for --cached or --staged flag
                 for arg in args.iter().skip(2) {
                     if arg == "--cached" || arg == "--staged" {
                         cached = true;
-                    } else if !arg.starts_with("-") {
+                    } else if !arg.starts_with('-') { // Assume non-flag arguments are paths
                         paths.push(arg.clone());
+                    } else {
+                         // Handle other potential flags or return error for unknown flags
+                         // return Err(Error::Generic(format!("Unknown option for diff: {}", arg)));
                     }
                 }
-                
+
                 CliArgs {
                     command: Command::Diff {
                         paths,
@@ -99,7 +109,7 @@ impl CliParser {
                 let mut verbose = false;
                 let mut delete = false;
                 let mut force = false;
-                
+
                 // Process all arguments for options
                 let mut i = 2;
                 while i < args.len() {
@@ -107,42 +117,47 @@ impl CliParser {
                     match arg.as_str() {
                         "-v" | "--verbose" => {
                             verbose = true;
-                            i += 1;
                         },
                         "-d" | "--delete" => {
                             delete = true;
-                            i += 1;
                         },
                         "-f" | "--force" => {
                             force = true;
-                            i += 1;
                         },
                         "-D" => {
                             delete = true;
                             force = true;
-                            i += 1;
                         },
-                        a if a.starts_with("-") => {
-                            return Err(Error::Generic(format!("Unknown option: {}", a)));
+                        // Check for other potential flags if needed
+                        a if a.starts_with('-') => {
+                            // Allow flags to appear anywhere relative to positional args
+                            // Just consume the flag
                         },
                         _ => {
-                            // If name is not set, this is the branch name
+                            // Treat non-flag arguments as positional: name then start_point
                             if name.is_empty() {
                                 name = arg.clone();
                             } else if start_point.is_none() {
-                                // If name is set but start_point isn't, this is the start point
                                 start_point = Some(arg.clone());
+                            } else {
+                                 // Too many positional arguments
+                                 return Err(Error::Generic(format!("Unexpected argument for branch: {}", arg)));
                             }
-                            i += 1;
                         }
                     }
+                    i += 1; // Increment index for every argument processed
                 }
-                
-                // When listing branches (no name specified), name could be empty
-                
+
+                // If name is empty, it implies listing branches (handled by BranchCommand)
+                // If delete is true, name must be provided
+                if delete && name.is_empty() {
+                     return Err(Error::Generic("Branch name required for delete operation".to_string()));
+                }
+
+
                 CliArgs {
                     command: Command::Branch {
-                        name,
+                        name, // Can be empty for listing
                         start_point,
                         verbose,
                         delete,
@@ -152,11 +167,13 @@ impl CliParser {
             },
             "checkout" => {
                 if args.len() < 3 {
-                    return Err(Error::Generic("No checkout target specified".to_string()));
+                    return Err(Error::Generic("No checkout target specified (branch, commit, or path)".to_string()));
                 }
-                
+                 // Allow multiple targets for file checkout? Git's behavior is complex here.
+                 // For now, assume one target (branch or commit).
+                 // Handle `checkout -- <paths...>` separately if needed.
                 let target = args[2].clone();
-                
+
                 CliArgs {
                     command: Command::Checkout {
                         target,
@@ -166,11 +183,11 @@ impl CliParser {
             "log" => {
                 // Parse log command options
                 let mut revisions = Vec::new();
-                let mut abbrev = false;
+                let mut abbrev = false; // Default to false like git
                 let mut format = "medium".to_string();
                 let mut patch = false;
                 let mut decorate = "auto".to_string();
-                
+
                 // Process arguments
                 let mut i = 2;
                 while i < args.len() {
@@ -178,62 +195,63 @@ impl CliParser {
                     match arg.as_str() {
                         "--abbrev-commit" => {
                             abbrev = true;
-                            i += 1;
                         },
                         "--no-abbrev-commit" => {
                             abbrev = false;
-                            i += 1;
                         },
                         "--pretty" | "--format" => {
                             if i + 1 < args.len() {
                                 format = args[i + 1].clone();
-                                i += 2;
+                                i += 1; // Increment extra for the value
                             } else {
-                                i += 1;
+                                 return Err(Error::Generic(format!("Option '{}' requires a value", arg)));
                             }
                         },
                         a if a.starts_with("--pretty=") || a.starts_with("--format=") => {
-                            let value = arg.split('=').nth(1).unwrap_or("medium");
-                            format = value.to_string();
-                            i += 1;
+                             let parts: Vec<&str> = a.splitn(2, '=').collect();
+                             if parts.len() == 2 {
+                                format = parts[1].to_string();
+                             } else {
+                                 return Err(Error::Generic(format!("Invalid format for option '{}'", arg)));
+                             }
                         },
                         "--oneline" => {
                             format = "oneline".to_string();
-                            abbrev = true;
-                            i += 1;
+                            abbrev = true; // oneline implies abbrev
                         },
                         "-p" | "-u" | "--patch" => {
                             patch = true;
-                            i += 1;
                         },
                         "-s" | "--no-patch" => {
                             patch = false;
-                            i += 1;
                         },
                         "--decorate" => {
-                            decorate = "short".to_string();
-                            i += 1;
+                            // Allow setting decorate without a value, default to short/auto later
+                             decorate = "auto".to_string();
                         },
                         a if a.starts_with("--decorate=") => {
-                            let value = arg.split('=').nth(1).unwrap_or("short");
-                            decorate = value.to_string();
-                            i += 1;
+                             let parts: Vec<&str> = a.splitn(2, '=').collect();
+                             if parts.len() == 2 {
+                                decorate = parts[1].to_string();
+                             } else {
+                                 return Err(Error::Generic(format!("Invalid format for option '{}'", arg)));
+                             }
                         },
                         "--no-decorate" => {
                             decorate = "no".to_string();
-                            i += 1;
                         },
-                        a if a.starts_with("-") => {
-                            return Err(Error::Generic(format!("Unknown option: {}", a)));
+                        a if a.starts_with('-') => {
+                            // Unknown flag
+                             return Err(Error::Generic(format!("Unknown option for log: {}", a)));
                         },
                         _ => {
                             // This is a revision specifier
                             revisions.push(arg.clone());
-                            i += 1;
                         }
                     }
+                     i += 1; // Increment for the current argument
                 }
-                
+
                 CliArgs {
                     command: Command::Log {
                         revisions,
@@ -244,12 +262,13 @@ impl CliParser {
                     },
                 }
             },
+            // --- Adaugă cazul pentru 'merge' ---
             "merge" => {
                 let mut branch = String::new();
                 let mut message = None;
                 let mut abort = false;
                 let mut continue_merge = false;
-                
+
                 let mut i = 2;
                 while i < args.len() {
                     let arg = &args[i];
@@ -257,35 +276,43 @@ impl CliParser {
                         "--message" | "-m" => {
                             if i + 1 < args.len() {
                                 message = Some(args[i + 1].clone());
-                                i += 2;
+                                i += 1; // Skip value
                             } else {
-                                i += 1;
+                                 return Err(Error::Generic(format!("Option '{}' requires a value", arg)));
                             }
                         },
                         "--abort" => {
                             abort = true;
-                            i += 1;
                         },
                         "--continue" => {
                             continue_merge = true;
-                            i += 1;
                         },
-                        _ if arg.starts_with("-") => {
-                            // Unknown option
-                            i += 1;
+                        // Allow unknown flags for now or add error handling
+                        _ if arg.starts_with('-') => {
+                             return Err(Error::Generic(format!("Unknown option for merge: {}", arg)));
                         },
-                        _ => {
-                            // Branch name
+                        // Assume the first non-flag argument is the branch name
+                        _ if branch.is_empty() => {
                             branch = arg.clone();
-                            i += 1;
+                        },
+                        // Handle unexpected additional arguments
+                        _ => {
+                             return Err(Error::Generic(format!("Unexpected argument for merge: {}", arg)));
                         }
                     }
+                     i += 1; // Increment index
                 }
-                
+
+                // Branch name is required unless --abort or --continue is specified
                 if branch.is_empty() && !abort && !continue_merge {
-                    return Err(Error::Generic("No branch specified for merge".to_string()));
+                    return Err(Error::Generic("No branch specified for merge and not using --abort or --continue".to_string()));
                 }
-                
+                // Cannot specify branch name with --abort or --continue
+                 if !branch.is_empty() && (abort || continue_merge) {
+                     return Err(Error::Generic("Cannot specify branch name with --abort or --continue".to_string()));
+                 }
+
+
                 CliArgs {
                     command: Command::Merge {
                         branch,
@@ -295,31 +322,34 @@ impl CliParser {
                     },
                 }
             },
-                _ => CliArgs {
-                    command: Command::Unknown { name: command },
-                },
-            };
+            // --- Sfârșit caz 'merge' ---
+            _ => CliArgs {
+                command: Command::Unknown { name: command },
+            },
+        };
 
         Ok(cli_args)
     }
 
-    pub fn format_help() -> String {
-        format!(
-            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
-            "Usage: ash <command> [options]",
-            "Commands:",
-            "  init [path]                      Initialize a new repository",
-            "  commit <message>                 Commit changes to the repository",
-            "  add <paths...>                   Add file contents to the index",
-            "  status [--porcelain] [--color=<when>]   Show the working tree status",
-            "         --porcelain               Machine-readable output",
-            "         --color=<when>            Colorize output (always|auto|never)",
-            "  diff [--cached] [paths...]      Show changes between commits, commit and working tree, etc",
-            "  branch <n> [start-point]        Create a new branch",
-            "         <n>                       Name of the branch to create",
-            "         [start-point]             Revision to start the branch at (defaults to HEAD)",
-            "  checkout <target>                Switch branches or restore working tree files"
-        )
-    }
+    // Updated format_help to include merge
+     pub fn format_help() -> String {
+         format!(
+             "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}", // Added one {}
+             "Usage: ash <command> [options]",
+             "Commands:",
+             "  init [path]                       Initialize a new repository",
+             "  add <paths...>                    Add file contents to the index",
+             "  commit -m <message>               Commit changes to the repository",
+             "  status [--porcelain] [--color=...] Show the working tree status",
+             "  diff [--cached] [paths...]        Show changes (HEAD vs index or index vs workspace)",
+             "  branch [-v] [-d|-D] [<n> [<sp>]]  Manage branches (list, create, delete)",
+             "  checkout <target>                 Switch branches or restore working tree files",
+             "  log [--oneline] [--decorate=...]  Show commit logs",
+             "  merge <branch> [-m <msg>]         Merge the specified branch into the current branch", // Added merge
+             "        --abort                     Abort the current merge resolution process",
+             "        --continue                  Continue the merge after resolving conflicts (not implemented)",
+             "Common Options:",
+             "  (Options specific to commands listed above)"
+         )
+     }
 }
-

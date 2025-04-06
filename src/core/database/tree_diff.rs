@@ -1,8 +1,8 @@
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use crate::core::file_mode::FileMode;
 use crate::errors::error::Error;
-use crate::core::database::database::{Database, GitObject};
+use crate::core::database::database::Database;
 use crate::core::database::tree::{Tree, TreeEntry};
 use crate::core::database::commit::Commit;
 use crate::core::database::entry::DatabaseEntry;

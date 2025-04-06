@@ -2,7 +2,7 @@
 use crate::core::repository::repository::Repository;
 use crate::errors::error::Error;
 use crate::validators::path_validator::PathValidator;
-use crate::core::refs::{Refs, HEAD};
+use crate::core::refs::Refs;
 use std::fs;
 use std::path::Path;
 

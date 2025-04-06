@@ -5,7 +5,6 @@ use crate::core::revision::Revision;
 use crate::core::repository::repository::Repository;
 use crate::core::color::Color;
 use crate::core::refs::Reference;
-use crate::core::database::database::GitObject;
 use crate::core::database::commit::Commit;
 
 pub struct CheckoutCommand;

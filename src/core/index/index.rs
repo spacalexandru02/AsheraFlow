@@ -72,7 +72,7 @@ impl Index {
         }
     }
     
-    fn clear(&mut self) {
+    pub fn clear(&mut self) {
         self.entries.clear();
         self.keys.clear();
         self.changed = false;

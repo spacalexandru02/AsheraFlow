@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use regex::Regex;
 use crate::errors::error::Error;
 use crate::core::repository::repository::Repository;
-use crate::core::database::database::Database;
 use crate::core::database::commit::Commit;
 
 // Constants for revision types

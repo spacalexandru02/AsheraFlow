@@ -6,7 +6,6 @@ use crate::core::database::blob::Blob;
 use crate::core::database::database::Database;
 use crate::core::database::tree::{Tree, TreeEntry, TREE_MODE};
 use crate::core::database::commit::Commit;
-use crate::core::file_mode::FileMode;
 use crate::core::index::index::Index;
 use crate::core::workspace::Workspace;
 use crate::core::refs::Refs;

@@ -1,18 +1,22 @@
 // src/commands/merge.rs
 use std::time::Instant;
 use std::env;
-use std::path::Path;
+use std::path::{Path, PathBuf}; // Ensure PathBuf is imported
+use std::collections::HashMap; // Ensure HashMap is imported
 use crate::errors::error::Error;
 use crate::core::merge::inputs::Inputs;
 use crate::core::merge::resolve::Resolve;
 use crate::core::refs::Refs;
-use crate::core::database::database::Database;
+use crate::core::database::database::Database; // Import Database
+use crate::core::database::database::GitObject; // Import GitObject Trait
 use crate::core::database::commit::Commit;
 use crate::core::database::author::Author;
 use crate::core::path_filter::PathFilter;
 use crate::core::workspace::Workspace;
-use crate::core::database::tree::Tree;
+use crate::core::database::tree::{Tree, TreeEntry}; // Import TreeEntry
 use crate::core::file_mode::FileMode;
+use crate::core::database::entry::DatabaseEntry; // Import DatabaseEntry
+
 
 const MERGE_MSG: &str = "\
 Merge branch '%s'
@@ -72,50 +76,55 @@ impl MergeCommand {
         // Check for already merged or fast-forward cases
         if inputs.already_merged() {
             println!("Already up to date.");
-            index.rollback()?;
+            index.rollback()?; // Release lock
             return Ok(());
         }
 
         if inputs.is_fast_forward() {
             // Handle fast-forward merge
+            println!("Fast-forward possible.");
             let result = Self::handle_fast_forward(
                 &mut database,
                 &workspace,
-                &mut index,
+                &mut index, // Pass mutable index
                 &refs,
-                &inputs.left_oid,
-                &inputs.right_oid
+                &inputs.left_oid, // Current HEAD OID
+                &inputs.right_oid // Target commit OID
             );
-            // handle_fast_forward should manage its own lock release/commit now
+            // handle_fast_forward manages its own lock release/commit
             return result;
         }
 
         // Perform a real merge
+         println!("Performing recursive merge.");
         let mut merge = Resolve::new(&mut database, &workspace, &mut index, &inputs);
         merge.on_progress = |info| println!("{}", info);
 
-        // Execute the merge
+        // Execute the merge (applies clean changes to workspace and index)
         if let Err(e) = merge.execute() {
-             index.rollback()?;
+             index.rollback()?; // Release lock on error
              return Err(e);
         }
 
         // Write the index updates (after clean changes are applied by Resolve)
-        if let Err(e) = index.write_updates() {
-            // Assuming write_updates handles its lock state on error
-            return Err(e);
+        // Resolve should have set index.changed = true if there were changes
+        if !index.write_updates()? {
+             // If write_updates returned false, it means no changes were detected
+             // by the Resolve step, which might indicate an issue, but we proceed.
+             println!("Warning: Index was not written as no changes were detected by Resolve.");
         }
+
 
         // Check for conflicts AFTER applying clean changes and writing index
         if index.has_conflict() {
             println!("\nAutomatic merge failed; fix conflicts and then commit the result.");
-            // Keep index locked with conflicts
+            // Keep index locked with conflicts - Don't rollback here
             return Err(Error::Generic("Automatic merge failed; fix conflicts and then commit the result.".into()));
         }
 
         // Commit the successful merge
         let commit_message = message.map(|s| s.to_string()).unwrap_or_else(|| {
-            format!("Merge branch '{}'", revision)
+            format!("Merge branch '{}' into {}", revision, inputs.left_name) // Make message clearer
         });
 
         // Create author
@@ -124,33 +133,39 @@ impl MergeCommand {
             env::var("GIT_AUTHOR_EMAIL").unwrap_or_else(|_| "author@example.com".to_string()),
         );
 
-        // Get tree from index (Index should be up-to-date now)
+        // Get tree from the updated index
         let tree_oid = match Self::write_tree_from_index(&mut database, &mut index) {
             Ok(oid) => oid,
             Err(e) => {
+                // Index lock state managed by write_tree_from_index or its callees on error
                 return Err(e);
             }
         };
 
         // Create commit with two parents
-        let mut commit = Commit::new(
-            Some(head_oid.clone()),
-            tree_oid.clone(),
-            author.clone(),
-            commit_message,
-        );
+        let parent1 = head_oid.clone(); // The current branch HEAD
+        let parent2 = inputs.right_oid.clone(); // The commit being merged
 
-        // Add the second parent marker
-        let special_message = format!("{}\n__PARENT2__:{}", commit.get_message(), inputs.right_oid);
-        commit = Commit::new(
-            Some(head_oid.clone()),
+        let mut commit = Commit::new(
+            Some(parent1), // First parent is HEAD
             tree_oid.clone(),
             author.clone(),
-            special_message
+            commit_message, // Initial message
         );
+        // Add second parent information. We'll store this directly in the commit message for simplicity,
+        // though git uses separate 'parent' lines in the commit object raw data.
+        let final_message = format!("{}\n\nParent: {}", commit.get_message(), parent2);
+         commit = Commit::new( // Recreate commit with final message and parent info
+             commit.get_parent().cloned(), // Keep first parent
+             tree_oid.clone(),
+             author.clone(),
+             final_message, // Use the message including the second parent info
+         );
+
 
         // Store the commit
         if let Err(e) = database.store(&mut commit) {
+             // Lock state? Assume store doesn't affect index lock
              return Err(e);
         }
 
@@ -158,105 +173,76 @@ impl MergeCommand {
         let commit_oid = match commit.get_oid() {
             Some(oid) => oid.clone(),
              None => {
+                 // Lock state? Assume commit_oid error doesn't affect index lock
                  return Err(Error::Generic("Commit OID not set after storage".into()));
              }
         };
 
         if let Err(e) = refs.update_head(&commit_oid) {
+            // Lock state? Assume update_head doesn't affect index lock
             return Err(e);
         }
 
-        // Lock was likely committed by write_updates or should be released if error occurred before that.
+        // Index lock was committed by write_updates earlier.
         let elapsed = start_time.elapsed();
         println!("Merge completed in {:.2}s", elapsed.as_secs_f32());
 
         Ok(())
     }
 
-    // Handle fast-forward merge
+    // --- Updated handle_fast_forward ---
     fn handle_fast_forward(
         database: &mut Database,
         workspace: &Workspace,
         index: &mut crate::core::index::index::Index, // Needs to be mutable
         refs: &Refs,
-        current_oid: &str,
+        _current_oid: &str, // Renamed to avoid confusion, not directly used for diff *target*
         target_oid: &str,
     ) -> Result<(), Error> {
-        let a = &current_oid[0..std::cmp::min(8, current_oid.len())];
+        let a = &_current_oid[0..std::cmp::min(8, _current_oid.len())];
         let b = &target_oid[0..std::cmp::min(8, target_oid.len())];
 
         println!("Updating {}..{}", a, b);
         println!("Fast-forward");
 
-        let path_filter = PathFilter::new();
-        println!("Calculating tree diff between {} and {}", current_oid, target_oid);
-        let tree_diff = database.tree_diff(Some(current_oid), Some(target_oid), &path_filter)?;
-        println!("Tree diff calculated, {} entries found", tree_diff.len());
-
-        for (path, (old_entry, new_entry)) in &tree_diff {
-            println!("Processing diff entry: {}", path.display());
-            if let Some(entry) = new_entry {
-                println!("  -> New/Modified entry found: OID={}, Mode={}", entry.get_oid(), entry.get_mode());
-                let mode = FileMode::parse(entry.get_mode());
-
-                // Create parent directories first
-                if let Some(parent) = path.parent() {
-                    if !parent.as_os_str().is_empty() {
-                        workspace.make_directory(parent)?; // Use ? directly
-                        println!("  -> Ensured parent directory exists: {}", parent.display());
-                    }
-                }
-
-                if mode.is_directory() {
-                    println!("  -> Entry is a directory. Creating directory: {}", path.display());
-                    workspace.make_directory(path)?; // Use ? directly
-                    println!("  -> Successfully created directory: {}", path.display());
-                } else {
-                    println!("  -> Entry is a file. Attempting to write file: {}", path.display());
-                    let blob_obj = database.load(&entry.get_oid())?;
-                    let content = blob_obj.to_bytes();
-                    println!("  -> Blob loaded, size: {} bytes", content.len());
-
-                    workspace.write_file(path, &content)?; // Use ? directly
-                    println!("  -> Successfully wrote file to workspace: {}", path.display());
-
-                    if let Ok(stat) = workspace.stat_file(path) {
-                        index.add(path, &entry.get_oid(), &stat)?; // Use ? directly
-                        println!("  -> Successfully updated index for: {}", path.display());
-                    } else {
-                        println!("  -> Warning: Could not stat file {} after writing.", path.display());
-                         // Consider if this should be an error: return Err(...)
-                    }
-                }
-            } else if let Some(entry) = old_entry {
-                println!("  -> Deleting entry: {}", path.display());
-                let old_mode = FileMode::parse(entry.get_mode());
-                if old_mode.is_directory() {
-                    println!("  -> Removing directory: {}", path.display());
-                    workspace.force_remove_directory(path)?; // Use ? directly
-                    println!("  -> Successfully removed directory: {}", path.display());
-                } else {
-                    println!("  -> Removing file: {}", path.display());
-                    workspace.remove_file(path)?; // Use ? directly
-                    println!("  -> Successfully removed file: {}", path.display());
-                }
-
-                let path_str = path.to_string_lossy().to_string();
-                println!("  -> Removing '{}' from index...", path_str);
-                index.remove(&path_str)?; // Use ? directly
-                println!("  -> Removed '{}' from index", path_str);
-            } else {
-                println!("  -> Skipping entry (no new_entry and no old_entry): {}", path.display());
+        // Load the target commit to get its tree
+        let target_commit_obj = database.load(target_oid)?;
+        let target_commit = match target_commit_obj.as_any().downcast_ref::<Commit>() {
+            Some(c) => c,
+            None => {
+                index.rollback()?; // Release lock on error
+                return Err(Error::Generic(format!("Target OID {} is not a commit", target_oid)));
             }
-        } // End of loop
+        };
+        let target_tree_oid = target_commit.get_tree();
+        println!("Target tree OID: {}", target_tree_oid);
+
+        // Clear the current index completely
+        index.clear(); // Use the internal clear method
+        println!("Cleared existing index entries.");
+
+        // Recursively read the target tree and update workspace and index
+        match Self::read_tree_recursive(database, workspace, index, target_tree_oid, &PathBuf::new()) {
+            Ok(_) => println!("Successfully updated workspace and index from target tree."),
+            Err(e) => {
+                index.rollback()?; // Release lock on error
+                return Err(e);
+            }
+        }
 
         println!("Attempting to write index updates...");
-        match index.write_updates() {
-            Ok(updated) => println!("Index write_updates returned: {}", updated),
+        match index.write_updates() { // write_updates handles the changed flag internally
+            Ok(updated) => {
+                if updated {
+                    println!("Index successfully written.");
+                } else {
+                    // This case should ideally not happen if read_tree_recursive added entries
+                    println!("Warning: Index write reported no changes, but expected updates.");
+                }
+            },
             Err(e) => {
                 println!("ERROR writing index updates: {}", e);
-                // If write_updates fails, the lock should ideally be released by it or rollback
-                index.rollback()?; // Explicit rollback just in case
+                // write_updates should manage its lock state on error (rollback)
                 return Err(e);
             }
         }
@@ -266,9 +252,7 @@ impl MergeCommand {
             Ok(_) => println!("Successfully updated HEAD"),
             Err(e) => {
                 println!("ERROR updating HEAD: {}", e);
-                // The index is already written, HEAD update failed. This leaves the repo
-                // in a slightly inconsistent state (index matches target, HEAD doesn't).
-                // Report the error. A more robust solution might try to revert index.
+                // The index is already written, HEAD update failed.
                 return Err(e);
             }
         }
@@ -277,18 +261,86 @@ impl MergeCommand {
         Ok(())
     }
 
+    // --- New Recursive Helper for handle_fast_forward ---
+    fn read_tree_recursive(
+        database: &mut Database,
+        workspace: &Workspace,
+        index: &mut crate::core::index::index::Index,
+        tree_oid: &str,
+        prefix: &PathBuf,
+    ) -> Result<(), Error> {
+        let tree_obj = database.load(tree_oid)?;
+        let tree = match tree_obj.as_any().downcast_ref::<Tree>() {
+            Some(t) => t,
+            None => return Err(Error::Generic(format!("Object {} is not a tree", tree_oid))),
+        };
+
+        println!("Processing tree {} at path '{}'", tree_oid, prefix.display());
+
+        for (name, entry) in tree.get_entries() {
+            let path = prefix.join(name);
+            let path_str = path.to_string_lossy();
+            println!("  Processing entry: {}", path_str);
+
+            match entry {
+                TreeEntry::Blob(oid, mode) => {
+                    println!("    -> Blob: OID={}, Mode={}", oid, mode);
+                    // Ensure parent directory exists
+                    if let Some(parent) = path.parent() {
+                        if !parent.as_os_str().is_empty() {
+                           workspace.make_directory(parent)?;
+                        }
+                    }
+                    // Read blob content
+                    let blob_obj = database.load(oid)?;
+                    let content = blob_obj.to_bytes();
+                    // Write file to workspace
+                    workspace.write_file(&path, &content)?;
+                    // Get stats and add to index
+                    let stat = workspace.stat_file(&path)?;
+                    index.add(&path, oid, &stat)?;
+                    println!("    -> Updated workspace and index for file: {}", path_str);
+                },
+                TreeEntry::Tree(subtree) => {
+                    if let Some(subtree_oid) = subtree.get_oid() {
+                         println!("    -> Subtree: OID={}", subtree_oid);
+                         // Ensure directory exists in workspace
+                         workspace.make_directory(&path)?;
+                         // Recursively process the subtree
+                         Self::read_tree_recursive(database, workspace, index, subtree_oid, &path)?;
+                    } else {
+                         println!("    -> Warning: Subtree entry '{}' has no OID", path_str);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
 
     fn write_tree_from_index(database: &mut Database, index: &mut crate::core::index::index::Index) -> Result<String, Error> {
         let database_entries: Vec<_> = index.each_entry()
-            .filter(|entry| entry.stage == 0)
+            .filter(|entry| entry.stage == 0) // Only include stage 0 entries
             .map(|index_entry| {
-                crate::core::database::entry::DatabaseEntry::new(
+                DatabaseEntry::new(
                     index_entry.get_path().to_string(),
                     index_entry.get_oid().to_string(),
                     &index_entry.mode_octal()
                 )
             })
             .collect();
+
+         if database_entries.is_empty() {
+              // Handle the case of an empty index after resolving conflicts,
+              // perhaps by returning the OID of an empty tree.
+              // For now, let's return an error or a predefined empty tree OID.
+              // Creating and storing an empty tree:
+              let mut empty_tree = Tree::new();
+              database.store(&mut empty_tree)?;
+              return empty_tree.get_oid().cloned().ok_or_else(|| Error::Generic("Failed to get OID for empty tree".into()));
+              // return Err(Error::Generic("Index is empty after merge, cannot write tree.".into()));
+         }
+
 
         let mut root = crate::core::database::tree::Tree::build(database_entries.iter())?;
         root.traverse(|tree| database.store(tree).map(|_| ()))?;

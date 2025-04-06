@@ -6,11 +6,11 @@ use std::path::PathBuf;
 use crate::errors::error::Error;
 use crate::core::color::Color;
 use crate::core::pager::Pager;
-use crate::core::database::database::{Database, GitObject};
+use crate::core::database::database::Database;
 use crate::core::database::commit::Commit;
 use crate::core::path_filter::PathFilter;
 use crate::core::refs::{Refs, Reference};
-use crate::core::revision::{Revision, HEAD};
+use crate::core::revision::Revision;
 
 pub struct LogCommand;
 

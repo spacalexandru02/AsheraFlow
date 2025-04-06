@@ -2,7 +2,6 @@
 use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::collections::{HashMap, HashSet};
 use regex::Regex;
 use crate::errors::error::Error;
 use crate::core::lockfile::Lockfile;

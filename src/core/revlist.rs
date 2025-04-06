@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use crate::core::database::database::{Database, GitObject};
 use crate::core::database::commit::Commit;
-use crate::core::revision::{Revision, HEAD, COMMIT};
+use crate::core::revision::{HEAD, COMMIT};
 use crate::core::path_filter::PathFilter;
 use crate::errors::error::Error;
 

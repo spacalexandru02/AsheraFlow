@@ -1,7 +1,7 @@
 // Place this in an appropriate file (e.g., src/core/metadata.rs or inline where needed)
 
 use std::fs::Metadata;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
 
 // Extension trait to add default() to Metadata
 pub trait MetadataExt {
