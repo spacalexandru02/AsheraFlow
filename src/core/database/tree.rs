@@ -1,5 +1,3 @@
-// src/core/database/tree.rs with FileMode struct
-use crate::core::database::database::Database;
 use crate::core::database::entry::DatabaseEntry;
 use crate::core::file_mode::FileMode;
 use super::database::GitObject;
@@ -23,10 +21,7 @@ pub enum TreeEntry {
     Tree(Box<Tree>),
 }
 
-// Constants for mode
 pub const TREE_MODE: FileMode = FileMode::DIRECTORY;
-pub const REGULAR_MODE: FileMode = FileMode::REGULAR;
-pub const EXECUTABLE_MODE: FileMode = FileMode::EXECUTABLE;
 
 impl GitObject for Tree {
     fn get_type(&self) -> &str {
@@ -221,62 +216,6 @@ impl Tree {
         
         Ok(root)
     }
-
-    pub fn add_entry(&mut self, entry: &DatabaseEntry) -> Result<(), Error> {
-        let parent_dirs = entry.parent_directories();
-        let basename = entry.basename();
-        
-        // Ensure all parent directories exist
-        let mut current = self;
-        
-        for dir in parent_dirs {
-            let dir_name = dir.file_name()
-                .map(|name| name.to_string_lossy().to_string())
-                .unwrap_or_default();
-            
-            if dir_name.is_empty() {
-                continue;
-            }
-            
-            // Verificăm dacă avem nevoie să adăugăm un nou subdirector sau să folosim unul existent
-            let entry_type = {
-                if let Some(entry) = current.entries.get(&dir_name) {
-                    match entry {
-                        TreeEntry::Tree(_) => None, // E deja un arbore, e ok
-                        _ => return Err(Error::Generic(format!(
-                            "Entry '{}' conflicts with existing blob entry",
-                            dir_name
-                        ))),
-                    }
-                } else {
-                    // Trebuie să adăugăm un nou subdirector
-                    Some(TreeEntry::Tree(Box::new(Tree::new())))
-                }
-            };
-            
-            // Adăugăm subdirectorul dacă e necesar
-            if let Some(tree_entry) = entry_type {
-                current.entries.insert(dir_name.clone(), tree_entry);
-            }
-            
-            // Obținem o referință la subdirector
-            if let Some(TreeEntry::Tree(tree)) = current.entries.get_mut(&dir_name) {
-                current = tree;
-            } else {
-                unreachable!("Subdirectory should exist at this point");
-            }
-        }
-        
-        // Add the file entry to the current tree
-        let mode = FileMode::parse(entry.get_mode());
-        current.entries.insert(
-            basename,
-            TreeEntry::Blob(entry.get_oid().to_string(), mode)
-        );
-        
-        Ok(())
-    }
-    
     // În tree.rs:
     pub fn traverse<F>(&mut self, mut func: F) -> Result<(), Error>
     where
@@ -427,20 +366,6 @@ impl Tree {
         Ok(tree)
     }
      
-    pub fn insert_entry(&mut self, name: String, entry: TreeEntry) {
-        self.entries.insert(name, entry);
-    }
-    
-    // Dacă e nevoie și de o metodă pentru a obține o intrare după nume
-    pub fn get_entry(&self, name: &str) -> Option<&TreeEntry> {
-        self.entries.get(name)
-    }
-    
-    // Dacă e nevoie și de acces mutabil la o intrare
-    pub fn get_entry_mut(&mut self, name: &str) -> Option<&mut TreeEntry> {
-        self.entries.get_mut(name)
-    }
-    
     pub fn dump_structure(&self, prefix: &str) {
         println!("{}Tree Structure:", prefix);
         self.dump_entries(prefix, "");
@@ -470,91 +395,4 @@ impl Tree {
             }
         }
     }
-    
-    pub fn inspect_tree_structure(database: &mut Database, tree_oid: &str, depth: usize) -> Result<(), Error> {
-        let indent = "  ".repeat(depth);
-        println!("{}Inspecting tree: {}", indent, tree_oid);
-        
-        // Load the object
-        let obj = database.load(tree_oid)?;
-        println!("{}Object type: {}", indent, obj.get_type());
-        
-        // If it's a tree, process it directly
-        if let Some(tree) = obj.as_any().downcast_ref::<Tree>() {
-            println!("{}Tree has {} entries:", indent, tree.get_entries().len());
-            
-            for (name, entry) in tree.get_entries() {
-                match entry {
-                    TreeEntry::Blob(blob_oid, mode) => {
-                        if mode.is_directory() {
-                            println!("{}+ {} (directory stored as blob) -> {}", 
-                                    indent, name, blob_oid);
-                            // Recursively inspect this directory
-                            Self::inspect_tree_structure(database, blob_oid, depth + 1)?;
-                        } else {
-                            println!("{}+ {} (file, mode {}) -> {}", 
-                                    indent, name, mode, blob_oid);
-                        }
-                    },
-                    TreeEntry::Tree(subtree) => {
-                        if let Some(subtree_oid) = subtree.get_oid() {
-                            println!("{}+ {} (directory) -> {}", indent, name, subtree_oid);
-                            // Recursively inspect this directory
-                            Self::inspect_tree_structure(database, subtree_oid, depth + 1)?;
-                        } else {
-                            println!("{}+ {} (directory without OID)", indent, name);
-                        }
-                    }
-                }
-            }
-            
-            return Ok(());
-        }
-        
-        // If it's a blob, try to parse it as a tree
-        if obj.get_type() == "blob" {
-            println!("{}Blob, attempting to parse as tree...", indent);
-            
-            let blob_data = obj.to_bytes();
-            match Tree::parse(&blob_data) {
-                Ok(tree) => {
-                    println!("{}Successfully parsed as tree with {} entries:", 
-                            indent, tree.get_entries().len());
-                    
-                    for (name, entry) in tree.get_entries() {
-                        match entry {
-                            TreeEntry::Blob(blob_oid, mode) => {
-                                if mode.is_directory() {
-                                    println!("{}+ {} (directory stored as blob) -> {}", 
-                                            indent, name, blob_oid);
-                                    // Recursively inspect this directory
-                                    Self::inspect_tree_structure(database, blob_oid, depth + 1)?;
-                                } else {
-                                    println!("{}+ {} (file, mode {}) -> {}", 
-                                            indent, name, mode, blob_oid);
-                                }
-                            },
-                            TreeEntry::Tree(subtree) => {
-                                if let Some(subtree_oid) = subtree.get_oid() {
-                                    println!("{}+ {} (directory) -> {}", indent, name, subtree_oid);
-                                    // Recursively inspect this directory
-                                    Self::inspect_tree_structure(database, subtree_oid, depth + 1)?;
-                                } else {
-                                    println!("{}+ {} (directory without OID)", indent, name);
-                                }
-                            }
-                        }
-                    }
-                },
-                Err(e) => {
-                    println!("{}Failed to parse as tree: {}", indent, e);
-                }
-            }
-            
-            return Ok(());
-        }
-        
-        println!("{}Neither a tree nor a parseable blob", indent);
-        Ok(())
     }
-}

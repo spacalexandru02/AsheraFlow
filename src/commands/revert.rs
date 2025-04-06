@@ -1,20 +1,14 @@
 // src/commands/revert.rs
 // Implementation of the revert command that undoes the changes introduced by a commit
 use std::time::Instant;
-use std::path::PathBuf;
-use std::collections::HashMap;
 use std::fs;
-use std::io::{self, Write};
-
 use crate::errors::error::Error;
 use crate::core::repository::repository::Repository;
 use crate::core::revision::Revision;
 use crate::core::database::commit::Commit;
-use crate::core::database::database::GitObject;
 use crate::core::database::author::Author;
 use crate::core::merge::inputs::Inputs;
 use crate::core::merge::resolve::Resolve;
-use crate::core::color::Color;
 use crate::core::refs::ORIG_HEAD;
 
 pub struct RevertCommand;

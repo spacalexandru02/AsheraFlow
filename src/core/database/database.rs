@@ -76,12 +76,6 @@ impl Database {
         Ok(result)
     }
 
-    /// Metodă privată de clonare a unui obiect - implementare de bază
-    fn clone_object(&self, obj: &Box<dyn GitObject>) -> Box<dyn GitObject> {
-        // Use the new clone_box method instead of manual cloning
-        obj.clone_box()
-    }
-
     /// Stochează un obiect git în baza de date
     pub fn store(&mut self, object: &mut impl GitObject) -> Result<String, Error> {
         println!("Storing object of type: {}", object.get_type());
@@ -315,15 +309,6 @@ impl Database {
         }
         
         Ok(matches)
-    }
-    
-    /// Get a short representation of an object ID
-    pub fn short_oid(&self, oid: &str) -> String {
-        if oid.len() <= 7 {
-            oid.to_string()
-        } else {
-            oid[0..7].to_string()
-        }
     }
 
     pub fn tree_diff(&mut self, a: Option<&str>, b: Option<&str>, filter: &PathFilter) -> Result<HashMap<PathBuf, (Option<DatabaseEntry>, Option<DatabaseEntry>)>, Error> {

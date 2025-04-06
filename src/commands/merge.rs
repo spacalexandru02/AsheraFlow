@@ -8,7 +8,6 @@ use crate::core::merge::inputs::Inputs;
 use crate::core::merge::resolve::Resolve;
 use crate::core::refs::Refs;
 use crate::core::database::database::Database;
-use crate::core::database::database::GitObject;
 use crate::core::database::commit::Commit;
 use crate::core::database::author::Author;
 use crate::core::path_filter::PathFilter;
@@ -23,18 +22,6 @@ use crate::core::repository::repository::Repository; // Importat pentru a avea a
 use crate::core::repository::inspector::{Inspector, ChangeType};
 
 use log::{debug, info, warn, error};
-use log;
-
-
-const MERGE_MSG: &str = "\
-Merge branch '%s'
-
-# Please enter a commit message to explain why this merge is necessary,
-# especially if it merges an updated upstream into a topic branch.
-#
-# Lines starting with '#' will be ignored, and an empty message aborts
-# the commit.
-";
 
 pub struct MergeCommand;
 
@@ -57,7 +44,7 @@ impl MergeCommand {
         let workspace = &repo.workspace;
         let refs = &repo.refs;
         let mut database = &mut repo.database; // Acum mutabil
-        let mut index = &mut repo.index;     // Acum mutabil
+        let index = &mut repo.index;
 
         // --- Lock index EARLY ---
         if !index.load_for_update()? {
@@ -175,7 +162,6 @@ impl MergeCommand {
             info!("Merge commit tree OID: {}", tree_oid);
 
             let parent1 = head_oid.clone();
-            let parent2 = target_oid.clone();
 
              let mut commit = Commit::new( Some(parent1), tree_oid.clone(), author.clone(), commit_message );
 

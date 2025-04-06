@@ -9,7 +9,6 @@ use crate::core::lockfile::Lockfile;
 // Constants
 pub const ORIG_HEAD: &str = "ORIG_HEAD";
 pub const HEAD: &str = "HEAD";
-const DEFAULT_BRANCH: &str = "master";
 const SYMREF_PREFIX: &str = "ref: ";
 lazy_static::lazy_static! {
     static ref SYMREF_REGEX: Regex = Regex::new(r"^ref: (.+)$").unwrap();
@@ -20,13 +19,6 @@ lazy_static::lazy_static! {
 pub enum Reference {
     Direct(String),       // Direct reference to an OID
     Symbolic(String),     // Symbolic reference to another ref
-}
-
-// Custom errors
-#[derive(Debug)]
-pub enum RefError {
-    InvalidBranch(String),
-    LockFailed(String),
 }
 
 pub struct Refs {

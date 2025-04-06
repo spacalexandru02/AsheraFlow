@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::{env, path::Path, time::Instant};
 use std::collections::{HashMap, HashSet};
 use crate::core::database::tree::{TreeEntry, TREE_MODE};
-use crate::{core::{database::{author::Author, commit::Commit, database::{Database, GitObject}, entry::DatabaseEntry, tree::Tree}, index::index::Index, refs::Refs}, errors::error::Error};
+use crate::{core::{database::{author::Author, commit::Commit, database::Database, entry::DatabaseEntry, tree::Tree}, index::index::Index, refs::Refs}, errors::error::Error};
 
 // Adaugă use pentru logging
 use log::{debug, info, warn, error};
