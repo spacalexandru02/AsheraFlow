@@ -375,12 +375,6 @@ impl CliParser {
                     i += 1;
                 }
 
-                // If no revision was provided, default to "HEAD" conceptually
-                // (The ResetCommand implementation might handle empty revision as HEAD)
-                // if revision.is_empty() && paths.is_empty() {
-                //     revision = "HEAD".to_string(); // Or let the command handle empty string
-                // }
-
                  // Validation: Cannot have multiple modes
                  let mode_count = [soft, mixed, hard].iter().filter(|&&x| x).count();
                  if mode_count > 1 {
@@ -398,6 +392,115 @@ impl CliParser {
                     },
                 }
             },
+            "revert" => {
+                let mut commit = String::new();
+                let mut continue_revert = false;
+                let mut abort = false;
+
+                let mut i = 2;
+                while i < args.len() {
+                    let arg = &args[i];
+                    match arg.as_str() {
+                        "--continue" => {
+                            continue_revert = true;
+                        },
+                        "--abort" => {
+                            abort = true;
+                        },
+                        a if a.starts_with('-') => {
+                            // Unknown flag
+                            return Err(Error::Generic(format!("Unknown option for revert: {}", a)));
+                        },
+                        _ => {
+                            // This is the commit to revert
+                            if commit.is_empty() {
+                                commit = arg.clone();
+                            } else {
+                                return Err(Error::Generic(format!("Unexpected argument for revert: {}", arg)));
+                            }
+                        }
+                    }
+                    i += 1;
+                }
+
+                // Validate arguments
+                if continue_revert && abort {
+                    return Err(Error::Generic("Cannot use --continue and --abort together".to_string()));
+                }
+
+                // commit is required unless using --continue or --abort
+                if commit.is_empty() && !continue_revert && !abort {
+                    return Err(Error::Generic("Commit argument is required for revert".to_string()));
+                }
+
+                // Cannot specify commit with --continue or --abort
+                if !commit.is_empty() && (continue_revert || abort) {
+                    return Err(Error::Generic("Cannot specify commit with --continue or --abort".to_string()));
+                }
+
+                CliArgs {
+                    command: Command::Revert {
+                        commit,
+                        continue_revert,
+                        abort,
+                    },
+                }
+            },
+            "rm" => {
+                // Parse rm command options
+                let mut paths = Vec::new();
+                let mut cached = false;
+                let mut force = false;
+                let mut recursive = false;
+                
+                // Process arguments
+                let mut i = 2;
+                while i < args.len() {
+                    let arg = &args[i];
+                    match arg.as_str() {
+                        "--cached" => {
+                            cached = true;
+                        },
+                        "-f" | "--force" => {
+                            force = true;
+                        },
+                        "-r" | "-R" | "--recursive" => {
+                            recursive = true;
+                        },
+                        "--" => {
+                            // Everything after -- is a path
+                            i += 1;
+                            while i < args.len() {
+                                paths.push(args[i].clone());
+                                i += 1;
+                            }
+                            break;
+                        },
+                        _ if arg.starts_with('-') => {
+                            // Unknown flag
+                            return Err(Error::Generic(format!("Unknown option for rm: {}", arg)));
+                        },
+                        _ => {
+                            // This is a path
+                            paths.push(arg.clone());
+                        }
+                    }
+                    i += 1;
+                }
+                
+                if paths.is_empty() {
+                    return Err(Error::Generic("No paths specified for removal".to_string()));
+                }
+                
+                CliArgs {
+                    command: Command::Rm {
+                        paths,
+                        cached,
+                        force,
+                        recursive,
+                    },
+                }
+            },
             _ => CliArgs {
                 command: Command::Unknown { name: command },
             },
@@ -407,9 +510,10 @@ impl CliParser {
     }
 
     // Updated format_help to include merge
+    // Updated format_help to include revert
     pub fn format_help() -> String {
         format!(
-            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}", // Added {} for reset
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
             "Usage: ash <command> [options]",
             "Commands:",
             "  init [path]                       Initialize a new repository",
@@ -423,7 +527,11 @@ impl CliParser {
             "  merge <branch> [-m <msg>]         Merge the specified branch into the current branch",
             "        --abort                     Abort the current merge resolution process",
             "        --continue                  Continue the merge after resolving conflicts (not implemented)",
-            "  reset [--soft|--mixed|--hard] [<rev>] [--] [<paths>...] Reset current HEAD to the specified state", // Added reset
+            "  reset [--soft|--mixed|--hard] [<rev>] [--] [<paths>...] Reset current HEAD to the specified state",
+            "  revert <commit>                   Revert the changes introduced by a commit",
+            "        --continue                  Continue the revert operation after resolving conflicts",
+            "        --abort                     Abort the revert operation and return to pre-revert state",
+            "  rm [-f] [--cached] [-r] <paths>... Remove files from the working tree and from the index", 
             "Common Options:",
             "  (Options specific to commands listed above)"
         )

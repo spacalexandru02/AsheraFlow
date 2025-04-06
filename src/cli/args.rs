@@ -33,6 +33,17 @@ pub enum Command {
         mixed: bool,
         hard: bool,
     },
+    Revert {
+        commit: String,
+        continue_revert: bool,
+        abort: bool,
+    },
+    Rm {
+        paths: Vec<String>,
+        cached: bool,
+        force: bool,
+        recursive: bool,
+    },
     Unknown { name: String },
 }
 

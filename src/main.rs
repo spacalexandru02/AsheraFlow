@@ -12,15 +12,14 @@ use commands::init::InitCommand;
 use commands::add::AddCommand;
 use commands::log::LogCommand;
 use commands::reset::ResetCommand;
+use commands::rm::RmCommand;
 use commands::status::StatusCommand;
 use commands::branch::BranchCommand;
 use commands::merge::MergeCommand;
-
-// --- Imports pentru Logging ---
+use commands::revert::RevertCommand;
 use env_logger::Builder;
-use log::{LevelFilter, info}; // Eliminăm 'error' de aici, îl vom folosi doar unde e necesar
+use log::{LevelFilter, info};
 use std::fs::OpenOptions;
-// --- Sfârșit Imports Logging ---
 
 mod cli;
 mod commands;
@@ -93,6 +92,10 @@ fn handle_command(cli_args: CliArgs) {
         Command::Reset { revision, paths, soft, mixed, hard } => {
             handle_reset_command(&revision, &paths, soft, mixed, hard)
         },
+        Command::Revert { commit, continue_revert, abort } => {
+            handle_revert_command(&commit, continue_revert, abort)
+        },
+        Command::Rm { paths, cached, force, recursive } => handle_rm_command(&paths, cached, force, recursive),
         Command::Unknown { name } => {
              // Logarea poate fi utilă
              log::error!("Unknown command received: {}", name);
@@ -243,6 +246,36 @@ fn handle_reset_command(revision: &str, paths: &[String], soft: bool, mixed: boo
         Ok(_) => process::exit(0),
         Err(e) => {
              exit_with_error(&e.to_string())
+        },
+    }
+}
+
+fn handle_revert_command(commit: &str, continue_revert: bool, abort: bool) {
+    info!("Executing RevertCommand for commit: '{}', continue: {}, abort: {}", 
+        commit, continue_revert, abort);
+    
+    match RevertCommand::execute(commit, continue_revert, abort) {
+        Ok(_) => process::exit(0),
+        Err(e) => {
+            if e.to_string().contains("fix conflicts") || 
+               e.to_string().contains("Automatic merge failed") {
+                // Don't prepend "fatal:" for conflict errors
+                exit_with_error(&e.to_string());
+            } else {
+                exit_with_error(&e.to_string());
+            }
+        },
+    }
+}
+
+fn handle_rm_command(paths: &[String], cached: bool, force: bool, recursive: bool) -> ! {
+    info!("Executing RmCommand (paths: {:?}, cached: {}, force: {}, recursive: {})", 
+        paths, cached, force, recursive);
+    
+    match RmCommand::execute(paths, cached, force, recursive) {
+        Ok(_) => process::exit(0),
+        Err(e) => {
+            exit_with_error(&e.to_string())
         },
     }
 }
