@@ -204,6 +204,9 @@ impl ResetCommand {
             repo.index.add_from_db(&path, &entry)?;
         }
         
+        // Ensure index is marked as changed to force write
+        repo.index.set_changed(true);
+        
         Ok(())
     }
     

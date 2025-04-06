@@ -1,29 +1,29 @@
 Using ASH executable: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow
-Using temporary directory for test repos: /var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.lGNsjgvJaR
+Using temporary directory for test repos: /var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.Tglg6MkXAO
 Logging detailed output to: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/tests/integration/reset_tests.log
 
 [0;34m--- Test: Soft Reset ---[0m
-[2025-04-06T15:39:32Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Handling command: Init { path: "." }
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Executing InitCommand for path: '.'
-Initialized empty Ash repository in /private/var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.lGNsjgvJaR/soft_reset_repo/.ash
-[0;34mInitialized repo in /var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.lGNsjgvJaR/soft_reset_repo[0m
-[2025-04-06T15:39:32Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Handling command: Add { paths: ["file1.txt"] }
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Executing AddCommand for paths: ["file1.txt"]
+[2025-04-06T16:16:14Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Handling command: Init { path: "." }
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Executing InitCommand for path: '.'
+Initialized empty Ash repository in /private/var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.Tglg6MkXAO/soft_reset_repo/.ash
+[0;34mInitialized repo in /var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.Tglg6MkXAO/soft_reset_repo[0m
+[2025-04-06T16:16:14Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Handling command: Add { paths: ["file1.txt"] }
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Executing AddCommand for paths: ["file1.txt"]
 Storing object of type: blob
 Serializing blob object, content size: 11 bytes
 Calculated OID: 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9
 Object 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9 doesn't exist, writing to database
 1 new file added to index (0.00s)
-[2025-04-06T15:39:32Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C1" }
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C1'
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Starting commit execution
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Loading index
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Index loaded successfully
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Reading HEAD
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] HEAD read successfully: None
+[2025-04-06T16:16:14Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C1" }
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C1'
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Reading HEAD
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] HEAD read successfully: None
 Processing entry: file1.txt
 Added top-level file: file1.txt
 Final tree structure:
@@ -35,26 +35,26 @@ Serializing tree object, content size: 37 bytes
 Calculated OID: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
 Object 8510ca5200643cdbd8d5d863d2b81db93c6dd409 doesn't exist, writing to database
 Tree has OID 8510ca5200643cdbd8d5d863d2b81db93c6dd409 after processing
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Current index tree OID: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Root commit with entries detected.
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Current index tree OID: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Root commit with entries detected.
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
 Storing object of type: commit
 Serializing commit object, content size: 165 bytes
-Calculated OID: 91b41c45ebcdb442110f011734d3b65109c0bce8
-Object 91b41c45ebcdb442110f011734d3b65109c0bce8 doesn't exist, writing to database
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: 91b41c45ebcdb442110f011734d3b65109c0bce8
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Updated HEAD to 91b41c45ebcdb442110f011734d3b65109c0bce8
-[(root-commit) 91b41c4] Commit C1 (0.00s)
+Calculated OID: f75df527b373bdcf27547876b78a8769664136b5
+Object f75df527b373bdcf27547876b78a8769664136b5 doesn't exist, writing to database
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: f75df527b373bdcf27547876b78a8769664136b5
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Updated HEAD to f75df527b373bdcf27547876b78a8769664136b5
+[(root-commit) f75df52] Commit C1 (0.00s)
 1 file changed
   Commit on 'master': 'Commit C1' (file1.txt)
-[2025-04-06T15:39:32Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Handling command: Add { paths: ["file2.txt"] }
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Executing AddCommand for paths: ["file2.txt"]
+[2025-04-06T16:16:14Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Handling command: Add { paths: ["file2.txt"] }
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Executing AddCommand for paths: ["file2.txt"]
 Storing object of type: blob
 Serializing blob object, content size: 11 bytes
 Calculated OID: 510f0a5c67260391a39e9649b47ac9e77d428264
 Object 510f0a5c67260391a39e9649b47ac9e77d428264 doesn't exist, writing to database
-Examining HEAD commit: 91b41c45ebcdb442110f011734d3b65109c0bce8
+Examining HEAD commit: f75df527b373bdcf27547876b78a8769664136b5
 Root tree OID: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
 Traversing tree: 8510ca5200643cdbd8d5d863d2b81db93c6dd409 at path: 
 Parsing tree object: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
@@ -62,77 +62,77 @@ Tree parse: Found file entry: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a113
 Found file: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9
 Found 1 files in HEAD
 1 new file added to index (0.00s)
-[2025-04-06T15:39:32Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C2" }
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C2'
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Starting commit execution
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Loading index
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Index loaded successfully
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Reading HEAD
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] HEAD read successfully: Some("91b41c45ebcdb442110f011734d3b65109c0bce8")
+[2025-04-06T16:16:14Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C2" }
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C2'
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Reading HEAD
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] HEAD read successfully: Some("f75df527b373bdcf27547876b78a8769664136b5")
 Processing entry: file1.txt
 Added top-level file: file1.txt
 Processing entry: file2.txt
 Added top-level file: file2.txt
 Final tree structure:
   Tree Structure:
-  file1.txt (blob, mode 100644) -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9
   file2.txt (blob, mode 100644) -> 510f0a5c67260391a39e9649b47ac9e77d428264
+  file1.txt (blob, mode 100644) -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9
 Processing tree with 2 entries
 Storing object of type: tree
 Serializing tree object, content size: 74 bytes
 Calculated OID: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
 Object ed5cc024b281c00d3756c8b9faab4ccb32711aa3 doesn't exist, writing to database
 Tree has OID ed5cc024b281c00d3756c8b9faab4ccb32711aa3 after processing
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Current index tree OID: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Parent commit tree OID: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Current index tree OID: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Parent commit tree OID: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
 Storing object of type: commit
 Serializing commit object, content size: 213 bytes
-Calculated OID: f3e8df65c382cc4246d45df7d5eb7cdd42a580ab
-Object f3e8df65c382cc4246d45df7d5eb7cdd42a580ab doesn't exist, writing to database
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: f3e8df65c382cc4246d45df7d5eb7cdd42a580ab
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Updated HEAD to f3e8df65c382cc4246d45df7d5eb7cdd42a580ab
+Calculated OID: e14545e4509c26e268cce2b01529e030771b6ac3
+Object e14545e4509c26e268cce2b01529e030771b6ac3 doesn't exist, writing to database
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: e14545e4509c26e268cce2b01529e030771b6ac3
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Updated HEAD to e14545e4509c26e268cce2b01529e030771b6ac3
 Parsing tree object: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
 Tree parse: Found file entry: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9 (mode 100644)
 Parsing tree object: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
 Tree parse: Found file entry: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9 (mode 100644)
 Tree parse: Found file entry: file2.txt -> 510f0a5c67260391a39e9649b47ac9e77d428264 (mode 100644)
-[f3e8df6] Commit C2 (0.00s)
+[e14545e] Commit C2 (0.00s)
 1 file changed
   Commit on 'master': 'Commit C2' (file2.txt)
 [0;33m  CMD [in soft_reset_repo]: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow add file1.txt file3.txt[0m
-[2025-04-06T15:39:32Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Handling command: Add { paths: ["file1.txt", "file3.txt"] }
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Executing AddCommand for paths: ["file1.txt", "file3.txt"]
-Storing object of type: blob
-Serializing blob object, content size: 18 bytes
-Calculated OID: 074c3daf449107e2eb48885fc235a22796aa9711
-Object 074c3daf449107e2eb48885fc235a22796aa9711 doesn't exist, writing to database
+[2025-04-06T16:16:14Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Handling command: Add { paths: ["file1.txt", "file3.txt"] }
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Executing AddCommand for paths: ["file1.txt", "file3.txt"]
 Storing object of type: blob
 Serializing blob object, content size: 13 bytes
 Calculated OID: 0625e276795ad8c80ed57e47d862dbe0afb9a393
 Object 0625e276795ad8c80ed57e47d862dbe0afb9a393 doesn't exist, writing to database
-Examining HEAD commit: f3e8df65c382cc4246d45df7d5eb7cdd42a580ab
+Storing object of type: blob
+Serializing blob object, content size: 18 bytes
+Calculated OID: 074c3daf449107e2eb48885fc235a22796aa9711
+Object 074c3daf449107e2eb48885fc235a22796aa9711 doesn't exist, writing to database
+Examining HEAD commit: e14545e4509c26e268cce2b01529e030771b6ac3
 Root tree OID: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
 Traversing tree: ed5cc024b281c00d3756c8b9faab4ccb32711aa3 at path: 
 Parsing tree object: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
 Tree parse: Found file entry: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9 (mode 100644)
 Tree parse: Found file entry: file2.txt -> 510f0a5c67260391a39e9649b47ac9e77d428264 (mode 100644)
-Found file: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9
 Found file: file2.txt -> 510f0a5c67260391a39e9649b47ac9e77d428264
+Found file: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9
 Found 2 files in HEAD
 1 new file and 1 modified file added to index (0.00s)
 [0;32m  CMD OK[0m
 [0;33m  CMD [in soft_reset_repo]: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow commit -m Commit C3[0m
-[2025-04-06T15:39:32Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C3" }
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C3'
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Starting commit execution
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Loading index
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Index loaded successfully
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Reading HEAD
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] HEAD read successfully: Some("f3e8df65c382cc4246d45df7d5eb7cdd42a580ab")
+[2025-04-06T16:16:14Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C3" }
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C3'
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Reading HEAD
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] HEAD read successfully: Some("e14545e4509c26e268cce2b01529e030771b6ac3")
 Processing entry: file1.txt
 Added top-level file: file1.txt
 Processing entry: file2.txt
@@ -150,15 +150,15 @@ Serializing tree object, content size: 111 bytes
 Calculated OID: 22fc390398bee180968a2cc7edc2e6e8f8e5be53
 Object 22fc390398bee180968a2cc7edc2e6e8f8e5be53 doesn't exist, writing to database
 Tree has OID 22fc390398bee180968a2cc7edc2e6e8f8e5be53 after processing
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Current index tree OID: 22fc390398bee180968a2cc7edc2e6e8f8e5be53
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Parent commit tree OID: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Current index tree OID: 22fc390398bee180968a2cc7edc2e6e8f8e5be53
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Parent commit tree OID: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
 Storing object of type: commit
 Serializing commit object, content size: 213 bytes
-Calculated OID: a17cfafe3310911f7366f920247a89814c6090db
-Object a17cfafe3310911f7366f920247a89814c6090db doesn't exist, writing to database
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: a17cfafe3310911f7366f920247a89814c6090db
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Updated HEAD to a17cfafe3310911f7366f920247a89814c6090db
+Calculated OID: 669cdb184492ca6b60f5cad91253a13ec5828309
+Object 669cdb184492ca6b60f5cad91253a13ec5828309 doesn't exist, writing to database
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: 669cdb184492ca6b60f5cad91253a13ec5828309
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Updated HEAD to 669cdb184492ca6b60f5cad91253a13ec5828309
 Parsing tree object: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
 Tree parse: Found file entry: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9 (mode 100644)
 Tree parse: Found file entry: file2.txt -> 510f0a5c67260391a39e9649b47ac9e77d428264 (mode 100644)
@@ -166,20 +166,20 @@ Parsing tree object: 22fc390398bee180968a2cc7edc2e6e8f8e5be53
 Tree parse: Found file entry: file1.txt -> 074c3daf449107e2eb48885fc235a22796aa9711 (mode 100644)
 Tree parse: Found file entry: file2.txt -> 510f0a5c67260391a39e9649b47ac9e77d428264 (mode 100644)
 Tree parse: Found file entry: file3.txt -> 0625e276795ad8c80ed57e47d862dbe0afb9a393 (mode 100644)
-[a17cfaf] Commit C3 (0.00s)
+[669cdb1] Commit C3 (0.00s)
 2 files changed
 [0;32m  CMD OK[0m
 [0;33m  CMD [in soft_reset_repo]: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow reset --soft [0m
-[2025-04-06T15:39:32Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Handling command: Reset { revision: "", paths: [], soft: true, mixed: false, hard: false }
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Executing ResetCommand with revision: "", paths: []
+[2025-04-06T16:16:14Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Handling command: Reset { revision: "", paths: [], soft: true, mixed: false, hard: false }
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Executing ResetCommand with revision: "", paths: []
 Starting reset operation...
-Using first commit (C1): 91b41c45ebcdb442110f011734d3b65109c0bce8
-[32mHEAD is now at[0m: 91b41c45 -> [33m91b41c45[0m
+Using first commit (C1): f75df527b373bdcf27547876b78a8769664136b5
+[32mHEAD is now at[0m: f75df527 -> [33mf75df527[0m
 Reset completed in 0.00s
 [0;32m  CMD OK[0m
 [0;33mTEST: Soft Reset: HEAD should be C1[0m
-[0;31mFAIL: Soft Reset: HEAD should be C1 - Expected HEAD OID '', but got '91b41c45ebcdb442110f011734d3b65109c0bce8'. HEAD content: 'ref: refs/heads/master' [0m
+[0;32mPASS: Soft Reset: HEAD should be C1 (HEAD is f75df527b373bdcf27547876b78a8769664136b5)[0m
 [0;33mTEST: Soft Reset: Index should differ from new HEAD (C1)[0m
 [0;32mPASS: Soft Reset: Index should differ from new HEAD (C1) (Index differs from HEAD as expected)[0m
 [0;33mTEST: Soft Reset: Working dir file1.txt should exist[0m
@@ -194,27 +194,27 @@ Reset completed in 0.00s
 [0;32mPASS: Soft Reset: Working dir file1.txt should contain unstaged changes[0m
 
 [0;34m--- Test: Mixed Reset (Default) ---[0m
-[2025-04-06T15:39:32Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Handling command: Init { path: "." }
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Executing InitCommand for path: '.'
-Initialized empty Ash repository in /private/var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.lGNsjgvJaR/mixed_reset_repo/.ash
-[0;34mInitialized repo in /var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.lGNsjgvJaR/mixed_reset_repo[0m
-[2025-04-06T15:39:32Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Handling command: Add { paths: ["file1.txt"] }
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Executing AddCommand for paths: ["file1.txt"]
+[2025-04-06T16:16:14Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Handling command: Init { path: "." }
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Executing InitCommand for path: '.'
+Initialized empty Ash repository in /private/var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.Tglg6MkXAO/mixed_reset_repo/.ash
+[0;34mInitialized repo in /var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.Tglg6MkXAO/mixed_reset_repo[0m
+[2025-04-06T16:16:14Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Handling command: Add { paths: ["file1.txt"] }
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Executing AddCommand for paths: ["file1.txt"]
 Storing object of type: blob
 Serializing blob object, content size: 11 bytes
 Calculated OID: 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9
 Object 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9 doesn't exist, writing to database
 1 new file added to index (0.00s)
-[2025-04-06T15:39:32Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C1" }
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C1'
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Starting commit execution
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Loading index
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Index loaded successfully
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Reading HEAD
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] HEAD read successfully: None
+[2025-04-06T16:16:14Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C1" }
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C1'
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Reading HEAD
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] HEAD read successfully: None
 Processing entry: file1.txt
 Added top-level file: file1.txt
 Final tree structure:
@@ -226,26 +226,26 @@ Serializing tree object, content size: 37 bytes
 Calculated OID: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
 Object 8510ca5200643cdbd8d5d863d2b81db93c6dd409 doesn't exist, writing to database
 Tree has OID 8510ca5200643cdbd8d5d863d2b81db93c6dd409 after processing
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Current index tree OID: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Root commit with entries detected.
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Current index tree OID: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Root commit with entries detected.
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
 Storing object of type: commit
 Serializing commit object, content size: 165 bytes
-Calculated OID: 91b41c45ebcdb442110f011734d3b65109c0bce8
-Object 91b41c45ebcdb442110f011734d3b65109c0bce8 doesn't exist, writing to database
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: 91b41c45ebcdb442110f011734d3b65109c0bce8
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Updated HEAD to 91b41c45ebcdb442110f011734d3b65109c0bce8
-[(root-commit) 91b41c4] Commit C1 (0.00s)
+Calculated OID: f75df527b373bdcf27547876b78a8769664136b5
+Object f75df527b373bdcf27547876b78a8769664136b5 doesn't exist, writing to database
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: f75df527b373bdcf27547876b78a8769664136b5
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Updated HEAD to f75df527b373bdcf27547876b78a8769664136b5
+[(root-commit) f75df52] Commit C1 (0.00s)
 1 file changed
   Commit on 'master': 'Commit C1' (file1.txt)
-[2025-04-06T15:39:32Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Handling command: Add { paths: ["file2.txt"] }
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Executing AddCommand for paths: ["file2.txt"]
+[2025-04-06T16:16:14Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Handling command: Add { paths: ["file2.txt"] }
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Executing AddCommand for paths: ["file2.txt"]
 Storing object of type: blob
 Serializing blob object, content size: 11 bytes
 Calculated OID: 510f0a5c67260391a39e9649b47ac9e77d428264
 Object 510f0a5c67260391a39e9649b47ac9e77d428264 doesn't exist, writing to database
-Examining HEAD commit: 91b41c45ebcdb442110f011734d3b65109c0bce8
+Examining HEAD commit: f75df527b373bdcf27547876b78a8769664136b5
 Root tree OID: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
 Traversing tree: 8510ca5200643cdbd8d5d863d2b81db93c6dd409 at path: 
 Parsing tree object: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
@@ -253,49 +253,49 @@ Tree parse: Found file entry: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a113
 Found file: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9
 Found 1 files in HEAD
 1 new file added to index (0.00s)
-[2025-04-06T15:39:32Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C2" }
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C2'
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Starting commit execution
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Loading index
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Index loaded successfully
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Reading HEAD
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] HEAD read successfully: Some("91b41c45ebcdb442110f011734d3b65109c0bce8")
+[2025-04-06T16:16:14Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C2" }
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C2'
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Reading HEAD
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] HEAD read successfully: Some("f75df527b373bdcf27547876b78a8769664136b5")
 Processing entry: file1.txt
 Added top-level file: file1.txt
 Processing entry: file2.txt
 Added top-level file: file2.txt
 Final tree structure:
   Tree Structure:
-  file1.txt (blob, mode 100644) -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9
   file2.txt (blob, mode 100644) -> 510f0a5c67260391a39e9649b47ac9e77d428264
+  file1.txt (blob, mode 100644) -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9
 Processing tree with 2 entries
 Storing object of type: tree
 Serializing tree object, content size: 74 bytes
 Calculated OID: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
 Object ed5cc024b281c00d3756c8b9faab4ccb32711aa3 doesn't exist, writing to database
 Tree has OID ed5cc024b281c00d3756c8b9faab4ccb32711aa3 after processing
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Current index tree OID: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Parent commit tree OID: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Current index tree OID: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Parent commit tree OID: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
 Storing object of type: commit
 Serializing commit object, content size: 213 bytes
-Calculated OID: f3e8df65c382cc4246d45df7d5eb7cdd42a580ab
-Object f3e8df65c382cc4246d45df7d5eb7cdd42a580ab doesn't exist, writing to database
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: f3e8df65c382cc4246d45df7d5eb7cdd42a580ab
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Updated HEAD to f3e8df65c382cc4246d45df7d5eb7cdd42a580ab
+Calculated OID: e14545e4509c26e268cce2b01529e030771b6ac3
+Object e14545e4509c26e268cce2b01529e030771b6ac3 doesn't exist, writing to database
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: e14545e4509c26e268cce2b01529e030771b6ac3
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Updated HEAD to e14545e4509c26e268cce2b01529e030771b6ac3
 Parsing tree object: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
 Tree parse: Found file entry: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9 (mode 100644)
 Parsing tree object: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
 Tree parse: Found file entry: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9 (mode 100644)
 Tree parse: Found file entry: file2.txt -> 510f0a5c67260391a39e9649b47ac9e77d428264 (mode 100644)
-[f3e8df6] Commit C2 (0.00s)
+[e14545e] Commit C2 (0.00s)
 1 file changed
   Commit on 'master': 'Commit C2' (file2.txt)
 [0;33m  CMD [in mixed_reset_repo]: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow add file1.txt file3.txt[0m
-[2025-04-06T15:39:32Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Handling command: Add { paths: ["file1.txt", "file3.txt"] }
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Executing AddCommand for paths: ["file1.txt", "file3.txt"]
+[2025-04-06T16:16:14Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Handling command: Add { paths: ["file1.txt", "file3.txt"] }
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Executing AddCommand for paths: ["file1.txt", "file3.txt"]
 Storing object of type: blob
 Serializing blob object, content size: 18 bytes
 Calculated OID: 074c3daf449107e2eb48885fc235a22796aa9711
@@ -304,7 +304,7 @@ Storing object of type: blob
 Serializing blob object, content size: 13 bytes
 Calculated OID: 0625e276795ad8c80ed57e47d862dbe0afb9a393
 Object 0625e276795ad8c80ed57e47d862dbe0afb9a393 doesn't exist, writing to database
-Examining HEAD commit: f3e8df65c382cc4246d45df7d5eb7cdd42a580ab
+Examining HEAD commit: e14545e4509c26e268cce2b01529e030771b6ac3
 Root tree OID: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
 Traversing tree: ed5cc024b281c00d3756c8b9faab4ccb32711aa3 at path: 
 Parsing tree object: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
@@ -316,14 +316,14 @@ Found 2 files in HEAD
 1 new file and 1 modified file added to index (0.00s)
 [0;32m  CMD OK[0m
 [0;33m  CMD [in mixed_reset_repo]: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow commit -m Commit C3[0m
-[2025-04-06T15:39:32Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C3" }
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C3'
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Starting commit execution
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Loading index
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Index loaded successfully
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Reading HEAD
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] HEAD read successfully: Some("f3e8df65c382cc4246d45df7d5eb7cdd42a580ab")
+[2025-04-06T16:16:14Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C3" }
+[2025-04-06T16:16:14Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C3'
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Reading HEAD
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] HEAD read successfully: Some("e14545e4509c26e268cce2b01529e030771b6ac3")
 Processing entry: file1.txt
 Added top-level file: file1.txt
 Processing entry: file2.txt
@@ -332,24 +332,24 @@ Processing entry: file3.txt
 Added top-level file: file3.txt
 Final tree structure:
   Tree Structure:
-  file2.txt (blob, mode 100644) -> 510f0a5c67260391a39e9649b47ac9e77d428264
   file3.txt (blob, mode 100644) -> 0625e276795ad8c80ed57e47d862dbe0afb9a393
   file1.txt (blob, mode 100644) -> 074c3daf449107e2eb48885fc235a22796aa9711
+  file2.txt (blob, mode 100644) -> 510f0a5c67260391a39e9649b47ac9e77d428264
 Processing tree with 3 entries
 Storing object of type: tree
 Serializing tree object, content size: 111 bytes
 Calculated OID: 22fc390398bee180968a2cc7edc2e6e8f8e5be53
 Object 22fc390398bee180968a2cc7edc2e6e8f8e5be53 doesn't exist, writing to database
 Tree has OID 22fc390398bee180968a2cc7edc2e6e8f8e5be53 after processing
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Current index tree OID: 22fc390398bee180968a2cc7edc2e6e8f8e5be53
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Parent commit tree OID: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Current index tree OID: 22fc390398bee180968a2cc7edc2e6e8f8e5be53
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Parent commit tree OID: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
 Storing object of type: commit
 Serializing commit object, content size: 213 bytes
-Calculated OID: a17cfafe3310911f7366f920247a89814c6090db
-Object a17cfafe3310911f7366f920247a89814c6090db doesn't exist, writing to database
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: a17cfafe3310911f7366f920247a89814c6090db
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Updated HEAD to a17cfafe3310911f7366f920247a89814c6090db
+Calculated OID: 669cdb184492ca6b60f5cad91253a13ec5828309
+Object 669cdb184492ca6b60f5cad91253a13ec5828309 doesn't exist, writing to database
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: 669cdb184492ca6b60f5cad91253a13ec5828309
+[2025-04-06T16:16:14Z INFO  AsheraFlow::commands::commit] Updated HEAD to 669cdb184492ca6b60f5cad91253a13ec5828309
 Parsing tree object: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
 Tree parse: Found file entry: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9 (mode 100644)
 Tree parse: Found file entry: file2.txt -> 510f0a5c67260391a39e9649b47ac9e77d428264 (mode 100644)
@@ -357,30 +357,30 @@ Parsing tree object: 22fc390398bee180968a2cc7edc2e6e8f8e5be53
 Tree parse: Found file entry: file1.txt -> 074c3daf449107e2eb48885fc235a22796aa9711 (mode 100644)
 Tree parse: Found file entry: file2.txt -> 510f0a5c67260391a39e9649b47ac9e77d428264 (mode 100644)
 Tree parse: Found file entry: file3.txt -> 0625e276795ad8c80ed57e47d862dbe0afb9a393 (mode 100644)
-[a17cfaf] Commit C3 (0.00s)
+[669cdb1] Commit C3 (0.00s)
 2 files changed
 [0;32m  CMD OK[0m
 [0;33m  CMD [in mixed_reset_repo]: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow reset [0m
-[2025-04-06T15:39:32Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Handling command: Reset { revision: "", paths: [], soft: false, mixed: true, hard: false }
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Executing ResetCommand with revision: "", paths: []
+[2025-04-06T16:16:15Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Handling command: Reset { revision: "", paths: [], soft: false, mixed: true, hard: false }
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Executing ResetCommand with revision: "", paths: []
 Starting reset operation...
-Using first commit (C1): 91b41c45ebcdb442110f011734d3b65109c0bce8
-Resetting index to commit 91b41c45
+Using first commit (C1): f75df527b373bdcf27547876b78a8769664136b5
+Resetting index to commit f75df527
 Loading tree from commit: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
 Parsing tree object: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
 Tree parse: Found file entry: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9 (mode 100644)
 Adding to index: file1.txt
-[32mHEAD is now at[0m: 91b41c45 -> [33m91b41c45[0m
+[32mHEAD is now at[0m: f75df527 -> [33mf75df527[0m
 Reset completed in 0.00s
 [0;32m  CMD OK[0m
 [0;33mTEST: Mixed Reset: HEAD should be C1[0m
-[0;31mFAIL: Mixed Reset: HEAD should be C1 - Expected HEAD OID '', but got '91b41c45ebcdb442110f011734d3b65109c0bce8'. HEAD content: 'ref: refs/heads/master' [0m
+[0;32mPASS: Mixed Reset: HEAD should be C1 (HEAD is f75df527b373bdcf27547876b78a8769664136b5)[0m
 [0;33mTEST: Mixed Reset: Index should match new HEAD (C1)[0m
 [0;31mFAIL: Mixed Reset: Index should match new HEAD (C1) - Expected index to match HEAD, but 'diff --cached' showed changes:[0m
-[2025-04-06T15:39:32Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Handling command: Diff { paths: [], cached: true }
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Executing DiffCommand (cached: true, paths: [])
+[2025-04-06T16:16:15Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Handling command: Diff { paths: [], cached: true }
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Executing DiffCommand (cached: true, paths: [])
 Parsing tree object: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
 Tree parse: Found file entry: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9 (mode 100644)
 [0;33mTEST: Mixed Reset: Working dir file1.txt should exist[0m
@@ -397,27 +397,27 @@ Tree parse: Found file entry: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a113
 [0;32mPASS: Mixed Reset: Working dir file3.txt should still contain C3 content (now unstaged)[0m
 
 [0;34m--- Test: Hard Reset ---[0m
-[2025-04-06T15:39:32Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Handling command: Init { path: "." }
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Executing InitCommand for path: '.'
-Initialized empty Ash repository in /private/var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.lGNsjgvJaR/hard_reset_repo/.ash
-[0;34mInitialized repo in /var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.lGNsjgvJaR/hard_reset_repo[0m
-[2025-04-06T15:39:32Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Handling command: Add { paths: ["file1.txt"] }
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Executing AddCommand for paths: ["file1.txt"]
+[2025-04-06T16:16:15Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Handling command: Init { path: "." }
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Executing InitCommand for path: '.'
+Initialized empty Ash repository in /private/var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.Tglg6MkXAO/hard_reset_repo/.ash
+[0;34mInitialized repo in /var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.Tglg6MkXAO/hard_reset_repo[0m
+[2025-04-06T16:16:15Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Handling command: Add { paths: ["file1.txt"] }
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Executing AddCommand for paths: ["file1.txt"]
 Storing object of type: blob
 Serializing blob object, content size: 11 bytes
 Calculated OID: 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9
 Object 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9 doesn't exist, writing to database
 1 new file added to index (0.00s)
-[2025-04-06T15:39:32Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C1" }
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C1'
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Starting commit execution
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Loading index
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Index loaded successfully
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Reading HEAD
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] HEAD read successfully: None
+[2025-04-06T16:16:15Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C1" }
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C1'
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Reading HEAD
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] HEAD read successfully: None
 Processing entry: file1.txt
 Added top-level file: file1.txt
 Final tree structure:
@@ -429,26 +429,26 @@ Serializing tree object, content size: 37 bytes
 Calculated OID: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
 Object 8510ca5200643cdbd8d5d863d2b81db93c6dd409 doesn't exist, writing to database
 Tree has OID 8510ca5200643cdbd8d5d863d2b81db93c6dd409 after processing
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Current index tree OID: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Root commit with entries detected.
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Current index tree OID: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Root commit with entries detected.
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
 Storing object of type: commit
 Serializing commit object, content size: 165 bytes
-Calculated OID: 91b41c45ebcdb442110f011734d3b65109c0bce8
-Object 91b41c45ebcdb442110f011734d3b65109c0bce8 doesn't exist, writing to database
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: 91b41c45ebcdb442110f011734d3b65109c0bce8
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Updated HEAD to 91b41c45ebcdb442110f011734d3b65109c0bce8
-[(root-commit) 91b41c4] Commit C1 (0.00s)
+Calculated OID: fab0ae7bd758d6a7fde850920dfdad06e012c29c
+Object fab0ae7bd758d6a7fde850920dfdad06e012c29c doesn't exist, writing to database
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: fab0ae7bd758d6a7fde850920dfdad06e012c29c
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Updated HEAD to fab0ae7bd758d6a7fde850920dfdad06e012c29c
+[(root-commit) fab0ae7] Commit C1 (0.00s)
 1 file changed
   Commit on 'master': 'Commit C1' (file1.txt)
-[2025-04-06T15:39:32Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Handling command: Add { paths: ["file2.txt"] }
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Executing AddCommand for paths: ["file2.txt"]
+[2025-04-06T16:16:15Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Handling command: Add { paths: ["file2.txt"] }
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Executing AddCommand for paths: ["file2.txt"]
 Storing object of type: blob
 Serializing blob object, content size: 11 bytes
 Calculated OID: 510f0a5c67260391a39e9649b47ac9e77d428264
 Object 510f0a5c67260391a39e9649b47ac9e77d428264 doesn't exist, writing to database
-Examining HEAD commit: 91b41c45ebcdb442110f011734d3b65109c0bce8
+Examining HEAD commit: fab0ae7bd758d6a7fde850920dfdad06e012c29c
 Root tree OID: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
 Traversing tree: 8510ca5200643cdbd8d5d863d2b81db93c6dd409 at path: 
 Parsing tree object: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
@@ -456,58 +456,58 @@ Tree parse: Found file entry: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a113
 Found file: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9
 Found 1 files in HEAD
 1 new file added to index (0.00s)
-[2025-04-06T15:39:32Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C2" }
-[2025-04-06T15:39:32Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C2'
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Starting commit execution
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Loading index
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Index loaded successfully
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Reading HEAD
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] HEAD read successfully: Some("91b41c45ebcdb442110f011734d3b65109c0bce8")
+[2025-04-06T16:16:15Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C2" }
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C2'
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Reading HEAD
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] HEAD read successfully: Some("fab0ae7bd758d6a7fde850920dfdad06e012c29c")
 Processing entry: file1.txt
 Added top-level file: file1.txt
 Processing entry: file2.txt
 Added top-level file: file2.txt
 Final tree structure:
   Tree Structure:
-  file2.txt (blob, mode 100644) -> 510f0a5c67260391a39e9649b47ac9e77d428264
   file1.txt (blob, mode 100644) -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9
+  file2.txt (blob, mode 100644) -> 510f0a5c67260391a39e9649b47ac9e77d428264
 Processing tree with 2 entries
 Storing object of type: tree
 Serializing tree object, content size: 74 bytes
 Calculated OID: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
 Object ed5cc024b281c00d3756c8b9faab4ccb32711aa3 doesn't exist, writing to database
 Tree has OID ed5cc024b281c00d3756c8b9faab4ccb32711aa3 after processing
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Current index tree OID: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Parent commit tree OID: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Current index tree OID: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Parent commit tree OID: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
 Storing object of type: commit
 Serializing commit object, content size: 213 bytes
-Calculated OID: f3e8df65c382cc4246d45df7d5eb7cdd42a580ab
-Object f3e8df65c382cc4246d45df7d5eb7cdd42a580ab doesn't exist, writing to database
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: f3e8df65c382cc4246d45df7d5eb7cdd42a580ab
-[2025-04-06T15:39:32Z INFO  AsheraFlow::commands::commit] Updated HEAD to f3e8df65c382cc4246d45df7d5eb7cdd42a580ab
+Calculated OID: 27354f264197f283841c4131d92c54ff794ec37c
+Object 27354f264197f283841c4131d92c54ff794ec37c doesn't exist, writing to database
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: 27354f264197f283841c4131d92c54ff794ec37c
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Updated HEAD to 27354f264197f283841c4131d92c54ff794ec37c
 Parsing tree object: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
 Tree parse: Found file entry: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9 (mode 100644)
 Parsing tree object: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
 Tree parse: Found file entry: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9 (mode 100644)
 Tree parse: Found file entry: file2.txt -> 510f0a5c67260391a39e9649b47ac9e77d428264 (mode 100644)
-[f3e8df6] Commit C2 (0.00s)
+[27354f2] Commit C2 (0.00s)
 1 file changed
   Commit on 'master': 'Commit C2' (file2.txt)
 [0;33m  CMD [in hard_reset_repo]: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow add file1.txt file3.txt[0m
-[2025-04-06T15:39:33Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:33Z INFO  AsheraFlow] Handling command: Add { paths: ["file1.txt", "file3.txt"] }
-[2025-04-06T15:39:33Z INFO  AsheraFlow] Executing AddCommand for paths: ["file1.txt", "file3.txt"]
-Storing object of type: blob
-Serializing blob object, content size: 18 bytes
-Calculated OID: 074c3daf449107e2eb48885fc235a22796aa9711
-Object 074c3daf449107e2eb48885fc235a22796aa9711 doesn't exist, writing to database
+[2025-04-06T16:16:15Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Handling command: Add { paths: ["file1.txt", "file3.txt"] }
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Executing AddCommand for paths: ["file1.txt", "file3.txt"]
 Storing object of type: blob
 Serializing blob object, content size: 13 bytes
 Calculated OID: 0625e276795ad8c80ed57e47d862dbe0afb9a393
 Object 0625e276795ad8c80ed57e47d862dbe0afb9a393 doesn't exist, writing to database
-Examining HEAD commit: f3e8df65c382cc4246d45df7d5eb7cdd42a580ab
+Storing object of type: blob
+Serializing blob object, content size: 18 bytes
+Calculated OID: 074c3daf449107e2eb48885fc235a22796aa9711
+Object 074c3daf449107e2eb48885fc235a22796aa9711 doesn't exist, writing to database
+Examining HEAD commit: 27354f264197f283841c4131d92c54ff794ec37c
 Root tree OID: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
 Traversing tree: ed5cc024b281c00d3756c8b9faab4ccb32711aa3 at path: 
 Parsing tree object: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
@@ -519,14 +519,14 @@ Found 2 files in HEAD
 1 new file and 1 modified file added to index (0.00s)
 [0;32m  CMD OK[0m
 [0;33m  CMD [in hard_reset_repo]: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow commit -m Commit C3[0m
-[2025-04-06T15:39:33Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:33Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C3" }
-[2025-04-06T15:39:33Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C3'
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Starting commit execution
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Loading index
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Index loaded successfully
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Reading HEAD
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] HEAD read successfully: Some("f3e8df65c382cc4246d45df7d5eb7cdd42a580ab")
+[2025-04-06T16:16:15Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C3" }
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C3'
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Reading HEAD
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] HEAD read successfully: Some("27354f264197f283841c4131d92c54ff794ec37c")
 Processing entry: file1.txt
 Added top-level file: file1.txt
 Processing entry: file2.txt
@@ -535,24 +535,24 @@ Processing entry: file3.txt
 Added top-level file: file3.txt
 Final tree structure:
   Tree Structure:
-  file1.txt (blob, mode 100644) -> 074c3daf449107e2eb48885fc235a22796aa9711
-  file3.txt (blob, mode 100644) -> 0625e276795ad8c80ed57e47d862dbe0afb9a393
   file2.txt (blob, mode 100644) -> 510f0a5c67260391a39e9649b47ac9e77d428264
+  file3.txt (blob, mode 100644) -> 0625e276795ad8c80ed57e47d862dbe0afb9a393
+  file1.txt (blob, mode 100644) -> 074c3daf449107e2eb48885fc235a22796aa9711
 Processing tree with 3 entries
 Storing object of type: tree
 Serializing tree object, content size: 111 bytes
 Calculated OID: 22fc390398bee180968a2cc7edc2e6e8f8e5be53
 Object 22fc390398bee180968a2cc7edc2e6e8f8e5be53 doesn't exist, writing to database
 Tree has OID 22fc390398bee180968a2cc7edc2e6e8f8e5be53 after processing
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Current index tree OID: 22fc390398bee180968a2cc7edc2e6e8f8e5be53
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Parent commit tree OID: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Current index tree OID: 22fc390398bee180968a2cc7edc2e6e8f8e5be53
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Parent commit tree OID: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
 Storing object of type: commit
 Serializing commit object, content size: 213 bytes
-Calculated OID: e878d7045d322481db3b4a839a14a95428e70648
-Object e878d7045d322481db3b4a839a14a95428e70648 doesn't exist, writing to database
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: e878d7045d322481db3b4a839a14a95428e70648
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Updated HEAD to e878d7045d322481db3b4a839a14a95428e70648
+Calculated OID: 252f19f3738e87e2de2aa28a75c2d811ae87b8b7
+Object 252f19f3738e87e2de2aa28a75c2d811ae87b8b7 doesn't exist, writing to database
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: 252f19f3738e87e2de2aa28a75c2d811ae87b8b7
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Updated HEAD to 252f19f3738e87e2de2aa28a75c2d811ae87b8b7
 Parsing tree object: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
 Tree parse: Found file entry: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9 (mode 100644)
 Tree parse: Found file entry: file2.txt -> 510f0a5c67260391a39e9649b47ac9e77d428264 (mode 100644)
@@ -560,43 +560,43 @@ Parsing tree object: 22fc390398bee180968a2cc7edc2e6e8f8e5be53
 Tree parse: Found file entry: file1.txt -> 074c3daf449107e2eb48885fc235a22796aa9711 (mode 100644)
 Tree parse: Found file entry: file2.txt -> 510f0a5c67260391a39e9649b47ac9e77d428264 (mode 100644)
 Tree parse: Found file entry: file3.txt -> 0625e276795ad8c80ed57e47d862dbe0afb9a393 (mode 100644)
-[e878d70] Commit C3 (0.00s)
+[252f19f] Commit C3 (0.00s)
 2 files changed
 [0;32m  CMD OK[0m
 [0;33m  CMD [in hard_reset_repo]: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow reset --hard [0m
-[2025-04-06T15:39:33Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:33Z INFO  AsheraFlow] Handling command: Reset { revision: "", paths: [], soft: false, mixed: false, hard: true }
-[2025-04-06T15:39:33Z INFO  AsheraFlow] Executing ResetCommand with revision: "", paths: []
+[2025-04-06T16:16:15Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Handling command: Reset { revision: "", paths: [], soft: false, mixed: false, hard: true }
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Executing ResetCommand with revision: "", paths: []
 Starting reset operation...
-Using first commit (C1): 91b41c45ebcdb442110f011734d3b65109c0bce8
-Hard resetting to commit 91b41c45
+Using first commit (C1): fab0ae7bd758d6a7fde850920dfdad06e012c29c
+Hard resetting to commit fab0ae7b
 Using tree from commit: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
-Current HEAD: Some("e878d7045d322481db3b4a839a14a95428e70648")
-Target commit: 91b41c45ebcdb442110f011734d3b65109c0bce8
+Current HEAD: Some("252f19f3738e87e2de2aa28a75c2d811ae87b8b7")
+Target commit: fab0ae7bd758d6a7fde850920dfdad06e012c29c
 Parsing tree object: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
 Tree parse: Found file entry: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9 (mode 100644)
 Writing file1.txt with C1 content
 Removing file2.txt (not in C1)
-  Attempting to remove file/dir at: /private/var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.lGNsjgvJaR/hard_reset_repo/file2.txt
+  Attempting to remove file/dir at: /private/var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.Tglg6MkXAO/hard_reset_repo/file2.txt
     Path is a file, calling std::fs::remove_file
     std::fs::remove_file succeeded for file.
-    Path confirmed removed or did not exist initially: /private/var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.lGNsjgvJaR/hard_reset_repo/file2.txt
+    Path confirmed removed or did not exist initially: /private/var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.Tglg6MkXAO/hard_reset_repo/file2.txt
 Removing file3.txt (not in C1)
-  Attempting to remove file/dir at: /private/var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.lGNsjgvJaR/hard_reset_repo/file3.txt
+  Attempting to remove file/dir at: /private/var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.Tglg6MkXAO/hard_reset_repo/file3.txt
     Path is a file, calling std::fs::remove_file
     std::fs::remove_file succeeded for file.
-    Path confirmed removed or did not exist initially: /private/var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.lGNsjgvJaR/hard_reset_repo/file3.txt
+    Path confirmed removed or did not exist initially: /private/var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.Tglg6MkXAO/hard_reset_repo/file3.txt
 Working directory and index updated successfully to C1 state
-[32mHEAD is now at[0m: 91b41c45 -> [33m91b41c45[0m
+[32mHEAD is now at[0m: fab0ae7b -> [33mfab0ae7b[0m
 Reset completed in 0.00s
 [0;32m  CMD OK[0m
 [0;33mTEST: Hard Reset: HEAD should be C1[0m
-[0;31mFAIL: Hard Reset: HEAD should be C1 - Expected HEAD OID '', but got '91b41c45ebcdb442110f011734d3b65109c0bce8'. HEAD content: 'ref: refs/heads/master' [0m
+[0;32mPASS: Hard Reset: HEAD should be C1 (HEAD is fab0ae7bd758d6a7fde850920dfdad06e012c29c)[0m
 [0;33mTEST: Hard Reset: Index should match new HEAD (C1)[0m
 [0;31mFAIL: Hard Reset: Index should match new HEAD (C1) - Expected index to match HEAD, but 'diff --cached' showed changes:[0m
-[2025-04-06T15:39:33Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:33Z INFO  AsheraFlow] Handling command: Diff { paths: [], cached: true }
-[2025-04-06T15:39:33Z INFO  AsheraFlow] Executing DiffCommand (cached: true, paths: [])
+[2025-04-06T16:16:15Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Handling command: Diff { paths: [], cached: true }
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Executing DiffCommand (cached: true, paths: [])
 Parsing tree object: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
 Tree parse: Found file entry: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9 (mode 100644)
 [0;33mTEST: Hard Reset: Working dir file1.txt should exist[0m
@@ -613,27 +613,27 @@ Tree parse: Found file entry: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a113
 [0;32mPASS: Hard Reset: Untracked file4 content should be preserved[0m
 
 [0;34m--- Test: Path Reset ---[0m
-[2025-04-06T15:39:33Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:33Z INFO  AsheraFlow] Handling command: Init { path: "." }
-[2025-04-06T15:39:33Z INFO  AsheraFlow] Executing InitCommand for path: '.'
-Initialized empty Ash repository in /private/var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.lGNsjgvJaR/path_reset_repo/.ash
-[0;34mInitialized repo in /var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.lGNsjgvJaR/path_reset_repo[0m
-[2025-04-06T15:39:33Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:33Z INFO  AsheraFlow] Handling command: Add { paths: ["file1.txt"] }
-[2025-04-06T15:39:33Z INFO  AsheraFlow] Executing AddCommand for paths: ["file1.txt"]
+[2025-04-06T16:16:15Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Handling command: Init { path: "." }
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Executing InitCommand for path: '.'
+Initialized empty Ash repository in /private/var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.Tglg6MkXAO/path_reset_repo/.ash
+[0;34mInitialized repo in /var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.Tglg6MkXAO/path_reset_repo[0m
+[2025-04-06T16:16:15Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Handling command: Add { paths: ["file1.txt"] }
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Executing AddCommand for paths: ["file1.txt"]
 Storing object of type: blob
 Serializing blob object, content size: 11 bytes
 Calculated OID: 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9
 Object 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9 doesn't exist, writing to database
 1 new file added to index (0.00s)
-[2025-04-06T15:39:33Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:33Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C1" }
-[2025-04-06T15:39:33Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C1'
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Starting commit execution
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Loading index
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Index loaded successfully
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Reading HEAD
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] HEAD read successfully: None
+[2025-04-06T16:16:15Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C1" }
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C1'
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Reading HEAD
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] HEAD read successfully: None
 Processing entry: file1.txt
 Added top-level file: file1.txt
 Final tree structure:
@@ -645,26 +645,26 @@ Serializing tree object, content size: 37 bytes
 Calculated OID: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
 Object 8510ca5200643cdbd8d5d863d2b81db93c6dd409 doesn't exist, writing to database
 Tree has OID 8510ca5200643cdbd8d5d863d2b81db93c6dd409 after processing
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Current index tree OID: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Root commit with entries detected.
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Current index tree OID: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Root commit with entries detected.
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
 Storing object of type: commit
 Serializing commit object, content size: 165 bytes
-Calculated OID: 3dabf1d843c3bf0d73c0639bf167e8d35d97de51
-Object 3dabf1d843c3bf0d73c0639bf167e8d35d97de51 doesn't exist, writing to database
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: 3dabf1d843c3bf0d73c0639bf167e8d35d97de51
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Updated HEAD to 3dabf1d843c3bf0d73c0639bf167e8d35d97de51
-[(root-commit) 3dabf1d] Commit C1 (0.00s)
+Calculated OID: fab0ae7bd758d6a7fde850920dfdad06e012c29c
+Object fab0ae7bd758d6a7fde850920dfdad06e012c29c doesn't exist, writing to database
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: fab0ae7bd758d6a7fde850920dfdad06e012c29c
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Updated HEAD to fab0ae7bd758d6a7fde850920dfdad06e012c29c
+[(root-commit) fab0ae7] Commit C1 (0.00s)
 1 file changed
   Commit on 'master': 'Commit C1' (file1.txt)
-[2025-04-06T15:39:33Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:33Z INFO  AsheraFlow] Handling command: Add { paths: ["file2.txt"] }
-[2025-04-06T15:39:33Z INFO  AsheraFlow] Executing AddCommand for paths: ["file2.txt"]
+[2025-04-06T16:16:15Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Handling command: Add { paths: ["file2.txt"] }
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Executing AddCommand for paths: ["file2.txt"]
 Storing object of type: blob
 Serializing blob object, content size: 11 bytes
 Calculated OID: 510f0a5c67260391a39e9649b47ac9e77d428264
 Object 510f0a5c67260391a39e9649b47ac9e77d428264 doesn't exist, writing to database
-Examining HEAD commit: 3dabf1d843c3bf0d73c0639bf167e8d35d97de51
+Examining HEAD commit: fab0ae7bd758d6a7fde850920dfdad06e012c29c
 Root tree OID: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
 Traversing tree: 8510ca5200643cdbd8d5d863d2b81db93c6dd409 at path: 
 Parsing tree object: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
@@ -672,77 +672,77 @@ Tree parse: Found file entry: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a113
 Found file: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9
 Found 1 files in HEAD
 1 new file added to index (0.00s)
-[2025-04-06T15:39:33Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:33Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C2" }
-[2025-04-06T15:39:33Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C2'
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Starting commit execution
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Loading index
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Index loaded successfully
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Reading HEAD
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] HEAD read successfully: Some("3dabf1d843c3bf0d73c0639bf167e8d35d97de51")
+[2025-04-06T16:16:15Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C2" }
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C2'
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Reading HEAD
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] HEAD read successfully: Some("fab0ae7bd758d6a7fde850920dfdad06e012c29c")
 Processing entry: file1.txt
 Added top-level file: file1.txt
 Processing entry: file2.txt
 Added top-level file: file2.txt
 Final tree structure:
   Tree Structure:
-  file2.txt (blob, mode 100644) -> 510f0a5c67260391a39e9649b47ac9e77d428264
   file1.txt (blob, mode 100644) -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9
+  file2.txt (blob, mode 100644) -> 510f0a5c67260391a39e9649b47ac9e77d428264
 Processing tree with 2 entries
 Storing object of type: tree
 Serializing tree object, content size: 74 bytes
 Calculated OID: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
 Object ed5cc024b281c00d3756c8b9faab4ccb32711aa3 doesn't exist, writing to database
 Tree has OID ed5cc024b281c00d3756c8b9faab4ccb32711aa3 after processing
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Current index tree OID: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Parent commit tree OID: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Current index tree OID: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Parent commit tree OID: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
 Storing object of type: commit
 Serializing commit object, content size: 213 bytes
-Calculated OID: d84783f44703bcade3a9b9e0ff1d43ae8273b958
-Object d84783f44703bcade3a9b9e0ff1d43ae8273b958 doesn't exist, writing to database
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: d84783f44703bcade3a9b9e0ff1d43ae8273b958
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Updated HEAD to d84783f44703bcade3a9b9e0ff1d43ae8273b958
+Calculated OID: 27354f264197f283841c4131d92c54ff794ec37c
+Object 27354f264197f283841c4131d92c54ff794ec37c doesn't exist, writing to database
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: 27354f264197f283841c4131d92c54ff794ec37c
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Updated HEAD to 27354f264197f283841c4131d92c54ff794ec37c
 Parsing tree object: 8510ca5200643cdbd8d5d863d2b81db93c6dd409
 Tree parse: Found file entry: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9 (mode 100644)
 Parsing tree object: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
 Tree parse: Found file entry: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9 (mode 100644)
 Tree parse: Found file entry: file2.txt -> 510f0a5c67260391a39e9649b47ac9e77d428264 (mode 100644)
-[d84783f] Commit C2 (0.00s)
+[27354f2] Commit C2 (0.00s)
 1 file changed
   Commit on 'master': 'Commit C2' (file2.txt)
 [0;33m  CMD [in path_reset_repo]: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow add file1.txt file3.txt[0m
-[2025-04-06T15:39:33Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:33Z INFO  AsheraFlow] Handling command: Add { paths: ["file1.txt", "file3.txt"] }
-[2025-04-06T15:39:33Z INFO  AsheraFlow] Executing AddCommand for paths: ["file1.txt", "file3.txt"]
-Storing object of type: blob
-Serializing blob object, content size: 18 bytes
-Calculated OID: 074c3daf449107e2eb48885fc235a22796aa9711
-Object 074c3daf449107e2eb48885fc235a22796aa9711 doesn't exist, writing to database
+[2025-04-06T16:16:15Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Handling command: Add { paths: ["file1.txt", "file3.txt"] }
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Executing AddCommand for paths: ["file1.txt", "file3.txt"]
 Storing object of type: blob
 Serializing blob object, content size: 13 bytes
 Calculated OID: 0625e276795ad8c80ed57e47d862dbe0afb9a393
 Object 0625e276795ad8c80ed57e47d862dbe0afb9a393 doesn't exist, writing to database
-Examining HEAD commit: d84783f44703bcade3a9b9e0ff1d43ae8273b958
+Storing object of type: blob
+Serializing blob object, content size: 18 bytes
+Calculated OID: 074c3daf449107e2eb48885fc235a22796aa9711
+Object 074c3daf449107e2eb48885fc235a22796aa9711 doesn't exist, writing to database
+Examining HEAD commit: 27354f264197f283841c4131d92c54ff794ec37c
 Root tree OID: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
 Traversing tree: ed5cc024b281c00d3756c8b9faab4ccb32711aa3 at path: 
 Parsing tree object: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
 Tree parse: Found file entry: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9 (mode 100644)
 Tree parse: Found file entry: file2.txt -> 510f0a5c67260391a39e9649b47ac9e77d428264 (mode 100644)
-Found file: file2.txt -> 510f0a5c67260391a39e9649b47ac9e77d428264
 Found file: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9
+Found file: file2.txt -> 510f0a5c67260391a39e9649b47ac9e77d428264
 Found 2 files in HEAD
 1 new file and 1 modified file added to index (0.00s)
 [0;32m  CMD OK[0m
 [0;33m  CMD [in path_reset_repo]: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow commit -m Commit C3[0m
-[2025-04-06T15:39:33Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:33Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C3" }
-[2025-04-06T15:39:33Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C3'
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Starting commit execution
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Loading index
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Index loaded successfully
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Reading HEAD
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] HEAD read successfully: Some("d84783f44703bcade3a9b9e0ff1d43ae8273b958")
+[2025-04-06T16:16:15Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C3" }
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C3'
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Reading HEAD
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] HEAD read successfully: Some("27354f264197f283841c4131d92c54ff794ec37c")
 Processing entry: file1.txt
 Added top-level file: file1.txt
 Processing entry: file2.txt
@@ -751,24 +751,24 @@ Processing entry: file3.txt
 Added top-level file: file3.txt
 Final tree structure:
   Tree Structure:
-  file2.txt (blob, mode 100644) -> 510f0a5c67260391a39e9649b47ac9e77d428264
-  file3.txt (blob, mode 100644) -> 0625e276795ad8c80ed57e47d862dbe0afb9a393
   file1.txt (blob, mode 100644) -> 074c3daf449107e2eb48885fc235a22796aa9711
+  file3.txt (blob, mode 100644) -> 0625e276795ad8c80ed57e47d862dbe0afb9a393
+  file2.txt (blob, mode 100644) -> 510f0a5c67260391a39e9649b47ac9e77d428264
 Processing tree with 3 entries
 Storing object of type: tree
 Serializing tree object, content size: 111 bytes
 Calculated OID: 22fc390398bee180968a2cc7edc2e6e8f8e5be53
 Object 22fc390398bee180968a2cc7edc2e6e8f8e5be53 doesn't exist, writing to database
 Tree has OID 22fc390398bee180968a2cc7edc2e6e8f8e5be53 after processing
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Current index tree OID: 22fc390398bee180968a2cc7edc2e6e8f8e5be53
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Parent commit tree OID: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Current index tree OID: 22fc390398bee180968a2cc7edc2e6e8f8e5be53
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Parent commit tree OID: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
 Storing object of type: commit
 Serializing commit object, content size: 213 bytes
-Calculated OID: fc0b2b8ee2b2b8475f4f120f89f177cc3c93e6d9
-Object fc0b2b8ee2b2b8475f4f120f89f177cc3c93e6d9 doesn't exist, writing to database
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: fc0b2b8ee2b2b8475f4f120f89f177cc3c93e6d9
-[2025-04-06T15:39:33Z INFO  AsheraFlow::commands::commit] Updated HEAD to fc0b2b8ee2b2b8475f4f120f89f177cc3c93e6d9
+Calculated OID: 252f19f3738e87e2de2aa28a75c2d811ae87b8b7
+Object 252f19f3738e87e2de2aa28a75c2d811ae87b8b7 doesn't exist, writing to database
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: 252f19f3738e87e2de2aa28a75c2d811ae87b8b7
+[2025-04-06T16:16:15Z INFO  AsheraFlow::commands::commit] Updated HEAD to 252f19f3738e87e2de2aa28a75c2d811ae87b8b7
 Parsing tree object: ed5cc024b281c00d3756c8b9faab4ccb32711aa3
 Tree parse: Found file entry: file1.txt -> 8f8c8bbccf6fe480e22ea4a4e1a6317d1a1133d9 (mode 100644)
 Tree parse: Found file entry: file2.txt -> 510f0a5c67260391a39e9649b47ac9e77d428264 (mode 100644)
@@ -776,15 +776,15 @@ Parsing tree object: 22fc390398bee180968a2cc7edc2e6e8f8e5be53
 Tree parse: Found file entry: file1.txt -> 074c3daf449107e2eb48885fc235a22796aa9711 (mode 100644)
 Tree parse: Found file entry: file2.txt -> 510f0a5c67260391a39e9649b47ac9e77d428264 (mode 100644)
 Tree parse: Found file entry: file3.txt -> 0625e276795ad8c80ed57e47d862dbe0afb9a393 (mode 100644)
-[fc0b2b8] Commit C3 (0.00s)
+[252f19f] Commit C3 (0.00s)
 2 files changed
 [0;32m  CMD OK[0m
 [0;33m  CMD [in path_reset_repo]: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow reset  -- file1.txt[0m
-[2025-04-06T15:39:33Z INFO  AsheraFlow] AsheraFlow application starting...
-[2025-04-06T15:39:33Z INFO  AsheraFlow] Handling command: Reset { revision: "", paths: ["file1.txt"], soft: false, mixed: true, hard: false }
-[2025-04-06T15:39:33Z INFO  AsheraFlow] Executing ResetCommand with revision: "", paths: ["file1.txt"]
+[2025-04-06T16:16:15Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Handling command: Reset { revision: "", paths: ["file1.txt"], soft: false, mixed: true, hard: false }
+[2025-04-06T16:16:15Z INFO  AsheraFlow] Executing ResetCommand with revision: "", paths: ["file1.txt"]
 Starting reset operation...
-Resetting 1 paths in index to commit fc0b2b8e
+Resetting 1 paths in index to commit 252f19f3
 Parsing tree object: 22fc390398bee180968a2cc7edc2e6e8f8e5be53
 Tree parse: Found file entry: file1.txt -> 074c3daf449107e2eb48885fc235a22796aa9711 (mode 100644)
 Tree parse: Found file entry: file2.txt -> 510f0a5c67260391a39e9649b47ac9e77d428264 (mode 100644)
@@ -793,7 +793,7 @@ Adding to index: file1.txt/file1.txt
 Reset completed in 0.00s
 [0;32m  CMD OK[0m
 [0;33mTEST: Path Reset: HEAD should still be C3[0m
-[0;31mFAIL: Path Reset: HEAD should still be C3 - Expected HEAD OID '', but got 'fc0b2b8ee2b2b8475f4f120f89f177cc3c93e6d9'. HEAD content: 'ref: refs/heads/master' [0m
+[0;32mPASS: Path Reset: HEAD should still be C3 (HEAD is 252f19f3738e87e2de2aa28a75c2d811ae87b8b7)[0m
 [0;33mTEST: Path Reset: Index should differ from HEAD (C3) because file1 was reset[0m
 [0;32mPASS: Path Reset: Index should differ from HEAD (C3) because file1 was reset (Index differs from HEAD as expected)[0m
 [0;33mTEST: Path Reset: Working dir file1.txt should exist[0m
@@ -808,6 +808,6 @@ Reset completed in 0.00s
 [0;32mPASS: Path Reset: Working dir file3.txt should contain C3 content[0m
 
 [0;34m--- Test Summary ---[0m
-[0;32mTests Passed: 24[0m
-[0;31mTests Failed: 6[0m
-Cleaned up temporary directory: /var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.lGNsjgvJaR
+[0;32mTests Passed: 28[0m
+[0;31mTests Failed: 2[0m
+Cleaned up temporary directory: /var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.Tglg6MkXAO
