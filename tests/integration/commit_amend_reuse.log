@@ -1,0 +1,830 @@
+Using ASH executable: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow
+Using temporary test container: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/tests/integration/ash_commit_tests_GBTIn9
+Logging detailed output to: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/tests/integration/commit_amend_reuse.log
+Running all commit amend tests...
+==================================
+
+[0;34m--- Test: Testing basic commit amend functionality ---[0m
+[0;32mTest environment ready: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/tests/integration/ash_commit_tests_GBTIn9/testingbasiccommitamendfunctionality_repo[0m
+[1;33mRUNNING [in repo]: add fileA.txt[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow add fileA.txt
+[2025-04-07T21:56:31Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Handling command: Add { paths: ["fileA.txt"] }
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Executing AddCommand for paths: ["fileA.txt"]
+Storing object of type: blob
+Serializing blob object, content size: 10 bytes
+Calculated OID: 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Object 709d8ef4eb8dbf93913a1ef341e30819244858bb doesn't exist, writing to database
+1 new file added to index (0.00s)
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+[1;33mRUNNING [in repo]: commit -m "Commit A message"[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow commit -m Commit A message
+[2025-04-07T21:56:31Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Handling command: Commit { message: "Commit A message" }
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit A message'
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Reading HEAD
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] HEAD read successfully: None
+Processing entry: fileA.txt
+Added top-level file: fileA.txt
+Final tree structure:
+  Tree Structure:
+  fileA.txt (blob, mode 100644) -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Processing tree with 1 entries
+Storing object of type: tree
+Serializing tree object, content size: 37 bytes
+Calculated OID: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Object 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 doesn't exist, writing to database
+Tree has OID 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 after processing
+Processing entry: fileA.txt
+Added top-level file: fileA.txt
+Final tree structure:
+  Tree Structure:
+  fileA.txt (blob, mode 100644) -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Processing tree with 1 entries
+Storing object of type: tree
+Serializing tree object, content size: 37 bytes
+Calculated OID: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Object 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 already exists in database
+Tree has OID 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 after processing
+Storing object of type: commit
+Serializing commit object, content size: 181 bytes
+Calculated OID: dc7adaf12527f7d3190b0f7cfc90b12844de05f7
+Object dc7adaf12527f7d3190b0f7cfc90b12844de05f7 doesn't exist, writing to database
+[[32mmaster (root-commit) dc7adaf[0m] Commit A message
+Parsing tree object: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Tree parse: Found file entry: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb (mode 100644)
+1 file changed (0.00s)
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+Created commit with message: Commit A message
+Warning: Could not get OID for 'HEAD', using fallback...
+[1;33mRUNNING [in repo]: add fileB.txt[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow add fileB.txt
+[2025-04-07T21:56:31Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Handling command: Add { paths: ["fileB.txt"] }
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Executing AddCommand for paths: ["fileB.txt"]
+Storing object of type: blob
+Serializing blob object, content size: 10 bytes
+Calculated OID: 781e9f8966fdb226e5be848e1a1b3b89e4564c42
+Object 781e9f8966fdb226e5be848e1a1b3b89e4564c42 doesn't exist, writing to database
+Examining HEAD commit: dc7adaf12527f7d3190b0f7cfc90b12844de05f7
+Root tree OID: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Traversing tree: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 at path: 
+Parsing tree object: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Tree parse: Found file entry: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb (mode 100644)
+Found file: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Found 1 files in HEAD
+1 new file added to index (0.00s)
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+[1;33mRUNNING [in repo]: commit -m "Commit B message"[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow commit -m Commit B message
+[2025-04-07T21:56:31Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Handling command: Commit { message: "Commit B message" }
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit B message'
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Reading HEAD
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] HEAD read successfully: Some("dc7adaf12527f7d3190b0f7cfc90b12844de05f7")
+Processing entry: fileA.txt
+Added top-level file: fileA.txt
+Processing entry: fileB.txt
+Added top-level file: fileB.txt
+Final tree structure:
+  Tree Structure:
+  fileA.txt (blob, mode 100644) -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+  fileB.txt (blob, mode 100644) -> 781e9f8966fdb226e5be848e1a1b3b89e4564c42
+Processing tree with 2 entries
+Storing object of type: tree
+Serializing tree object, content size: 74 bytes
+Calculated OID: 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263
+Object 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263 doesn't exist, writing to database
+Tree has OID 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263 after processing
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Parent commit tree OID: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Processing entry: fileA.txt
+Added top-level file: fileA.txt
+Processing entry: fileB.txt
+Added top-level file: fileB.txt
+Final tree structure:
+  Tree Structure:
+  fileA.txt (blob, mode 100644) -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+  fileB.txt (blob, mode 100644) -> 781e9f8966fdb226e5be848e1a1b3b89e4564c42
+Processing tree with 2 entries
+Storing object of type: tree
+Serializing tree object, content size: 74 bytes
+Calculated OID: 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263
+Object 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263 already exists in database
+Tree has OID 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263 after processing
+Storing object of type: commit
+Serializing commit object, content size: 229 bytes
+Calculated OID: 31908545f1c2154dfe3de61dddbae7ef7630fc91
+Object 31908545f1c2154dfe3de61dddbae7ef7630fc91 doesn't exist, writing to database
+[[32mmaster 3190854[0m] Commit B message
+Parsing tree object: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Tree parse: Found file entry: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb (mode 100644)
+Parsing tree object: 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263
+Tree parse: Found file entry: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb (mode 100644)
+Tree parse: Found file entry: fileB.txt -> 781e9f8966fdb226e5be848e1a1b3b89e4564c42 (mode 100644)
+1 file changed (0.00s)
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+Created commit with message: Commit B message
+Warning: Could not get OID for 'HEAD', using fallback...
+[1;33mRUNNING [in repo]: add fileC.txt[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow add fileC.txt
+[2025-04-07T21:56:31Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Handling command: Add { paths: ["fileC.txt"] }
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Executing AddCommand for paths: ["fileC.txt"]
+Storing object of type: blob
+Serializing blob object, content size: 10 bytes
+Calculated OID: f879ee88702525240d15d7e1ef900b45a7be3597
+Object f879ee88702525240d15d7e1ef900b45a7be3597 doesn't exist, writing to database
+Examining HEAD commit: 31908545f1c2154dfe3de61dddbae7ef7630fc91
+Root tree OID: 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263
+Traversing tree: 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263 at path: 
+Parsing tree object: 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263
+Tree parse: Found file entry: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb (mode 100644)
+Tree parse: Found file entry: fileB.txt -> 781e9f8966fdb226e5be848e1a1b3b89e4564c42 (mode 100644)
+Found file: fileB.txt -> 781e9f8966fdb226e5be848e1a1b3b89e4564c42
+Found file: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Found 2 files in HEAD
+1 new file added to index (0.00s)
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+[1;33mRUNNING [in repo]: commit --amend -m "Amended: Commit B message"[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow commit --amend -m Amended: Commit B message
+[2025-04-07T21:56:31Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Handling command: Commit { message: "Amended: Commit B message" }
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Executing CommitCommand with message: 'Amended: Commit B message'
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Amending the previous commit
+Processing entry: fileA.txt
+Added top-level file: fileA.txt
+Processing entry: fileB.txt
+Added top-level file: fileB.txt
+Processing entry: fileC.txt
+Added top-level file: fileC.txt
+Final tree structure:
+  Tree Structure:
+  fileA.txt (blob, mode 100644) -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+  fileB.txt (blob, mode 100644) -> 781e9f8966fdb226e5be848e1a1b3b89e4564c42
+  fileC.txt (blob, mode 100644) -> f879ee88702525240d15d7e1ef900b45a7be3597
+Processing tree with 3 entries
+Storing object of type: tree
+Serializing tree object, content size: 111 bytes
+Calculated OID: 119277d1b6ecd719f6948ceffd124d4f3641dabc
+Object 119277d1b6ecd719f6948ceffd124d4f3641dabc doesn't exist, writing to database
+Tree has OID 119277d1b6ecd719f6948ceffd124d4f3641dabc after processing
+Storing object of type: commit
+Serializing commit object, content size: 228 bytes
+Calculated OID: 405273908c1acab1b7fac46eee6948aa20589b04
+Object 405273908c1acab1b7fac46eee6948aa20589b04 doesn't exist, writing to database
+[[32mmaster 4052739[0m] Commit B message
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+Warning: Could not get OID for 'HEAD', using fallback...
+[1;33mSKIP: Log contains amended message - Log verification skipped due to log command limitations[0m
+[0;32mPASS: Amended commit (B') has different OID than original commit (B)[0m
+[0;32mTest completed.[0m
+
+[0;34m--- Test: Testing commit amend without actual changes ---[0m
+[0;32mTest environment ready: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/tests/integration/ash_commit_tests_GBTIn9/testingcommitamendwithoutactualchanges_repo[0m
+[1;33mRUNNING [in repo]: add fileA.txt[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow add fileA.txt
+[2025-04-07T21:56:31Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Handling command: Add { paths: ["fileA.txt"] }
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Executing AddCommand for paths: ["fileA.txt"]
+Storing object of type: blob
+Serializing blob object, content size: 10 bytes
+Calculated OID: 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Object 709d8ef4eb8dbf93913a1ef341e30819244858bb doesn't exist, writing to database
+1 new file added to index (0.00s)
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+[1;33mRUNNING [in repo]: commit -m "Commit A message"[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow commit -m Commit A message
+[2025-04-07T21:56:31Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Handling command: Commit { message: "Commit A message" }
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit A message'
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Reading HEAD
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] HEAD read successfully: None
+Processing entry: fileA.txt
+Added top-level file: fileA.txt
+Final tree structure:
+  Tree Structure:
+  fileA.txt (blob, mode 100644) -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Processing tree with 1 entries
+Storing object of type: tree
+Serializing tree object, content size: 37 bytes
+Calculated OID: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Object 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 doesn't exist, writing to database
+Tree has OID 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 after processing
+Processing entry: fileA.txt
+Added top-level file: fileA.txt
+Final tree structure:
+  Tree Structure:
+  fileA.txt (blob, mode 100644) -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Processing tree with 1 entries
+Storing object of type: tree
+Serializing tree object, content size: 37 bytes
+Calculated OID: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Object 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 already exists in database
+Tree has OID 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 after processing
+Storing object of type: commit
+Serializing commit object, content size: 181 bytes
+Calculated OID: dc7adaf12527f7d3190b0f7cfc90b12844de05f7
+Object dc7adaf12527f7d3190b0f7cfc90b12844de05f7 doesn't exist, writing to database
+[[32mmaster (root-commit) dc7adaf[0m] Commit A message
+Parsing tree object: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Tree parse: Found file entry: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb (mode 100644)
+1 file changed (0.00s)
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+Created commit with message: Commit A message
+[1;33mRUNNING [in repo]: add fileB.txt[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow add fileB.txt
+[2025-04-07T21:56:31Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Handling command: Add { paths: ["fileB.txt"] }
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Executing AddCommand for paths: ["fileB.txt"]
+Storing object of type: blob
+Serializing blob object, content size: 10 bytes
+Calculated OID: 781e9f8966fdb226e5be848e1a1b3b89e4564c42
+Object 781e9f8966fdb226e5be848e1a1b3b89e4564c42 doesn't exist, writing to database
+Examining HEAD commit: dc7adaf12527f7d3190b0f7cfc90b12844de05f7
+Root tree OID: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Traversing tree: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 at path: 
+Parsing tree object: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Tree parse: Found file entry: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb (mode 100644)
+Found file: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Found 1 files in HEAD
+1 new file added to index (0.00s)
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+[1;33mRUNNING [in repo]: commit -m "Commit B message"[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow commit -m Commit B message
+[2025-04-07T21:56:31Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Handling command: Commit { message: "Commit B message" }
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit B message'
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Reading HEAD
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] HEAD read successfully: Some("dc7adaf12527f7d3190b0f7cfc90b12844de05f7")
+Processing entry: fileA.txt
+Added top-level file: fileA.txt
+Processing entry: fileB.txt
+Added top-level file: fileB.txt
+Final tree structure:
+  Tree Structure:
+  fileB.txt (blob, mode 100644) -> 781e9f8966fdb226e5be848e1a1b3b89e4564c42
+  fileA.txt (blob, mode 100644) -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Processing tree with 2 entries
+Storing object of type: tree
+Serializing tree object, content size: 74 bytes
+Calculated OID: 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263
+Object 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263 doesn't exist, writing to database
+Tree has OID 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263 after processing
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Parent commit tree OID: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Processing entry: fileA.txt
+Added top-level file: fileA.txt
+Processing entry: fileB.txt
+Added top-level file: fileB.txt
+Final tree structure:
+  Tree Structure:
+  fileA.txt (blob, mode 100644) -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+  fileB.txt (blob, mode 100644) -> 781e9f8966fdb226e5be848e1a1b3b89e4564c42
+Processing tree with 2 entries
+Storing object of type: tree
+Serializing tree object, content size: 74 bytes
+Calculated OID: 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263
+Object 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263 already exists in database
+Tree has OID 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263 after processing
+Storing object of type: commit
+Serializing commit object, content size: 229 bytes
+Calculated OID: 31908545f1c2154dfe3de61dddbae7ef7630fc91
+Object 31908545f1c2154dfe3de61dddbae7ef7630fc91 doesn't exist, writing to database
+[[32mmaster 3190854[0m] Commit B message
+Parsing tree object: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Tree parse: Found file entry: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb (mode 100644)
+Parsing tree object: 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263
+Tree parse: Found file entry: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb (mode 100644)
+Tree parse: Found file entry: fileB.txt -> 781e9f8966fdb226e5be848e1a1b3b89e4564c42 (mode 100644)
+1 file changed (0.00s)
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+Created commit with message: Commit B message
+Warning: Could not get OID for 'HEAD', using fallback...
+[1;33mRUNNING [in repo]: commit --amend -m "Just amended message: Commit B"[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow commit --amend -m Just amended message: Commit B
+[2025-04-07T21:56:31Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Handling command: Commit { message: "Just amended message: Commit B" }
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Executing CommitCommand with message: 'Just amended message: Commit B'
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Amending the previous commit
+Processing entry: fileA.txt
+Added top-level file: fileA.txt
+Processing entry: fileB.txt
+Added top-level file: fileB.txt
+Final tree structure:
+  Tree Structure:
+  fileB.txt (blob, mode 100644) -> 781e9f8966fdb226e5be848e1a1b3b89e4564c42
+  fileA.txt (blob, mode 100644) -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Processing tree with 2 entries
+Storing object of type: tree
+Serializing tree object, content size: 74 bytes
+Calculated OID: 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263
+Object 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263 already exists in database
+Tree has OID 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263 after processing
+Storing object of type: commit
+Serializing commit object, content size: 228 bytes
+Calculated OID: 17485ea38405f14a184717433a2b12165d6ed802
+Object 17485ea38405f14a184717433a2b12165d6ed802 doesn't exist, writing to database
+[[32mmaster 17485ea[0m] Commit B message
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+Warning: Could not get OID for 'HEAD', using fallback...
+[1;33mSKIP: Log contains just amended message - Log verification skipped due to log command limitations[0m
+[0;32mPASS: Amended commit (B') has different OID than original commit (B)[0m
+[0;32mTest completed.[0m
+
+[0;34m--- Test: Testing commit amend reusing message ---[0m
+[0;32mTest environment ready: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/tests/integration/ash_commit_tests_GBTIn9/testingcommitamendreusingmessage_repo[0m
+[1;33mRUNNING [in repo]: add fileA.txt[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow add fileA.txt
+[2025-04-07T21:56:31Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Handling command: Add { paths: ["fileA.txt"] }
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Executing AddCommand for paths: ["fileA.txt"]
+Storing object of type: blob
+Serializing blob object, content size: 10 bytes
+Calculated OID: 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Object 709d8ef4eb8dbf93913a1ef341e30819244858bb doesn't exist, writing to database
+1 new file added to index (0.00s)
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+[1;33mRUNNING [in repo]: commit -m "Commit A message"[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow commit -m Commit A message
+[2025-04-07T21:56:31Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Handling command: Commit { message: "Commit A message" }
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit A message'
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Reading HEAD
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] HEAD read successfully: None
+Processing entry: fileA.txt
+Added top-level file: fileA.txt
+Final tree structure:
+  Tree Structure:
+  fileA.txt (blob, mode 100644) -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Processing tree with 1 entries
+Storing object of type: tree
+Serializing tree object, content size: 37 bytes
+Calculated OID: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Object 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 doesn't exist, writing to database
+Tree has OID 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 after processing
+Processing entry: fileA.txt
+Added top-level file: fileA.txt
+Final tree structure:
+  Tree Structure:
+  fileA.txt (blob, mode 100644) -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Processing tree with 1 entries
+Storing object of type: tree
+Serializing tree object, content size: 37 bytes
+Calculated OID: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Object 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 already exists in database
+Tree has OID 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 after processing
+Storing object of type: commit
+Serializing commit object, content size: 181 bytes
+Calculated OID: dc7adaf12527f7d3190b0f7cfc90b12844de05f7
+Object dc7adaf12527f7d3190b0f7cfc90b12844de05f7 doesn't exist, writing to database
+[[32mmaster (root-commit) dc7adaf[0m] Commit A message
+Parsing tree object: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Tree parse: Found file entry: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb (mode 100644)
+1 file changed (0.00s)
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+Created commit with message: Commit A message
+[1;33mRUNNING [in repo]: add fileB.txt[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow add fileB.txt
+[2025-04-07T21:56:31Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Handling command: Add { paths: ["fileB.txt"] }
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Executing AddCommand for paths: ["fileB.txt"]
+Storing object of type: blob
+Serializing blob object, content size: 10 bytes
+Calculated OID: 781e9f8966fdb226e5be848e1a1b3b89e4564c42
+Object 781e9f8966fdb226e5be848e1a1b3b89e4564c42 doesn't exist, writing to database
+Examining HEAD commit: dc7adaf12527f7d3190b0f7cfc90b12844de05f7
+Root tree OID: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Traversing tree: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 at path: 
+Parsing tree object: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Tree parse: Found file entry: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb (mode 100644)
+Found file: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Found 1 files in HEAD
+1 new file added to index (0.00s)
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+[1;33mRUNNING [in repo]: commit -m "Original: Commit B message"[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow commit -m Original: Commit B message
+[2025-04-07T21:56:31Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Handling command: Commit { message: "Original: Commit B message" }
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Executing CommitCommand with message: 'Original: Commit B message'
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Reading HEAD
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] HEAD read successfully: Some("dc7adaf12527f7d3190b0f7cfc90b12844de05f7")
+Processing entry: fileA.txt
+Added top-level file: fileA.txt
+Processing entry: fileB.txt
+Added top-level file: fileB.txt
+Final tree structure:
+  Tree Structure:
+  fileA.txt (blob, mode 100644) -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+  fileB.txt (blob, mode 100644) -> 781e9f8966fdb226e5be848e1a1b3b89e4564c42
+Processing tree with 2 entries
+Storing object of type: tree
+Serializing tree object, content size: 74 bytes
+Calculated OID: 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263
+Object 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263 doesn't exist, writing to database
+Tree has OID 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263 after processing
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Parent commit tree OID: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Processing entry: fileA.txt
+Added top-level file: fileA.txt
+Processing entry: fileB.txt
+Added top-level file: fileB.txt
+Final tree structure:
+  Tree Structure:
+  fileA.txt (blob, mode 100644) -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+  fileB.txt (blob, mode 100644) -> 781e9f8966fdb226e5be848e1a1b3b89e4564c42
+Processing tree with 2 entries
+Storing object of type: tree
+Serializing tree object, content size: 74 bytes
+Calculated OID: 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263
+Object 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263 already exists in database
+Tree has OID 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263 after processing
+Storing object of type: commit
+Serializing commit object, content size: 239 bytes
+Calculated OID: 9175f5e595680045c4e693ba179d209ee5ca6f9c
+Object 9175f5e595680045c4e693ba179d209ee5ca6f9c doesn't exist, writing to database
+[[32mmaster 9175f5e[0m] Original: Commit B message
+Parsing tree object: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Tree parse: Found file entry: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb (mode 100644)
+Parsing tree object: 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263
+Tree parse: Found file entry: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb (mode 100644)
+Tree parse: Found file entry: fileB.txt -> 781e9f8966fdb226e5be848e1a1b3b89e4564c42 (mode 100644)
+1 file changed (0.00s)
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+Created commit with message: Original: Commit B message
+Warning: Could not get OID for 'HEAD', using fallback...
+[1;33mRUNNING [in repo]: add fileC.txt[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow add fileC.txt
+[2025-04-07T21:56:31Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Handling command: Add { paths: ["fileC.txt"] }
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Executing AddCommand for paths: ["fileC.txt"]
+Storing object of type: blob
+Serializing blob object, content size: 10 bytes
+Calculated OID: f879ee88702525240d15d7e1ef900b45a7be3597
+Object f879ee88702525240d15d7e1ef900b45a7be3597 doesn't exist, writing to database
+Examining HEAD commit: 9175f5e595680045c4e693ba179d209ee5ca6f9c
+Root tree OID: 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263
+Traversing tree: 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263 at path: 
+Parsing tree object: 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263
+Tree parse: Found file entry: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb (mode 100644)
+Tree parse: Found file entry: fileB.txt -> 781e9f8966fdb226e5be848e1a1b3b89e4564c42 (mode 100644)
+Found file: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Found file: fileB.txt -> 781e9f8966fdb226e5be848e1a1b3b89e4564c42
+Found 2 files in HEAD
+1 new file added to index (0.00s)
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+[1;33mRUNNING [in repo]: commit --amend --reuse-message=HEAD[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow commit --amend --reuse-message=HEAD
+[2025-04-07T21:56:31Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Handling command: Commit { message: "" }
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Executing CommitCommand with message: ''
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Amending the previous commit
+Processing entry: fileA.txt
+Added top-level file: fileA.txt
+Processing entry: fileB.txt
+Added top-level file: fileB.txt
+Processing entry: fileC.txt
+Added top-level file: fileC.txt
+Final tree structure:
+  Tree Structure:
+  fileB.txt (blob, mode 100644) -> 781e9f8966fdb226e5be848e1a1b3b89e4564c42
+  fileC.txt (blob, mode 100644) -> f879ee88702525240d15d7e1ef900b45a7be3597
+  fileA.txt (blob, mode 100644) -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Processing tree with 3 entries
+Storing object of type: tree
+Serializing tree object, content size: 111 bytes
+Calculated OID: 119277d1b6ecd719f6948ceffd124d4f3641dabc
+Object 119277d1b6ecd719f6948ceffd124d4f3641dabc doesn't exist, writing to database
+Tree has OID 119277d1b6ecd719f6948ceffd124d4f3641dabc after processing
+Storing object of type: commit
+Serializing commit object, content size: 238 bytes
+Calculated OID: de4d271afec83e3c635beed4d20565b6edf240e9
+Object de4d271afec83e3c635beed4d20565b6edf240e9 doesn't exist, writing to database
+[[32mmaster de4d271[0m] Original: Commit B message
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+Warning: Could not get OID for 'HEAD', using fallback...
+[1;33mSKIP: Log contains same message - Log verification skipped due to log command limitations[0m
+[0;32mPASS: Amended commit (B') has different OID than original commit (B)[0m
+[0;32mTest completed.[0m
+
+[0;34m--- Test: Testing commit amend with message editing ---[0m
+[0;32mTest environment ready: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/tests/integration/ash_commit_tests_GBTIn9/testingcommitamendwithmessageediting_repo[0m
+[1;33mRUNNING [in repo]: add fileA.txt[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow add fileA.txt
+[2025-04-07T21:56:31Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Handling command: Add { paths: ["fileA.txt"] }
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Executing AddCommand for paths: ["fileA.txt"]
+Storing object of type: blob
+Serializing blob object, content size: 10 bytes
+Calculated OID: 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Object 709d8ef4eb8dbf93913a1ef341e30819244858bb doesn't exist, writing to database
+1 new file added to index (0.00s)
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+[1;33mRUNNING [in repo]: commit -m "Commit A message"[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow commit -m Commit A message
+[2025-04-07T21:56:31Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Handling command: Commit { message: "Commit A message" }
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit A message'
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Reading HEAD
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] HEAD read successfully: None
+Processing entry: fileA.txt
+Added top-level file: fileA.txt
+Final tree structure:
+  Tree Structure:
+  fileA.txt (blob, mode 100644) -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Processing tree with 1 entries
+Storing object of type: tree
+Serializing tree object, content size: 37 bytes
+Calculated OID: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Object 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 doesn't exist, writing to database
+Tree has OID 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 after processing
+Processing entry: fileA.txt
+Added top-level file: fileA.txt
+Final tree structure:
+  Tree Structure:
+  fileA.txt (blob, mode 100644) -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Processing tree with 1 entries
+Storing object of type: tree
+Serializing tree object, content size: 37 bytes
+Calculated OID: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Object 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 already exists in database
+Tree has OID 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 after processing
+Storing object of type: commit
+Serializing commit object, content size: 181 bytes
+Calculated OID: dc7adaf12527f7d3190b0f7cfc90b12844de05f7
+Object dc7adaf12527f7d3190b0f7cfc90b12844de05f7 doesn't exist, writing to database
+[[32mmaster (root-commit) dc7adaf[0m] Commit A message
+Parsing tree object: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Tree parse: Found file entry: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb (mode 100644)
+1 file changed (0.00s)
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+Created commit with message: Commit A message
+[1;33mRUNNING [in repo]: add fileB.txt[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow add fileB.txt
+[2025-04-07T21:56:31Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Handling command: Add { paths: ["fileB.txt"] }
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Executing AddCommand for paths: ["fileB.txt"]
+Storing object of type: blob
+Serializing blob object, content size: 10 bytes
+Calculated OID: 781e9f8966fdb226e5be848e1a1b3b89e4564c42
+Object 781e9f8966fdb226e5be848e1a1b3b89e4564c42 doesn't exist, writing to database
+Examining HEAD commit: dc7adaf12527f7d3190b0f7cfc90b12844de05f7
+Root tree OID: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Traversing tree: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 at path: 
+Parsing tree object: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Tree parse: Found file entry: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb (mode 100644)
+Found file: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Found 1 files in HEAD
+1 new file added to index (0.00s)
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+[1;33mRUNNING [in repo]: commit -m "Commit B message"[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow commit -m Commit B message
+[2025-04-07T21:56:31Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Handling command: Commit { message: "Commit B message" }
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit B message'
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Reading HEAD
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] HEAD read successfully: Some("dc7adaf12527f7d3190b0f7cfc90b12844de05f7")
+Processing entry: fileA.txt
+Added top-level file: fileA.txt
+Processing entry: fileB.txt
+Added top-level file: fileB.txt
+Final tree structure:
+  Tree Structure:
+  fileA.txt (blob, mode 100644) -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+  fileB.txt (blob, mode 100644) -> 781e9f8966fdb226e5be848e1a1b3b89e4564c42
+Processing tree with 2 entries
+Storing object of type: tree
+Serializing tree object, content size: 74 bytes
+Calculated OID: 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263
+Object 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263 doesn't exist, writing to database
+Tree has OID 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263 after processing
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Parent commit tree OID: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Processing entry: fileA.txt
+Added top-level file: fileA.txt
+Processing entry: fileB.txt
+Added top-level file: fileB.txt
+Final tree structure:
+  Tree Structure:
+  fileA.txt (blob, mode 100644) -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+  fileB.txt (blob, mode 100644) -> 781e9f8966fdb226e5be848e1a1b3b89e4564c42
+Processing tree with 2 entries
+Storing object of type: tree
+Serializing tree object, content size: 74 bytes
+Calculated OID: 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263
+Object 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263 already exists in database
+Tree has OID 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263 after processing
+Storing object of type: commit
+Serializing commit object, content size: 229 bytes
+Calculated OID: 31908545f1c2154dfe3de61dddbae7ef7630fc91
+Object 31908545f1c2154dfe3de61dddbae7ef7630fc91 doesn't exist, writing to database
+[[32mmaster 3190854[0m] Commit B message
+Parsing tree object: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Tree parse: Found file entry: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb (mode 100644)
+Parsing tree object: 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263
+Tree parse: Found file entry: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb (mode 100644)
+Tree parse: Found file entry: fileB.txt -> 781e9f8966fdb226e5be848e1a1b3b89e4564c42 (mode 100644)
+1 file changed (0.00s)
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+Created commit with message: Commit B message
+Warning: Could not get OID for 'HEAD', using fallback...
+[1;33mRUNNING [in repo]: commit --amend --edit[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow commit --amend --edit
+[2025-04-07T21:56:31Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Handling command: Commit { message: "" }
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Executing CommitCommand with message: ''
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Amending the previous commit
+Processing entry: fileA.txt
+Added top-level file: fileA.txt
+Processing entry: fileB.txt
+Added top-level file: fileB.txt
+Final tree structure:
+  Tree Structure:
+  fileB.txt (blob, mode 100644) -> 781e9f8966fdb226e5be848e1a1b3b89e4564c42
+  fileA.txt (blob, mode 100644) -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Processing tree with 2 entries
+Storing object of type: tree
+Serializing tree object, content size: 74 bytes
+Calculated OID: 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263
+Object 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263 already exists in database
+Tree has OID 59c4c10b1f59fdf170665090e7ea4bbb5fa5b263 after processing
+Storing object of type: commit
+Serializing commit object, content size: 242 bytes
+Calculated OID: 69e94c86aa4c09870f4c6ea67e7e746ebeae42c7
+Object 69e94c86aa4c09870f4c6ea67e7e746ebeae42c7 doesn't exist, writing to database
+[[32mmaster 69e94c8[0m] Edited: ./.ash/COMMIT_EDITMSG
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+Warning: Could not get OID for 'HEAD', using fallback...
+[1;33mSKIP: Log contains edited message - Log verification skipped due to log command limitations[0m
+[0;32mPASS: Amended commit (B') has different OID than original commit (B)[0m
+[0;32mTest completed.[0m
+
+[0;34m--- Test: Testing commit amend preserves original author date ---[0m
+[0;32mTest environment ready: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/tests/integration/ash_commit_tests_GBTIn9/testingcommitamendpreservesoriginalauthordate_repo[0m
+[1;33mRUNNING [in repo]: add fileA.txt[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow add fileA.txt
+[2025-04-07T21:56:31Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Handling command: Add { paths: ["fileA.txt"] }
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Executing AddCommand for paths: ["fileA.txt"]
+Storing object of type: blob
+Serializing blob object, content size: 10 bytes
+Calculated OID: 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Object 709d8ef4eb8dbf93913a1ef341e30819244858bb doesn't exist, writing to database
+1 new file added to index (0.00s)
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+[1;33mRUNNING [in repo]: commit -m "Commit A message"[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow commit -m Commit A message
+[2025-04-07T21:56:31Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Handling command: Commit { message: "Commit A message" }
+[2025-04-07T21:56:31Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit A message'
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] Reading HEAD
+[2025-04-07T21:56:31Z INFO  AsheraFlow::commands::commit] HEAD read successfully: None
+Processing entry: fileA.txt
+Added top-level file: fileA.txt
+Final tree structure:
+  Tree Structure:
+  fileA.txt (blob, mode 100644) -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Processing tree with 1 entries
+Storing object of type: tree
+Serializing tree object, content size: 37 bytes
+Calculated OID: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Object 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 doesn't exist, writing to database
+Tree has OID 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 after processing
+Processing entry: fileA.txt
+Added top-level file: fileA.txt
+Final tree structure:
+  Tree Structure:
+  fileA.txt (blob, mode 100644) -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Processing tree with 1 entries
+Storing object of type: tree
+Serializing tree object, content size: 37 bytes
+Calculated OID: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Object 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 already exists in database
+Tree has OID 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 after processing
+Storing object of type: commit
+Serializing commit object, content size: 181 bytes
+Calculated OID: dc7adaf12527f7d3190b0f7cfc90b12844de05f7
+Object dc7adaf12527f7d3190b0f7cfc90b12844de05f7 doesn't exist, writing to database
+[[32mmaster (root-commit) dc7adaf[0m] Commit A message
+Parsing tree object: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Tree parse: Found file entry: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb (mode 100644)
+1 file changed (0.00s)
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+Created commit with message: Commit A message
+Warning: Could not get OID for 'HEAD', using fallback...
+[1;33mRUNNING [in repo]: add fileA.txt[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow add fileA.txt
+[2025-04-07T21:56:32Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:32Z INFO  AsheraFlow] Handling command: Add { paths: ["fileA.txt"] }
+[2025-04-07T21:56:32Z INFO  AsheraFlow] Executing AddCommand for paths: ["fileA.txt"]
+Storing object of type: blob
+Serializing blob object, content size: 23 bytes
+Calculated OID: 84c145aadf97e6b42bd1c4ed87f36f85b14fa981
+Object 84c145aadf97e6b42bd1c4ed87f36f85b14fa981 doesn't exist, writing to database
+Examining HEAD commit: dc7adaf12527f7d3190b0f7cfc90b12844de05f7
+Root tree OID: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Traversing tree: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66 at path: 
+Parsing tree object: 7eceb0b31a92a5cc50f5a00459be9ddab4934d66
+Tree parse: Found file entry: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb (mode 100644)
+Found file: fileA.txt -> 709d8ef4eb8dbf93913a1ef341e30819244858bb
+Found 1 files in HEAD
+1 modified file added to index (0.00s)
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+[1;33mRUNNING [in repo]: commit --amend -m "Amended: Commit A message"[0m
+CMD: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow commit --amend -m Amended: Commit A message
+[2025-04-07T21:56:32Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-07T21:56:32Z INFO  AsheraFlow] Handling command: Commit { message: "Amended: Commit A message" }
+[2025-04-07T21:56:32Z INFO  AsheraFlow] Executing CommitCommand with message: 'Amended: Commit A message'
+[2025-04-07T21:56:32Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-07T21:56:32Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-07T21:56:32Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-07T21:56:32Z INFO  AsheraFlow::commands::commit] Amending the previous commit
+Processing entry: fileA.txt
+Added top-level file: fileA.txt
+Final tree structure:
+  Tree Structure:
+  fileA.txt (blob, mode 100644) -> 84c145aadf97e6b42bd1c4ed87f36f85b14fa981
+Processing tree with 1 entries
+Storing object of type: tree
+Serializing tree object, content size: 37 bytes
+Calculated OID: 586b3d70a77039bef35eeca4b68cb840dadb17e0
+Object 586b3d70a77039bef35eeca4b68cb840dadb17e0 doesn't exist, writing to database
+Tree has OID 586b3d70a77039bef35eeca4b68cb840dadb17e0 after processing
+Storing object of type: commit
+Serializing commit object, content size: 180 bytes
+Calculated OID: 0271dadb72f91c3797361ffd16d4aa23f8ed6eae
+Object 0271dadb72f91c3797361ffd16d4aa23f8ed6eae doesn't exist, writing to database
+[[32mmaster (root-commit) 0271dad[0m] Commit A message
+EXIT CODE: 0
+[0;32m  CMD OK[0m
+Warning: Could not get OID for 'HEAD', using fallback...
+[1;33mSKIP: Log contains amended message - Log verification skipped due to log command limitations[0m
+[0;32mPASS: Amended commit has different OID[0m
+[0;32mTest completed.[0m
+==================================
+All tests completed.
+Cleaning up test container: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/tests/integration/ash_commit_tests_GBTIn9
+--------------------
+Tests Passed: 10
+Tests Failed: 0
+--------------------

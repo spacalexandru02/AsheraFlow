@@ -11,6 +11,7 @@ pub struct Commit {
     parent: Option<String>,
     tree: String,
     author: Author,
+    committer: Author,
     message: String,
 }
 
@@ -20,15 +21,7 @@ impl GitObject for Commit {
     }
 
     fn to_bytes(&self) -> Vec<u8> {
-        let timestamp = self.author.timestamp.timestamp();
-        let author_line = format!(
-            "{} <{}> {} +0000", 
-            self.author.name, 
-            self.author.email, 
-            timestamp
-        );
-    
-        let mut lines = Vec::with_capacity(5);
+        let mut lines = Vec::with_capacity(6);
         
         lines.push(format!("tree {}", self.tree));
         
@@ -36,8 +29,8 @@ impl GitObject for Commit {
             lines.push(format!("parent {}", parent));
         }
         
-        lines.push(format!("author {}", author_line));
-        lines.push(format!("committer {}", author_line));
+        lines.push(format!("author {}", self.author));
+        lines.push(format!("committer {}", self.committer));
     
         lines.push(String::new()); // Empty line before message
         lines.push(self.message.clone());
@@ -65,7 +58,19 @@ impl Commit {
             oid: None,
             parent,
             tree,
+            author: author.clone(),
+            committer: author,
+            message,
+        }
+    }
+    
+    pub fn new_with_committer(parent: Option<String>, tree: String, author: Author, committer: Author, message: String) -> Self {
+        Commit {
+            oid: None,
+            parent,
+            tree,
             author,
+            committer,
             message,
         }
     }
@@ -81,6 +86,10 @@ impl Commit {
     
     pub fn get_author(&self) -> Option<&Author> {
         Some(&self.author)
+    }
+    
+    pub fn get_committer(&self) -> Option<&Author> {
+        Some(&self.committer)
     }
     
     pub fn get_message(&self) -> &str {
@@ -141,10 +150,19 @@ impl Commit {
         let author_str = headers.get("author")
             .ok_or_else(|| Error::Generic("Missing author in commit".to_string()))?;
         
-        // Parsează autor - implementare simplificată
+        // Parse author
         let author = match Author::parse(author_str) {
             Ok(author) => author,
             Err(_) => return Err(Error::Generic("Invalid author format".to_string())),
+        };
+        
+        // Parse committer or use author as fallback
+        let committer = match headers.get("committer") {
+            Some(committer_str) => match Author::parse(committer_str) {
+                Ok(committer) => committer,
+                Err(_) => author.clone(),
+            },
+            None => author.clone(),
         };
 
         Ok(Commit {
@@ -152,6 +170,7 @@ impl Commit {
             parent,
             tree,
             author,
+            committer,
             message,
         })
     }

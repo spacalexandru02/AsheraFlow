@@ -8,6 +8,9 @@ use crate::core::index::index::Index;
 use crate::core::refs::Refs;
 use crate::errors::error::Error;
 use std::env;
+use std::fs;
+use std::fs::{File, OpenOptions};
+use std::io::Write;
 
 pub struct WriteCommit<'a> {
     pub database: &'a mut Database,
@@ -21,6 +24,8 @@ pub struct WriteCommitOptions {
     pub message: Option<String>,
     pub file: Option<PathBuf>,
     pub edit: EditOption,
+    pub amend: bool,
+    pub reuse_message: Option<String>,
 }
 
 pub enum EditOption {
@@ -68,16 +73,27 @@ impl<'a> WriteCommit<'a> {
         Ok(None)
     }
     
-    pub fn compose_message(&self, message: Option<String>, notes: &str) -> Result<Option<String>, Error> {
-        let should_edit = match (message.as_ref(), &self.options.edit) {
+    pub fn current_author(&self) -> crate::core::database::author::Author {
+        let name = env::var("GIT_AUTHOR_NAME")
+            .or_else(|_| env::var("USER"))
+            .unwrap_or_else(|_| "Unknown".to_string());
+            
+        let email = env::var("GIT_AUTHOR_EMAIL")
+            .unwrap_or_else(|_| format!("{}@localhost", name));
+            
+        crate::core::database::author::Author::new(name, email)
+    }
+    
+    pub fn compose_message(&self, initial_message: Option<String>, notes: &str) -> Result<Option<String>, Error> {
+        let should_edit = match (initial_message.as_ref(), &self.options.edit) {
             (_, EditOption::Always) => true,
             (Some(_), EditOption::Auto) => false,
             (Some(_), EditOption::Never) => false,
             (None, _) => true,
         };
         
-        if !should_edit && message.is_some() {
-            return Ok(message);
+        if !should_edit && initial_message.is_some() {
+            return Ok(initial_message);
         }
         
         let commit_message_path = self.commit_message_path();
@@ -85,7 +101,7 @@ impl<'a> WriteCommit<'a> {
         
         Editor::edit(commit_message_path, Some(editor_command), |editor| {
             // Add initial message if provided
-            if let Some(msg) = &message {
+            if let Some(msg) = &initial_message {
                 editor.puts(msg)?;
                 editor.puts("")?;
             }
@@ -159,24 +175,80 @@ impl<'a> WriteCommit<'a> {
         let tree_oid = self.write_tree()?;
         
         // Get author information
-        let name = env::var("GIT_AUTHOR_NAME")
-            .or_else(|_| env::var("USER"))
-            .unwrap_or_else(|_| "Unknown".to_string());
-            
-        let email = env::var("GIT_AUTHOR_EMAIL")
-            .unwrap_or_else(|_| format!("{}@localhost", name));
-            
-        let author = crate::core::database::author::Author::new(name, email);
+        let author = self.current_author();
+        let committer = author.clone();
         
         // Create the commit
         let parent = if parents.is_empty() { None } else { Some(parents[0].clone()) };
-        let mut commit = Commit::new(parent, tree_oid, author, message);
+        let mut commit = Commit::new_with_committer(parent, tree_oid, author, committer, message);
         
         // Store the commit
         self.database.store(&mut commit)?;
         
         // Return the commit
         Ok(commit)
+    }
+    
+    pub fn handle_amend(&mut self) -> Result<(), Error> {
+        // Get current HEAD commit
+        let head_oid = match self.refs.read_head()? {
+            Some(oid) => oid,
+            None => return Err(Error::Generic("No HEAD commit found".to_string())),
+        };
+        
+        // Load the commit
+        let head_obj = self.database.load(&head_oid)?;
+        let head_commit = match head_obj.as_any().downcast_ref::<Commit>() {
+            Some(c) => c,
+            None => return Err(Error::Generic("HEAD is not a commit".to_string())),
+        };
+        
+        // Get the tree from the current index
+        let tree_oid = self.write_tree()?;
+        
+        // Get the message from the commit and let user edit it
+        let initial_message = head_commit.get_message().to_string();
+        let message = match self.compose_message(Some(initial_message), "Please enter the commit message for your changes. Lines starting\nwith '#' will be ignored, and an empty message aborts the commit.")? {
+            Some(msg) => msg,
+            None => return Err(Error::Generic("Aborting commit due to empty commit message".to_string())),
+        };
+        
+        // Create a new commit with the same parents and author, but new tree and possibly edited message
+        let parent = head_commit.get_parent().cloned();
+        let author = head_commit.get_author().unwrap().clone();
+        let committer = self.current_author();
+        
+        let mut new_commit = if parent.is_some() {
+            Commit::new_with_committer(parent, tree_oid, author, committer, message)
+        } else {
+            // For root commits
+            Commit::new_with_committer(None, tree_oid, author, committer, message)
+        };
+        
+        // Store the new commit
+        self.database.store(&mut new_commit)?;
+        
+        // Update HEAD to point to the new commit
+        let new_oid = new_commit.get_oid().unwrap().clone();
+        self.refs.update_head(&new_oid)?;
+        
+        // Print commit info
+        self.print_commit(&new_commit);
+        
+        Ok(())
+    }
+
+    // Save ORIG_HEAD when amending or in other commands that change HEAD
+    pub fn save_orig_head(&self) -> Result<(), Error> {
+        let head = match self.refs.read_head()? {
+            Some(oid) => oid,
+            None => return Ok(()),  // No HEAD to save
+        };
+        
+        // Use the ORIG_HEAD constant instead of a hardcoded string
+        let orig_head_path = Path::new(crate::core::refs::ORIG_HEAD);
+        self.refs.update_ref_file(orig_head_path, &head)?;
+        Ok(())
     }
 }
 
@@ -186,6 +258,8 @@ pub fn define_write_commit_options() -> WriteCommitOptions {
         message: None,
         file: None,
         edit: EditOption::Auto,
+        amend: false,
+        reuse_message: None,
     };
     
     // Check environment variables (would normally parse from command line args)
@@ -203,6 +277,14 @@ pub fn define_write_commit_options() -> WriteCommitOptions {
             "0" => EditOption::Never,
             _ => options.edit,
         };
+    }
+    
+    if let Ok(_) = env::var("ASH_COMMIT_AMEND") {
+        options.amend = true;
+    }
+    
+    if let Ok(reuse) = env::var("ASH_REUSE_MESSAGE") {
+        options.reuse_message = Some(reuse);
     }
     
     options

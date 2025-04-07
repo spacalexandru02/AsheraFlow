@@ -187,11 +187,25 @@ impl RevertCommand {
         });
         let author = Author::new(author_name, author_email);
         
+        // Create committer with current timestamp
+        let committer_name = std::env::var("GIT_COMMITTER_NAME").unwrap_or_else(|_| {
+            std::env::var("GIT_AUTHOR_NAME").unwrap_or_else(|_| {
+                std::env::var("USER").unwrap_or_else(|_| "Default Committer".to_string())
+            })
+        });
+        let committer_email = std::env::var("GIT_COMMITTER_EMAIL").unwrap_or_else(|_| {
+            std::env::var("GIT_AUTHOR_EMAIL").unwrap_or_else(|_| {
+                format!("{}@localhost", committer_name)
+            })
+        });
+        let committer = Author::new(committer_name, committer_email);
+        
         // Create commit
-        let mut commit = Commit::new(
+        let mut commit = Commit::new_with_committer(
             Some(head_oid.clone()), 
             tree_oid, 
-            author.clone(), 
+            author, 
+            committer,
             message.to_string()
         );
         

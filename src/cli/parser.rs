@@ -30,6 +30,8 @@ impl CliParser {
                 let mut message = None; // Use Option for message initially
                 let mut edit = false;
                 let mut file = None;
+                let mut amend = false;
+                let mut reuse_message = None;
                 let mut i = 2;
                 
                 while i < args.len() {
@@ -45,6 +47,17 @@ impl CliParser {
                     } else if args[i] == "--no-edit" {
                         edit = false;
                         i += 1; // Skip flag
+                    } else if args[i] == "--amend" {
+                        amend = true;
+                        i += 1;
+                    } else if (args[i] == "--reuse-message" || args[i] == "-C") && i + 1 < args.len() {
+                        reuse_message = Some(args[i + 1].to_owned());
+                        edit = false;
+                        i += 2;
+                    } else if (args[i] == "--reedit-message" || args[i] == "-c") && i + 1 < args.len() {
+                        reuse_message = Some(args[i + 1].to_owned());
+                        edit = true;
+                        i += 2;
                     } else {
                         // Handle potential unknown flags or arguments here if needed
                         i += 1;
@@ -69,13 +82,25 @@ impl CliParser {
                 } else {
                     env::remove_var("ASH_COMMIT_MESSAGE");
                 }
+                
+                if amend {
+                    env::set_var("ASH_COMMIT_AMEND", "1");
+                } else {
+                    env::remove_var("ASH_COMMIT_AMEND");
+                }
+                
+                if let Some(reuse) = &reuse_message {
+                    env::set_var("ASH_REUSE_MESSAGE", reuse);
+                } else {
+                    env::remove_var("ASH_REUSE_MESSAGE");
+                }
 
                 CliArgs {
                     command: Command::Commit {
                         message: message.unwrap_or_default(),
                     },
                 }
-            }
+            },
             "add" => {
                 if args.len() < 3 {
                     return Err(Error::Generic("File path(s) are required for add command".to_string()));

@@ -11,6 +11,8 @@ use crate::core::editor::Editor;
 use crate::core::index::index::Index;
 use crate::core::refs::Refs;
 use crate::core::write_commit::{WriteCommit, WriteCommitOptions, EditOption};
+use crate::core::revision::Revision;
+use crate::core::repository::repository::Repository;
 use crate::errors::error::Error;
 use log::{debug, info, warn, error};
 
@@ -38,6 +40,8 @@ impl CommitCommand {
 
         let db_path = git_path.join("objects");
 
+        // Clone db_path before it's moved
+        let db_path_clone = db_path.clone();
         debug!("Initializing components");
         let mut database = crate::core::database::database::Database::new(db_path);
 
@@ -95,6 +99,8 @@ impl CommitCommand {
             } else { 
                 EditOption::Auto 
             },
+            amend: env::var("ASH_COMMIT_AMEND").is_ok(),
+            reuse_message: env::var("ASH_REUSE_MESSAGE").ok(),
         };
         
         // Create WriteCommit struct
@@ -106,8 +112,38 @@ impl CommitCommand {
             &options
         );
         
-        // Get initial message
-        let initial_message = write_commit.read_message()?;
+        // Handle --amend option
+        if options.amend {
+            info!("Amending the previous commit");
+            write_commit.save_orig_head()?;
+            write_commit.handle_amend()?;
+            return Ok(());
+        }
+        
+        // Handle reuse-message or reedit-message
+        let initial_message = if let Some(rev) = &options.reuse_message {
+            info!("Reusing message from {}", rev);
+            // Create a separate repository and database instance
+            let mut repo = Repository::new(".")?;
+            let mut revision = Revision::new(&mut repo, rev);
+            
+            match revision.resolve("commit") {
+                Ok(oid) => {
+                    // Create a new database instance to avoid borrowing conflict
+                    let mut separate_db = crate::core::database::database::Database::new(db_path_clone.clone());
+                    let commit_obj = separate_db.load(&oid)?;
+                    if let Some(commit) = commit_obj.as_any().downcast_ref::<Commit>() {
+                        Some(commit.get_message().to_string())
+                    } else {
+                        return Err(Error::Generic(format!("Object {} is not a commit", oid)));
+                    }
+                },
+                Err(e) => return Err(e),
+            }
+        } else {
+            // Get initial message
+            write_commit.read_message()?
+        };
         
         // Compose final message
         let composed_message = write_commit.compose_message(initial_message, COMMIT_NOTES)?;
@@ -176,6 +212,11 @@ impl CommitCommand {
 
         if no_changes {
             return Err(Error::Generic("No changes staged for commit.".into()));
+        }
+        
+        // Save current HEAD to ORIG_HEAD if this isn't the initial commit
+        if parent.is_some() {
+            write_commit.save_orig_head()?;
         }
         
         // Create commit

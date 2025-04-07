@@ -423,114 +423,107 @@ impl<'a> Migration<'a> {
     }
     
     // Execute all planned changes
-    // In src/core/repository/migration.rs
-// Modified execute_changes method for better directory cleanup
+    fn execute_changes(&mut self) -> Result<(), Error> {
+        println!("Executing {} changes", self.changes_to_make.len());
 
-fn execute_changes(&mut self) -> Result<(), Error> {
-    println!("Executing {} changes", self.changes_to_make.len());
+        // Clone the changes to avoid borrowing issues
+        let changes_clone = self.changes_to_make.clone();
 
-    // Clone the changes to avoid borrowing issues
-    let changes_clone = self.changes_to_make.clone();
+        // Keep track of directories that might need cleanup
+        let mut affected_dirs = HashSet::new();
 
-    // Keep track of directories that might need cleanup
-    let mut affected_dirs = HashSet::new();
-
-    // First, handle deletions
-    for change in &changes_clone {
-        if let Change::Delete { path } = change {
-            println!("Processing deletion for: {}", path.display());
-            // *** START MODIFICATION ***
-            // Check the type in the workspace before removing
-            let full_path = self.repo.workspace.root_path.join(path);
-            if full_path.is_dir() {
-                println!("  -> Removing directory using force_remove_directory");
-                self.repo.workspace.force_remove_directory(path)?;
-            } else {
-                // If it's a file or doesn't exist, remove_file handles it
-                println!("  -> Removing file using remove_file");
-                self.repo.workspace.remove_file(path)?;
-            }
-            // *** END MODIFICATION ***
-
-            // Also remove from index
-            let path_str = path.to_string_lossy().to_string();
-            self.repo.index.remove(&path_str)?;
-
-            // Add parent directories to the affected dirs list
-            if let Some(parent) = path.parent() {
-                if !(parent.as_os_str().is_empty() || parent.to_string_lossy() == ".") {
-                    affected_dirs.insert(parent.to_path_buf());
-                }
-            }
-        }
-    }
-
-    // Find all directories needed for new/updated files
-    let mut needed_dirs = HashSet::new();
-    for change in &changes_clone {
-        match change {
-            Change::Create { path, .. } | Change::Update { path, .. } => {
-                // Add all parent directories
-                let mut current = path.parent();
-                while let Some(parent) = current {
-                    if parent.as_os_str().is_empty() || parent.to_string_lossy() == "." {
-                        break;
-                    }
-                    needed_dirs.insert(parent.to_path_buf());
-                    current = parent.parent();
-                }
-            },
-            _ => {}
-        }
-    }
-
-    // Sort the directories by path length to ensure we create them in order
-    let mut dir_list: Vec<_> = needed_dirs.iter().cloned().collect();
-    dir_list.sort_by_key(|p| p.to_string_lossy().len());
-
-    // Create all needed directories
-    for dir in dir_list {
-        println!("Ensuring directory exists: {}", dir.display()); // Changed log message slightly
-        self.repo.workspace.make_directory(&dir)?;
-    }
-
-    // Now apply file creations and updates
-    for change in changes_clone {
-        match change {
-            Change::Create { path, entry } | Change::Update { path, entry } => {
-                // Check if this is a directory entry
-                if entry.get_mode() == "040000" || FileMode::parse(entry.get_mode()).is_directory() {
-                    // Ensure directory exists (already done mostly, but good to be sure)
-                    println!("Ensuring directory exists (via Create/Update): {}", path.display());
-                    self.repo.workspace.make_directory(&path)?;
-
-                    // Process directory contents
-                   // self.process_directory_contents(&path, &entry.get_oid())?; // Potentially complex, ensure needed
+        // First, handle deletions
+        for change in &changes_clone {
+            if let Change::Delete { path } = change {
+                println!("Processing deletion for: {}", path.display());
+                // Check the type in the workspace before removing
+                let full_path = self.repo.workspace.root_path.join(path);
+                
+                // Remove from index first
+                let path_str = path.to_string_lossy().to_string();
+                self.repo.index.remove(&path_str)?;
+                
+                if full_path.is_dir() {
+                    println!("  -> Removing directory using force_remove_directory");
+                    self.repo.workspace.force_remove_directory(path)?;
                 } else {
-                    // Write the file and update index
-                    println!("Writing file: {}", path.display());
-                    self.write_file(&path, &entry)?;
+                    // If it's a file or doesn't exist, remove_file handles it
+                    println!("  -> Removing file using remove_file");
+                    self.repo.workspace.remove_file(path)?;
                 }
-            },
-            _ => {} // Deletions already handled
-        }
-    }
 
-    // Clean up affected directories - we'll use the improved recursive method
-    // which will automatically clean up parent directories as well
-    // NOTE: This cleanup might be redundant if make_directory is robust, but leave for now.
-    for dir in affected_dirs {
-        // Skip if this directory is needed for new/updated files
-        if needed_dirs.contains(&dir) {
-            continue;
+                // Add parent directories to the affected dirs list
+                if let Some(parent) = path.parent() {
+                    if !(parent.as_os_str().is_empty() || parent.to_string_lossy() == ".") {
+                        affected_dirs.insert(parent.to_path_buf());
+                    }
+                }
+            }
         }
 
-        println!("Checking if previously affected directory is now empty: {}", dir.display());
-        self.repo.workspace.remove_directory(&dir)?;
+        // Find all directories needed for new/updated files
+        let mut needed_dirs = HashSet::new();
+        for change in &changes_clone {
+            match change {
+                Change::Create { path, .. } | Change::Update { path, .. } => {
+                    // Add all parent directories
+                    let mut current = path.parent();
+                    while let Some(parent) = current {
+                        if parent.as_os_str().is_empty() || parent.to_string_lossy() == "." {
+                            break;
+                        }
+                        needed_dirs.insert(parent.to_path_buf());
+                        current = parent.parent();
+                    }
+                },
+                _ => {}
+            }
+        }
+
+        // Sort the directories by path length to ensure we create them in order
+        let mut dir_list: Vec<_> = needed_dirs.iter().cloned().collect();
+        dir_list.sort_by_key(|p| p.to_string_lossy().len());
+
+        // Create all needed directories
+        for dir in dir_list {
+            println!("Ensuring directory exists: {}", dir.display());
+            self.repo.workspace.make_directory(&dir)?;
+        }
+
+        // Now apply file creations and updates
+        for change in changes_clone {
+            match change {
+                Change::Create { path, entry } | Change::Update { path, entry } => {
+                    // Check if this is a directory entry
+                    if entry.get_mode() == "040000" || FileMode::parse(entry.get_mode()).is_directory() {
+                        // Ensure directory exists (already done mostly, but good to be sure)
+                        println!("Ensuring directory exists (via Create/Update): {}", path.display());
+                        self.repo.workspace.make_directory(&path)?;
+                    } else {
+                        // Write the file and update index
+                        println!("Writing file: {}", path.display());
+                        self.write_file(&path, &entry)?;
+                    }
+                },
+                _ => {} // Deletions already handled
+            }
+        }
+
+        // Clean up affected directories - we'll use the improved recursive method
+        // which will automatically clean up parent directories as well
+        for dir in affected_dirs {
+            // Skip if this directory is needed for new/updated files
+            if needed_dirs.contains(&dir) {
+                continue;
+            }
+
+            println!("Checking if previously affected directory is now empty: {}", dir.display());
+            self.repo.workspace.remove_directory(&dir)?;
+        }
+
+        Ok(())
     }
 
-    Ok(())
-}
     // Write a file to the workspace and update the index
     fn write_file(&mut self, path: &Path, entry: &DatabaseEntry) -> Result<(), Error> {
         // Get blob contents

@@ -1,4 +1,3 @@
-// src/commands/merge.rs
 use std::time::Instant;
 use std::env;
 use std::path::{Path, PathBuf};
@@ -156,6 +155,19 @@ impl MergeCommand {
                   "author@example.com".to_string()
              });
             let author = Author::new(author_name, author_email);
+            
+            // Create committer with current timestamp
+            let committer_name = env::var("GIT_COMMITTER_NAME").unwrap_or_else(|_| {
+                env::var("GIT_AUTHOR_NAME").unwrap_or_else(|_| {
+                    env::var("USER").unwrap_or_else(|_| "Default Committer".to_string())
+                })
+            });
+            let committer_email = env::var("GIT_COMMITTER_EMAIL").unwrap_or_else(|_| {
+                env::var("GIT_AUTHOR_EMAIL").unwrap_or_else(|_| {
+                    format!("{}@localhost", committer_name)
+                })
+            });
+            let committer = Author::new(committer_name, committer_email);
 
             // Trecem &mut database și aici
             let tree_oid = Self::write_tree_from_index(database, index)?;
@@ -163,7 +175,13 @@ impl MergeCommand {
 
             let parent1 = head_oid.clone();
 
-             let mut commit = Commit::new( Some(parent1), tree_oid.clone(), author.clone(), commit_message );
+             let mut commit = Commit::new_with_committer(
+                 Some(parent1), 
+                 tree_oid.clone(), 
+                 author, 
+                 committer,
+                 commit_message
+             );
 
              database.store(&mut commit)?; // Trecem &mut database
              let commit_oid = commit.get_oid().cloned().ok_or(Error::Generic("Commit OID not set after storage".into()))?;

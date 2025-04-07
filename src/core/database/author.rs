@@ -19,6 +19,14 @@ impl Author {
         }
     }
     
+    pub fn new_with_time(name: String, email: String, timestamp: DateTime<Utc>) -> Self {
+        Author {
+            name,
+            email,
+            timestamp,
+        }
+    }
+    
     /// Parse an author from the format "Name <email> timestamp timezone"
     pub fn parse(author_str: &str) -> Result<Self, String> {
         // Use a regex to parse the format
