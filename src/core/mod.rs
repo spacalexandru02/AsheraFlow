@@ -12,3 +12,5 @@ pub mod revision;
 pub mod path_filter;
 pub mod merge;
 pub mod metadata;
+pub mod editor;
+pub mod write_commit;

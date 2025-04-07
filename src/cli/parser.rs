@@ -1,3 +1,6 @@
+use std::env;
+use std::path::Path;
+
 use crate::cli::args::{CliArgs, Command};
 use crate::errors::error::Error;
 
@@ -20,31 +23,59 @@ impl CliParser {
                     path: args.get(2).map(|s| s.to_owned()).unwrap_or(".".to_string()),
                 },
             },
+            // Update to src/cli/parser.rs
+// This is the relevant part for the commit command in the match statement:
+
             "commit" => {
                 let mut message = None; // Use Option for message initially
+                let mut edit = false;
+                let mut file = None;
                 let mut i = 2;
+                
                 while i < args.len() {
                     if (args[i] == "--message" || args[i] == "-m") && i + 1 < args.len() {
                         message = Some(args[i + 1].to_owned());
                         i += 2; // Skip both flag and value
+                    } else if (args[i] == "--file" || args[i] == "-F") && i + 1 < args.len() {
+                        file = Some(Path::new(&args[i + 1]).to_path_buf());
+                        i += 2; // Skip both flag and value
+                    } else if args[i] == "--edit" || args[i] == "-e" {
+                        edit = true;
+                        i += 1; // Skip flag
+                    } else if args[i] == "--no-edit" {
+                        edit = false;
+                        i += 1; // Skip flag
                     } else {
                         // Handle potential unknown flags or arguments here if needed
                         i += 1;
                     }
                 }
 
-                if message.is_none() {
-                     // Try reading from standard input or editor if no -m is provided (like git)
-                     // For now, require the message flag
-                    return Err(Error::Generic("Commit message is required. Use --message <msg> or -m <msg>".to_string()));
+                // Set environment variables based on options
+                if edit {
+                    env::set_var("ASH_EDIT", "1");
+                } else {
+                    env::remove_var("ASH_EDIT");
+                }
+                
+                if let Some(file_path) = &file {
+                    env::set_var("ASH_COMMIT_FILE", file_path.to_string_lossy().to_string());
+                } else {
+                    env::remove_var("ASH_COMMIT_FILE");
+                }
+                
+                if let Some(msg) = &message {
+                    env::set_var("ASH_COMMIT_MESSAGE", msg);
+                } else {
+                    env::remove_var("ASH_COMMIT_MESSAGE");
                 }
 
                 CliArgs {
                     command: Command::Commit {
-                        message: message.unwrap(), // Unwrap is safe here due to check above
+                        message: message.unwrap_or_default(),
                     },
                 }
-            },
+            }
             "add" => {
                 if args.len() < 3 {
                     return Err(Error::Generic("File path(s) are required for add command".to_string()));

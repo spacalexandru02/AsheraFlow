@@ -1,55 +1,57 @@
-// src/commands/commit.rs
-
-use std::path::PathBuf;
-use std::{env, path::Path, time::Instant};
+// src/commands/commit.rs - updated version
+use std::path::{Path, PathBuf};
+use std::time::Instant;
+use std::env;
 use std::collections::{HashMap, HashSet};
 use crate::core::database::tree::{TreeEntry, TREE_MODE};
-use crate::{core::{database::{author::Author, commit::Commit, database::Database, entry::DatabaseEntry, tree::Tree}, index::index::Index, refs::Refs}, errors::error::Error};
-
-// Adaugă use pentru logging
+use crate::core::database::author::Author;
+use crate::core::database::commit::Commit;
+use crate::core::database::tree::Tree;
+use crate::core::editor::Editor;
+use crate::core::index::index::Index;
+use crate::core::refs::Refs;
+use crate::core::write_commit::{WriteCommit, WriteCommitOptions, EditOption};
+use crate::errors::error::Error;
 use log::{debug, info, warn, error};
-use log;
+
+const COMMIT_NOTES: &str = "\
+Please enter the commit message for your changes. Lines starting
+with '#' will be ignored, and an empty message aborts the commit.
+";
 
 pub struct CommitCommand;
 
 impl CommitCommand {
     pub fn execute(message: &str) -> Result<(), Error> {
         let start_time = Instant::now();
-
-        // Validate the commit message
-        if message.trim().is_empty() {
-            // Folosim error! pentru logarea internă a motivului erorii
-            error!("Commit aborted due to empty commit message.");
-            return Err(Error::Generic("Aborting commit due to empty commit message".into()));
-        }
-
-        info!("Starting commit execution"); // Info
+        
+        info!("Starting commit execution");
 
         let root_path = Path::new(".");
         let git_path = root_path.join(".ash");
-
+        
         // Verify .ash directory exists
         if !git_path.exists() {
-            error!(".ash directory not found at {}", root_path.display()); // Error
+            error!(".ash directory not found at {}", root_path.display());
             return Err(Error::Generic("Not an ash repository (or any of the parent directories): .ash directory not found".into()));
         }
 
         let db_path = git_path.join("objects");
 
-        debug!("Initializing components"); // Debug
-        let mut database = Database::new(db_path);
+        debug!("Initializing components");
+        let mut database = crate::core::database::database::Database::new(db_path);
 
         // Check for the index file
         let index_path = git_path.join("index");
         if !index_path.exists() {
-            error!("Index file not found at {}", index_path.display()); // Error
+            error!("Index file not found at {}", index_path.display());
             return Err(Error::Generic("No index file found. Please add some files first.".into()));
         }
 
         // Check for existing index.lock file before trying to load the index
         let index_lock_path = git_path.join("index.lock");
         if index_lock_path.exists() {
-            error!("Index lock file exists: {}", index_lock_path.display()); // Error
+            error!("Index lock file exists: {}", index_lock_path.display());
             return Err(Error::Lock(format!(
                 "Unable to create '.ash/index.lock': File exists.\n\
                 Another ash process seems to be running in this repository.\n\
@@ -60,12 +62,12 @@ impl CommitCommand {
 
         let mut index = Index::new(index_path);
 
-        info!("Loading index"); // Info
-        // Load the index (read-only is sufficient for commit)
+        info!("Loading index");
+        // Load the index
         match index.load() {
-            Ok(_) => info!("Index loaded successfully"), // Info
+            Ok(_) => info!("Index loaded successfully"),
             Err(e) => {
-                error!("Error loading index: {}", e); // Error
+                error!("Error loading index: {}", e);
                 return Err(Error::Generic(format!("Error loading index: {}", e)));
             }
         }
@@ -73,7 +75,7 @@ impl CommitCommand {
         // Check for HEAD lock
         let head_lock_path = git_path.join("HEAD.lock");
         if head_lock_path.exists() {
-            error!("HEAD lock file exists: {}", head_lock_path.display()); // Error
+            error!("HEAD lock file exists: {}", head_lock_path.display());
             return Err(Error::Lock(format!(
                 "Unable to create '.ash/HEAD.lock': File exists.\n\
                 Another ash process seems to be running in this repository.\n\
@@ -83,226 +85,174 @@ impl CommitCommand {
         }
 
         let refs = Refs::new(&git_path);
-
-        info!("Reading HEAD"); // Info
+        
+        // Create WriteCommitOptions
+        let options = WriteCommitOptions {
+            message: if message.is_empty() { None } else { Some(message.to_string()) },
+            file: None,
+            edit: if env::var("ASH_EDIT").unwrap_or_default() == "1" { 
+                EditOption::Always 
+            } else { 
+                EditOption::Auto 
+            },
+        };
+        
+        // Create WriteCommit struct
+        let mut write_commit = WriteCommit::new(
+            &mut database,
+            &mut index,
+            &refs,
+            root_path,
+            &options
+        );
+        
+        // Get initial message
+        let initial_message = write_commit.read_message()?;
+        
+        // Compose final message
+        let composed_message = write_commit.compose_message(initial_message, COMMIT_NOTES)?;
+        
+        // If no message is provided, abort the commit
+        let message = match composed_message {
+            Some(msg) => msg,
+            None => {
+                println!("Aborting commit due to empty commit message");
+                return Ok(());
+            }
+        };
+        
+        info!("Reading HEAD");
         // Get the parent commit OID
         let parent = match refs.read_head() {
             Ok(p) => {
-                info!("HEAD read successfully: {:?}", p); // Info
+                info!("HEAD read successfully: {:?}", p);
                 p
             },
             Err(e) => {
-                error!("Error reading HEAD: {:?}", e); // Error
+                error!("Error reading HEAD: {:?}", e);
                 return Err(e);
             }
         };
-
-        // Convert index entries to database entries (only stage 0)
-        let database_entries: Vec<DatabaseEntry> = index.each_entry()
-            .filter(|entry| entry.stage == 0)
-            .map(|index_entry| {
-                DatabaseEntry::new(
-                    index_entry.path.clone(),
-                    index_entry.oid.clone(),
-                    &index_entry.mode_octal()
-                )
-            })
-            .collect();
-        debug!("Collected {} stage 0 entries from index.", database_entries.len()); // Debug
-
-        // --- Verificare Modificări ---
-        debug!("Building tree from index entries..."); // Debug
-        let mut root = Tree::build(database_entries.iter())?;
-
-        debug!("Storing trees to database to determine current tree OID..."); // Debug
-        root.traverse(|tree| database.store(tree).map(|_| ()))?;
-        let tree_oid = root.get_oid()
-            .ok_or(Error::Generic("Tree OID not set after storage".into()))?
-            .clone();
-        info!("Current index tree OID: {}", tree_oid); // Info
-
+        
+        // Create a clone of parent for later use
+        let parent_clone = parent.clone();
+        
+        // Convert optional parent to Vec
+        let parents = match &parent {
+            Some(p) => vec![p.clone()],
+            None => vec![],
+        };
+        
+        // Check for changes
+        let tree_oid = write_commit.write_tree()?;
+        
+        // Check if parent tree matches current tree
         let mut no_changes = false;
-        if let Some(parent_oid) = &parent {
-            match database.load(parent_oid) {
+        
+        // Create a separate Database for this operation
+        let mut temp_database = crate::core::database::database::Database::new(
+            git_path.join("objects")
+        );
+        
+        if let Some(parent_oid) = &parent_clone {
+            match temp_database.load(parent_oid) {
                 Ok(parent_obj) => {
                     if let Some(parent_commit) = parent_obj.as_any().downcast_ref::<Commit>() {
                         let parent_tree_oid = parent_commit.get_tree();
-                        info!("Parent commit tree OID: {}", parent_tree_oid); // Info
+                        info!("Parent commit tree OID: {}", parent_tree_oid);
                         if &tree_oid == parent_tree_oid {
-                            info!("Tree OIDs match. No changes detected."); // Info
+                            info!("Tree OIDs match. No changes detected.");
                             no_changes = true;
                         } else {
-                            debug!("Tree OIDs differ: Current={}, Parent={}", tree_oid, parent_tree_oid); // Debug
+                            debug!("Tree OIDs differ: Current={}, Parent={}", tree_oid, parent_tree_oid);
                         }
-                    } else {
-                        warn!("Parent OID {} did not resolve to a Commit object.", parent_oid); // Warn
                     }
                 },
-                Err(e) => {
-                    warn!("Could not load parent commit object {}: {}", parent_oid, e); // Warn
-                     if database_entries.is_empty() {
-                         no_changes = true;
-                     }
+                Err(_) => {
+                    // Unable to load parent commit - assume there are changes
                 }
-            }
-        } else {
-            if database_entries.is_empty() {
-                info!("Index is empty for root commit. No changes."); // Info
-                no_changes = true;
-            } else {
-                 info!("Root commit with entries detected."); // Info
             }
         }
 
         if no_changes {
             return Err(Error::Generic("No changes staged for commit.".into()));
         }
-        // --- Sfârșit Verificare Modificări ---
-
-        // --- Creare Commit ---
-        info!("Proceeding with commit creation..."); // Info
-        debug!("Index entries being committed:"); // Debug
-        for entry in &database_entries {
-            debug!("  Path: {}  OID: {}  Mode: {}", entry.get_name(), entry.get_oid(), entry.get_mode()); // Debug
-        }
-
-        // Verificare obiecte lipsă (opțional, dar sigur)
-        let mut missing_objects = Vec::new();
-        let mut unique_oids = HashSet::new();
-        for entry in &database_entries {
-            let oid = entry.get_oid();
-            if !unique_oids.contains(oid) && !database.exists(oid) {
-                missing_objects.push((oid.to_string(), entry.get_name().to_string()));
-                unique_oids.insert(oid.to_string());
-            }
-        }
-        if !missing_objects.is_empty() {
-            let mut error_msg = String::from("Error: The following objects needed for the commit are missing from the object database:\n");
-            for (oid, path) in &missing_objects { // Use reference
-                error_msg.push_str(&format!("  {} (referenced by {})\n", oid, path));
-            }
-            error_msg.push_str("\nAborting commit. This might indicate index corruption or an incomplete 'add'. Try adding the affected files again.");
-            error!("Commit aborted due to missing objects: {:?}", missing_objects); // Error
-            return Err(Error::Generic(error_msg));
-        }
-
-        debug!("Using pre-calculated Tree OID: {}", tree_oid); // Debug
-        if let Some(parent_oid) = &parent {
-            debug!("Using Parent OID: {}", parent_oid); // Debug
-        }
-        debug!("Message: {}", message); // Debug
-
-        let name = match env::var("GIT_AUTHOR_NAME").or_else(|_| env::var("USER")) {
-            Ok(name) => name,
-            Err(_) => {
-                 error!("Unable to determine author name."); // Error
-                 return Err(Error::Generic(
-                    "Unable to determine author name. Please set GIT_AUTHOR_NAME environment variable".into()
-                 ));
-            }
-        };
-        let email = match env::var("GIT_AUTHOR_EMAIL") {
-            Ok(email) => email,
-            Err(_) => {
-                 warn!("GIT_AUTHOR_EMAIL not set, using fallback."); // Warn
-                 format!("{}@{}", name, "localhost")
-            },
-        };
-        let author = Author::new(name, email);
-        debug!("Commit author: {}", author); // Debug
-
-        let mut commit = Commit::new( parent.clone(), tree_oid.clone(), author, message.to_string() );
-
-        if let Err(e) = database.store(&mut commit) {
-            error!("Failed to store commit object: {}", e); // Error
-            return Err(Error::Generic(format!("Failed to store commit: {}", e)));
-        }
-
-        let commit_oid = commit.get_oid()
-            .ok_or_else(|| { // Folosim or_else pentru a loga eroarea
-                error!("Commit OID was not set after storage."); // Error
-                Error::Generic("Commit OID not set after storage".into())
-            })?
-            .clone();
-        info!("Stored commit object with OID: {}", commit_oid); // Info
-
-        // Update HEAD
-        if let Err(e) = refs.update_head(&commit_oid) {
-            error!("Failed to update HEAD to {}: {}", commit_oid, e); // Error
-            return Err(Error::Generic(format!("Failed to update HEAD: {}", e)));
-        }
-        info!("Updated HEAD to {}", commit_oid); // Info
-
-        // --- Calculare fișiere modificate pentru rezumat ---
-        let mut changed_files = 0;
-        if let Some(parent_oid) = &parent {
-            if let Ok(parent_obj) = database.load(parent_oid) {
-                if let Some(parent_commit) = parent_obj.as_any().downcast_ref::<Commit>() {
-                    let parent_tree_oid = parent_commit.get_tree();
-                    let mut parent_files = HashMap::<String, String>::new();
-                    let mut current_files = HashMap::<String, String>::new();
-                    let _ = Self::collect_files_from_tree(&mut database, parent_tree_oid, PathBuf::new(), &mut parent_files);
-                    let _ = Self::collect_files_from_tree(&mut database, &tree_oid, PathBuf::new(), &mut current_files);
-                    debug!("Files in parent commit tree ({}): {}", parent_tree_oid, parent_files.len()); // Debug
-                    debug!("Files in current commit tree ({}): {}", tree_oid, current_files.len()); // Debug
-                    let all_paths: HashSet<_> = parent_files.keys().chain(current_files.keys()).collect();
-                    for path in all_paths {
-                        match (parent_files.get(path), current_files.get(path)) {
-                            (Some(old_oid), Some(new_oid)) if old_oid != new_oid => changed_files += 1,
-                            (None, Some(_)) => changed_files += 1,
-                            (Some(_), None) => changed_files += 1,
-                            _ => {}
-                        }
-                    }
-                    debug!("Changed files calculated by diff: {}", changed_files); // Debug
-                }
-            } else {
-                 warn!("Could not load parent commit {} during change calculation.", parent_oid); // Warn
-                 changed_files = database_entries.len(); // Fallback: count all entries
-            }
-        } else {
-            changed_files = database_entries.len();
-             debug!("Changed files (root commit): {}", changed_files); // Debug
-        }
-        // --- Sfârșit calcul fișiere modificate ---
-
-        // --- Afișare Rezumat Commit (pe stdout) ---
-        let is_root = if parent.is_none() { "(root-commit) " } else { "" };
-        let first_line = message.lines().next().unwrap_or("");
-        let short_oid = &commit_oid[0..std::cmp::min(7, commit_oid.len())];
+        
+        // Create commit
+        let commit = write_commit.create_commit(parents, message)?;
+        
+        // Update HEAD reference
+        refs.update_head(commit.get_oid().unwrap_or(&String::new()))?;
+        
+        // Print commit info
+        write_commit.print_commit(&commit);
+        
+        // Count changed files with a separate database instance
+        let mut counting_database = crate::core::database::database::Database::new(
+            git_path.join("objects")
+        );
+        let changed_files_count = Self::count_changed_files(&commit, &mut counting_database)?;
+        
+        // Show elapsed time
         let elapsed = start_time.elapsed();
-
-        // Folosim println! pentru output-ul final către utilizator
         println!(
-            "[{}{}] {} ({:.2}s)",
-            is_root,
-            short_oid,
-            first_line,
+            "{} file{} changed ({:.2}s)",
+            changed_files_count,
+            if changed_files_count == 1 { "" } else { "s" },
             elapsed.as_secs_f32()
         );
-        println!(
-            "{} file{} changed",
-            changed_files,
-            if changed_files == 1 { "" } else { "s" }
-        );
-        // --- Sfârșit Rezumat Commit ---
-
-        // Optional: Inspect tree structure for debugging (poate fi comentat)
-        // debug!("Inspecting final tree structure:");
-        // Tree::inspect_tree_structure(&mut database, &tree_oid, 0)?;
 
         Ok(())
     }
-
-    // Funcția de colectare a fișierelor din arbore (rămasă neschimbată funcțional, dar logurile sunt debug)
+    
+    // Helper method to count changed files
+    fn count_changed_files(commit: &Commit, database: &mut crate::core::database::database::Database) -> Result<usize, Error> {
+        let mut count = 0;
+        
+        // If it's a root commit, just count entries in the tree
+        if commit.get_parent().is_none() {
+            let tree_oid = commit.get_tree();
+            let mut files = HashMap::<String, String>::new();
+            Self::collect_files_from_tree(database, tree_oid, PathBuf::new(), &mut files)?;
+            return Ok(files.len());
+        }
+        
+        // Compare with parent commit
+        let parent_oid = commit.get_parent().unwrap();
+        let parent_obj = database.load(parent_oid)?;
+        
+        if let Some(parent_commit) = parent_obj.as_any().downcast_ref::<Commit>() {
+            let parent_tree_oid = parent_commit.get_tree();
+            let tree_oid = commit.get_tree();
+            
+            let mut parent_files = HashMap::<String, String>::new();
+            let mut current_files = HashMap::<String, String>::new();
+            
+            Self::collect_files_from_tree(database, parent_tree_oid, PathBuf::new(), &mut parent_files)?;
+            Self::collect_files_from_tree(database, tree_oid, PathBuf::new(), &mut current_files)?;
+            
+            let all_paths: HashSet<_> = parent_files.keys().chain(current_files.keys()).collect();
+            
+            for path in all_paths {
+                match (parent_files.get(path), current_files.get(path)) {
+                    (Some(old_oid), Some(new_oid)) if old_oid != new_oid => count += 1,
+                    (None, Some(_)) => count += 1,
+                    (Some(_), None) => count += 1,
+                    _ => {}
+                }
+            }
+        }
+        
+        Ok(count)
+    }
+    
+    // Existing helper method to collect files - unchanged
     fn collect_files_from_tree(
-        database: &mut Database,
+        database: &mut crate::core::database::database::Database,
         tree_oid: &str,
         prefix: PathBuf,
         files: &mut HashMap<String, String>
     ) -> Result<(), Error> {
-        //debug!("Traversing tree: {} at path: {}", tree_oid, prefix.display());
-
         let obj = database.load(tree_oid)?;
 
         if let Some(tree) = obj.as_any().downcast_ref::<Tree>() {
@@ -312,25 +262,21 @@ impl CommitCommand {
                 match entry {
                     TreeEntry::Blob(oid, mode) => {
                         if *mode == TREE_MODE || mode.is_directory() {
-                            //debug!("Found directory stored as blob: {} -> {}", entry_path_str, oid);
                             Self::collect_files_from_tree(database, &oid, entry_path, files)?;
                         } else {
-                            //debug!("Found file: {} -> {}", entry_path_str, oid);
                             files.insert(entry_path_str, oid.clone());
                         }
                     },
                     TreeEntry::Tree(subtree) => {
                         if let Some(subtree_oid) = subtree.get_oid() {
-                            //debug!("Found directory: {} -> {}", entry_path_str, subtree_oid);
                             Self::collect_files_from_tree(database, subtree_oid, entry_path, files)?;
-                        } else { warn!("Tree entry without OID: {}", entry_path_str); }
+                        }
                     }
                 }
             }
             return Ok(());
         }
 
-        // ... (restul funcției rămâne la fel, logurile pot fi ajustate la debug/trace) ...
         if obj.get_type() == "blob" {
             let blob_data = obj.to_bytes();
             match Tree::parse(&blob_data) {
@@ -349,23 +295,21 @@ impl CommitCommand {
                             TreeEntry::Tree(subtree) => {
                                 if let Some(subtree_oid) = subtree.get_oid() {
                                     Self::collect_files_from_tree(database, subtree_oid, entry_path, files)?;
-                                } else { warn!("Tree entry without OID in parsed tree: {}", entry_path_str); }
+                                }
                             }
                         }
                     }
                     return Ok(());
                 },
-                Err(_e) => {
+                Err(_) => {
                     if !prefix.as_os_str().is_empty() {
                         let path_str = prefix.to_string_lossy().to_string();
                         files.insert(path_str, tree_oid.to_string());
                         return Ok(());
                     }
-                     // debug!("Failed to parse blob {} as tree: {}", tree_oid, e); // Poate fi prea zgomotos
                 }
             }
         }
-        // debug!("Object {} is neither a tree nor a blob that can be parsed as a tree", tree_oid); // Poate fi prea zgomotos
         Ok(())
     }
 }
