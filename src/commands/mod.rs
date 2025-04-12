@@ -7,6 +7,3 @@ pub mod branch;
 pub mod checkout;
 pub mod log;
 pub mod merge;
-pub mod reset;
-pub mod revert;
-pub mod rm;
