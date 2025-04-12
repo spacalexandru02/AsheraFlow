@@ -26,6 +26,24 @@ pub enum Command {
         abort: bool,
         continue_merge: bool,
     },
+    Reset {
+        revision: String,
+        paths: Vec<String>,
+        soft: bool,
+        mixed: bool,
+        hard: bool,
+    },
+    Revert {
+        commit: String,
+        continue_revert: bool,
+        abort: bool,
+    },
+    Rm {
+        paths: Vec<String>,
+        cached: bool,
+        force: bool,
+        recursive: bool,
+    },
     Unknown { name: String },
 }
 

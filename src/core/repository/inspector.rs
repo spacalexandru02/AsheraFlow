@@ -2,12 +2,11 @@
 use std::path::Path;
 use std::collections::HashMap;
 use crate::errors::error::Error;
-use crate::core::database::blob::Blob;
 use crate::core::database::entry::DatabaseEntry;
 use crate::core::index::entry::Entry;
 use crate::core::workspace::Workspace;
 use crate::core::index::index::Index;
-use crate::core::database::database::{Database, GitObject};
+use crate::core::database::database::Database;
 
 // Enum for change types in the repository
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -123,8 +122,6 @@ impl<'a> Inspector<'a> {
             return Ok(Some(ChangeType::Deleted));
         }
         
-        let stat = stat.unwrap();
-        
         // Skip metadata checks and go directly to content comparison
         // Read file content
         let path = Path::new(&entry.path);
@@ -209,29 +206,6 @@ impl<'a> Inspector<'a> {
         }
         
         Ok(!matches) // Return true if they differ
-    }
-    
-    /// Check if a file in workspace has uncommitted changes
-    pub fn has_uncommitted_changes(&self, path: &Path) -> Result<bool, Error> {
-        // Get the entry from the index
-        let path_str = path.to_string_lossy().to_string();
-        let entry = self.index.get_entry(&path_str);
-        
-        if entry.is_none() {
-            // Not in index - consider untracked
-            return Ok(true);
-        }
-        
-        // Get file metadata
-        let stat = match self.workspace.stat_file(path) {
-            Ok(s) => s,
-            Err(_) => return Ok(true), // If we can't stat, consider it changed
-        };
-        
-        // Check if content differs
-        let compare_result = self.compare_index_to_workspace(entry, Some(&stat))?;
-        
-        Ok(compare_result.is_some())
     }
     
     /// Analyze all changes in the workspace compared to index

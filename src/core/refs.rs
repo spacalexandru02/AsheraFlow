@@ -7,8 +7,8 @@ use crate::errors::error::Error;
 use crate::core::lockfile::Lockfile;
 
 // Constants
+pub const ORIG_HEAD: &str = "ORIG_HEAD";
 pub const HEAD: &str = "HEAD";
-const DEFAULT_BRANCH: &str = "master";
 const SYMREF_PREFIX: &str = "ref: ";
 lazy_static::lazy_static! {
     static ref SYMREF_REGEX: Regex = Regex::new(r"^ref: (.+)$").unwrap();
@@ -19,13 +19,6 @@ lazy_static::lazy_static! {
 pub enum Reference {
     Direct(String),       // Direct reference to an OID
     Symbolic(String),     // Symbolic reference to another ref
-}
-
-// Custom errors
-#[derive(Debug)]
-pub enum RefError {
-    InvalidBranch(String),
-    LockFailed(String),
 }
 
 pub struct Refs {
@@ -177,7 +170,8 @@ impl Refs {
     }
     
     // Update a reference file with proper locking
-    fn update_ref_file(&self, path: &Path, content: &str) -> Result<(), Error> {
+    pub(crate) fn update_ref_file(&self, path: &Path, content: &str) -> Result<(), Error> {
+        // ... implementarea existentă ...
         // Create parent directories if they don't exist
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|e| {
@@ -188,28 +182,28 @@ impl Refs {
                 ))
             })?;
         }
-        
+
         // Create a lockfile for safe writing
         let mut lockfile = Lockfile::new(path);
-        
+
         // Acquire the lock
         let acquired = lockfile.hold_for_update()
             .map_err(|e| Error::Generic(format!("Lock error: {:?}", e)))?;
-        
+
         if !acquired {
             return Err(Error::Generic(format!(
                 "Could not acquire lock on '{}'", path.display()
             )));
         }
-        
+
         // Write the content with a newline
         lockfile.write(&format!("{}\n", content))
             .map_err(|e| Error::Generic(format!("Write error: {:?}", e)))?;
-        
+
         // Commit the changes
         lockfile.commit_ref()
             .map_err(|e| Error::Generic(format!("Commit error: {:?}", e)))?;
-        
+
         Ok(())
     }
     

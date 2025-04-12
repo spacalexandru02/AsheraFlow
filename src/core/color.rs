@@ -7,29 +7,10 @@ pub struct Color;
 impl Color {
     // Foreground colors
     pub const RESET: &'static str = "\x1b[0m";
-    pub const BLACK: &'static str = "\x1b[30m";
     pub const RED: &'static str = "\x1b[31m";
     pub const GREEN: &'static str = "\x1b[32m";
     pub const YELLOW: &'static str = "\x1b[33m";
-    pub const BLUE: &'static str = "\x1b[34m";
-    pub const MAGENTA: &'static str = "\x1b[35m";
     pub const CYAN: &'static str = "\x1b[36m";
-    pub const WHITE: &'static str = "\x1b[37m";
-
-    // Background colors
-    pub const BG_BLACK: &'static str = "\x1b[40m";
-    pub const BG_RED: &'static str = "\x1b[41m";
-    pub const BG_GREEN: &'static str = "\x1b[42m";
-    pub const BG_YELLOW: &'static str = "\x1b[43m";
-    pub const BG_BLUE: &'static str = "\x1b[44m";
-    pub const BG_MAGENTA: &'static str = "\x1b[45m";
-    pub const BG_CYAN: &'static str = "\x1b[46m";
-    pub const BG_WHITE: &'static str = "\x1b[47m";
-
-    // Styles
-    pub const BOLD: &'static str = "\x1b[1m";
-    pub const UNDERLINE: &'static str = "\x1b[4m";
-    pub const REVERSED: &'static str = "\x1b[7m";
 
     // Check if colors should be enabled
     fn is_enabled() -> bool {
@@ -90,23 +71,8 @@ impl Color {
         Self::colorize(text, Self::YELLOW)
     }
 
-    // Helper for blue text
-    pub fn blue(text: &str) -> String {
-        Self::colorize(text, Self::BLUE)
-    }
-
-    // Helper for magenta text
-    pub fn magenta(text: &str) -> String {
-        Self::colorize(text, Self::MAGENTA)
-    }
-
     // Helper for cyan text
     pub fn cyan(text: &str) -> String {
         Self::colorize(text, Self::CYAN)
-    }
-
-    // Helper for bold text
-    pub fn bold(text: &str) -> String {
-        Self::colorize(text, Self::BOLD)
     }
 }

@@ -1,0 +1,184 @@
+Using ASH executable: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow
+Using temporary directory for test repos: /var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.5QOGr7AxPb
+Logging detailed output to: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/tests/integration/revert_tests.log
+
+[0;34m--- Test: Simple Revert (No Conflict) ---[0m
+[2025-04-06T16:55:08Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:55:08Z INFO  AsheraFlow] Handling command: Init { path: "." }
+[2025-04-06T16:55:08Z INFO  AsheraFlow] Executing InitCommand for path: '.'
+Initialized empty Ash repository in /private/var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.5QOGr7AxPb/simple_revert_repo/.ash
+[INFO] Initialized repo in /var/folders/0z/02sl9x695lj1flvcl639dvm40000gn/T/tmp.5QOGr7AxPb/simple_revert_repo
+[2025-04-06T16:55:08Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:55:08Z INFO  AsheraFlow] Handling command: Add { paths: ["file1.txt"] }
+[2025-04-06T16:55:08Z INFO  AsheraFlow] Executing AddCommand for paths: ["file1.txt"]
+Storing object of type: blob
+Serializing blob object, content size: 23 bytes
+Calculated OID: 99b42069237a7ed7934b28e053a44ebe07caf52d
+Object 99b42069237a7ed7934b28e053a44ebe07caf52d doesn't exist, writing to database
+1 new file added to index (0.00s)
+[2025-04-06T16:55:08Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:55:08Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C1" }
+[2025-04-06T16:55:08Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C1'
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Reading HEAD
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] HEAD read successfully: None
+Processing entry: file1.txt
+Added top-level file: file1.txt
+Final tree structure:
+  Tree Structure:
+  file1.txt (blob, mode 100644) -> 99b42069237a7ed7934b28e053a44ebe07caf52d
+Processing tree with 1 entries
+Storing object of type: tree
+Serializing tree object, content size: 37 bytes
+Calculated OID: 84fdf568a49a1707e1239bf68dd0965ac5012562
+Object 84fdf568a49a1707e1239bf68dd0965ac5012562 doesn't exist, writing to database
+Tree has OID 84fdf568a49a1707e1239bf68dd0965ac5012562 after processing
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Current index tree OID: 84fdf568a49a1707e1239bf68dd0965ac5012562
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Root commit with entries detected.
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
+Storing object of type: commit
+Serializing commit object, content size: 165 bytes
+Calculated OID: 0a8a794601f7be00c0465ac6b2fa98d5a97a430b
+Object 0a8a794601f7be00c0465ac6b2fa98d5a97a430b doesn't exist, writing to database
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: 0a8a794601f7be00c0465ac6b2fa98d5a97a430b
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Updated HEAD to 0a8a794601f7be00c0465ac6b2fa98d5a97a430b
+[(root-commit) 0a8a794] Commit C1 (0.00s)
+1 file changed
+[INFO] Commit on 'master': 'Commit C1' (file1.txt)
+[DEBUG] Running log in get_oid for simple_revert_repo
+[DEBUG] log exit code: [0], output line: [[2025-04-06T16:55:08Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:55:08Z INFO  AsheraFlow] Handling command: Log { revisions: [], abbrev: true, format: "oneline", patch: false, decorate: "auto" }
+[2025-04-06T16:55:08Z INFO  AsheraFlow] Executing LogCommand (revisions: [], options: abbrev=true, format=oneline, patch=false, decorate=auto)]
+[2025-04-06T16:55:08Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:55:08Z INFO  AsheraFlow] Handling command: Add { paths: ["file1.txt"] }
+[2025-04-06T16:55:08Z INFO  AsheraFlow] Executing AddCommand for paths: ["file1.txt"]
+Storing object of type: blob
+Serializing blob object, content size: 32 bytes
+Calculated OID: 6643fc8092241fc1fc7d9b974a0e963004e66de5
+Object 6643fc8092241fc1fc7d9b974a0e963004e66de5 doesn't exist, writing to database
+Examining HEAD commit: 0a8a794601f7be00c0465ac6b2fa98d5a97a430b
+Root tree OID: 84fdf568a49a1707e1239bf68dd0965ac5012562
+Traversing tree: 84fdf568a49a1707e1239bf68dd0965ac5012562 at path: 
+Parsing tree object: 84fdf568a49a1707e1239bf68dd0965ac5012562
+Tree parse: Found file entry: file1.txt -> 99b42069237a7ed7934b28e053a44ebe07caf52d (mode 100644)
+Found file: file1.txt -> 99b42069237a7ed7934b28e053a44ebe07caf52d
+Found 1 files in HEAD
+1 modified file added to index (0.00s)
+[2025-04-06T16:55:08Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:55:08Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C2" }
+[2025-04-06T16:55:08Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C2'
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Reading HEAD
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] HEAD read successfully: Some("0a8a794601f7be00c0465ac6b2fa98d5a97a430b")
+Processing entry: file1.txt
+Added top-level file: file1.txt
+Final tree structure:
+  Tree Structure:
+  file1.txt (blob, mode 100644) -> 6643fc8092241fc1fc7d9b974a0e963004e66de5
+Processing tree with 1 entries
+Storing object of type: tree
+Serializing tree object, content size: 37 bytes
+Calculated OID: 71254a02cb07d8b148ce9d8fbf9e7c100de61a22
+Object 71254a02cb07d8b148ce9d8fbf9e7c100de61a22 doesn't exist, writing to database
+Tree has OID 71254a02cb07d8b148ce9d8fbf9e7c100de61a22 after processing
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Current index tree OID: 71254a02cb07d8b148ce9d8fbf9e7c100de61a22
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Parent commit tree OID: 84fdf568a49a1707e1239bf68dd0965ac5012562
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
+Storing object of type: commit
+Serializing commit object, content size: 213 bytes
+Calculated OID: aada9d5803ceca1d50c29cf378051bf537b7215e
+Object aada9d5803ceca1d50c29cf378051bf537b7215e doesn't exist, writing to database
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: aada9d5803ceca1d50c29cf378051bf537b7215e
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Updated HEAD to aada9d5803ceca1d50c29cf378051bf537b7215e
+Parsing tree object: 84fdf568a49a1707e1239bf68dd0965ac5012562
+Tree parse: Found file entry: file1.txt -> 99b42069237a7ed7934b28e053a44ebe07caf52d (mode 100644)
+Parsing tree object: 71254a02cb07d8b148ce9d8fbf9e7c100de61a22
+Tree parse: Found file entry: file1.txt -> 6643fc8092241fc1fc7d9b974a0e963004e66de5 (mode 100644)
+[aada9d5] Commit C2 (0.00s)
+1 file changed
+[INFO] Commit on 'master': 'Commit C2' (file1.txt)
+[DEBUG] Running log in get_oid for simple_revert_repo
+[DEBUG] log exit code: [0], output line: [[2025-04-06T16:55:08Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:55:08Z INFO  AsheraFlow] Handling command: Log { revisions: [], abbrev: true, format: "oneline", patch: false, decorate: "auto" }
+[2025-04-06T16:55:08Z INFO  AsheraFlow] Executing LogCommand (revisions: [], options: abbrev=true, format=oneline, patch=false, decorate=auto)]
+[2025-04-06T16:55:08Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:55:08Z INFO  AsheraFlow] Handling command: Add { paths: ["file2.txt"] }
+[2025-04-06T16:55:08Z INFO  AsheraFlow] Executing AddCommand for paths: ["file2.txt"]
+Storing object of type: blob
+Serializing blob object, content size: 17 bytes
+Calculated OID: 118d52556c52027ca6c1561d6a7641cfccc1dca5
+Object 118d52556c52027ca6c1561d6a7641cfccc1dca5 doesn't exist, writing to database
+Examining HEAD commit: aada9d5803ceca1d50c29cf378051bf537b7215e
+Root tree OID: 71254a02cb07d8b148ce9d8fbf9e7c100de61a22
+Traversing tree: 71254a02cb07d8b148ce9d8fbf9e7c100de61a22 at path: 
+Parsing tree object: 71254a02cb07d8b148ce9d8fbf9e7c100de61a22
+Tree parse: Found file entry: file1.txt -> 6643fc8092241fc1fc7d9b974a0e963004e66de5 (mode 100644)
+Found file: file1.txt -> 6643fc8092241fc1fc7d9b974a0e963004e66de5
+Found 1 files in HEAD
+1 new file added to index (0.00s)
+[2025-04-06T16:55:08Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:55:08Z INFO  AsheraFlow] Handling command: Commit { message: "Commit C3" }
+[2025-04-06T16:55:08Z INFO  AsheraFlow] Executing CommitCommand with message: 'Commit C3'
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Starting commit execution
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Loading index
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Index loaded successfully
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Reading HEAD
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] HEAD read successfully: Some("aada9d5803ceca1d50c29cf378051bf537b7215e")
+Processing entry: file1.txt
+Added top-level file: file1.txt
+Processing entry: file2.txt
+Added top-level file: file2.txt
+Final tree structure:
+  Tree Structure:
+  file2.txt (blob, mode 100644) -> 118d52556c52027ca6c1561d6a7641cfccc1dca5
+  file1.txt (blob, mode 100644) -> 6643fc8092241fc1fc7d9b974a0e963004e66de5
+Processing tree with 2 entries
+Storing object of type: tree
+Serializing tree object, content size: 74 bytes
+Calculated OID: e4c0f06081296b779f6adaecf052775f62b12254
+Object e4c0f06081296b779f6adaecf052775f62b12254 doesn't exist, writing to database
+Tree has OID e4c0f06081296b779f6adaecf052775f62b12254 after processing
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Current index tree OID: e4c0f06081296b779f6adaecf052775f62b12254
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Parent commit tree OID: 71254a02cb07d8b148ce9d8fbf9e7c100de61a22
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Proceeding with commit creation...
+Storing object of type: commit
+Serializing commit object, content size: 213 bytes
+Calculated OID: 5630933aaf99685aabd0004e2de2e7d62f7043f1
+Object 5630933aaf99685aabd0004e2de2e7d62f7043f1 doesn't exist, writing to database
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Stored commit object with OID: 5630933aaf99685aabd0004e2de2e7d62f7043f1
+[2025-04-06T16:55:08Z INFO  AsheraFlow::commands::commit] Updated HEAD to 5630933aaf99685aabd0004e2de2e7d62f7043f1
+Parsing tree object: 71254a02cb07d8b148ce9d8fbf9e7c100de61a22
+Tree parse: Found file entry: file1.txt -> 6643fc8092241fc1fc7d9b974a0e963004e66de5 (mode 100644)
+Parsing tree object: e4c0f06081296b779f6adaecf052775f62b12254
+Tree parse: Found file entry: file1.txt -> 6643fc8092241fc1fc7d9b974a0e963004e66de5 (mode 100644)
+Tree parse: Found file entry: file2.txt -> 118d52556c52027ca6c1561d6a7641cfccc1dca5 (mode 100644)
+[5630933] Commit C3 (0.00s)
+1 file changed
+[INFO] Commit on 'master': 'Commit C3' (file2.txt)
+[DEBUG] Running log in get_oid for simple_revert_repo
+[DEBUG] log exit code: [0], output line: [[2025-04-06T16:55:08Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:55:08Z INFO  AsheraFlow] Handling command: Log { revisions: [], abbrev: true, format: "oneline", patch: false, decorate: "auto" }
+[2025-04-06T16:55:08Z INFO  AsheraFlow] Executing LogCommand (revisions: [], options: abbrev=true, format=oneline, patch=false, decorate=auto)]
+[DEBUG] OIDs for simple_revert_repo: C1=[2025-04-06T16:55:08Z
+[2025-04-06T16:55:08Z
+[2025-04-06T16:55:08Z, C2=[2025-04-06T16:55:08Z
+[2025-04-06T16:55:08Z
+[2025-04-06T16:55:08Z, C3=[2025-04-06T16:55:08Z
+[2025-04-06T16:55:08Z
+[2025-04-06T16:55:08Z
+[0;33m  CMD [in simple_revert_repo]: /Users/alexandruspac/Developer/AsheraFlow/AsheraFlow/target/release/AsheraFlow revert [2025-04-06T16:55:08Z
+[2025-04-06T16:55:08Z
+[2025-04-06T16:55:08Z[0m
+[2025-04-06T16:55:08Z INFO  AsheraFlow] AsheraFlow application starting...
+[2025-04-06T16:55:08Z INFO  AsheraFlow] Handling command: Revert { commit: "[2025-04-06T16:55:08Z\n[2025-04-06T16:55:08Z\n[2025-04-06T16:55:08Z", continue_revert: false, abort: false }
+[2025-04-06T16:55:08Z INFO  AsheraFlow] Executing RevertCommand for commit: '[2025-04-06T16:55:08Z
+    [2025-04-06T16:55:08Z
+    [2025-04-06T16:55:08Z', continue: false, abort: false
+Error: Not a valid object name: '[2025-04-06T16:55:08Z
+[2025-04-06T16:55:08Z
+[2025-04-06T16:55:08Z'
+[0;31m  CMD FAILED UNEXPECTEDLY (Exit Code: 1)[0m

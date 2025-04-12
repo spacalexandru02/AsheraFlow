@@ -1,3 +1,6 @@
+use std::env;
+use std::path::Path;
+
 use crate::cli::args::{CliArgs, Command};
 use crate::errors::error::Error;
 
@@ -20,31 +23,59 @@ impl CliParser {
                     path: args.get(2).map(|s| s.to_owned()).unwrap_or(".".to_string()),
                 },
             },
+            // Update to src/cli/parser.rs
+// This is the relevant part for the commit command in the match statement:
+
             "commit" => {
                 let mut message = None; // Use Option for message initially
+                let mut edit = false;
+                let mut file = None;
                 let mut i = 2;
+                
                 while i < args.len() {
                     if (args[i] == "--message" || args[i] == "-m") && i + 1 < args.len() {
                         message = Some(args[i + 1].to_owned());
                         i += 2; // Skip both flag and value
+                    } else if (args[i] == "--file" || args[i] == "-F") && i + 1 < args.len() {
+                        file = Some(Path::new(&args[i + 1]).to_path_buf());
+                        i += 2; // Skip both flag and value
+                    } else if args[i] == "--edit" || args[i] == "-e" {
+                        edit = true;
+                        i += 1; // Skip flag
+                    } else if args[i] == "--no-edit" {
+                        edit = false;
+                        i += 1; // Skip flag
                     } else {
                         // Handle potential unknown flags or arguments here if needed
                         i += 1;
                     }
                 }
 
-                if message.is_none() {
-                     // Try reading from standard input or editor if no -m is provided (like git)
-                     // For now, require the message flag
-                    return Err(Error::Generic("Commit message is required. Use --message <msg> or -m <msg>".to_string()));
+                // Set environment variables based on options
+                if edit {
+                    env::set_var("ASH_EDIT", "1");
+                } else {
+                    env::remove_var("ASH_EDIT");
+                }
+                
+                if let Some(file_path) = &file {
+                    env::set_var("ASH_COMMIT_FILE", file_path.to_string_lossy().to_string());
+                } else {
+                    env::remove_var("ASH_COMMIT_FILE");
+                }
+                
+                if let Some(msg) = &message {
+                    env::set_var("ASH_COMMIT_MESSAGE", msg);
+                } else {
+                    env::remove_var("ASH_COMMIT_MESSAGE");
                 }
 
                 CliArgs {
                     command: Command::Commit {
-                        message: message.unwrap(), // Unwrap is safe here due to check above
+                        message: message.unwrap_or_default(),
                     },
                 }
-            },
+            }
             "add" => {
                 if args.len() < 3 {
                     return Err(Error::Generic("File path(s) are required for add command".to_string()));
@@ -322,7 +353,185 @@ impl CliParser {
                     },
                 }
             },
-            // --- Sfârșit caz 'merge' ---
+            "reset" => {
+                // Parse reset command options
+                let mut revision = String::new();
+                let mut paths = Vec::new();
+                let mut soft = false;
+                let mut mixed = false; // Default mode
+                let mut hard = false;
+                let mut parsing_paths = false; // Flag to indicate we are past '--'
+
+                let mut i = 2;
+                while i < args.len() {
+                    let arg = &args[i];
+
+                    // Check for '--' separator first
+                    if arg == "--" {
+                        parsing_paths = true;
+                        i += 1; // Move past '--'
+                        continue; // Continue to next iteration
+                    }
+
+                    if parsing_paths {
+                        // Everything after '--' is a path
+                        paths.push(arg.clone());
+                    } else {
+                        // Parse options or revision before '--'
+                        match arg.as_str() {
+                            "--soft" => {
+                                soft = true;
+                            },
+                            "--mixed" => {
+                                mixed = true;
+                            },
+                            "--hard" => {
+                                hard = true;
+                            },
+                            a if a.starts_with('-') => {
+                                // Unknown flag before '--'
+                                return Err(Error::Generic(format!("Unknown option for reset: {}", a)));
+                            },
+                            _ => {
+                                // If revision is not set yet, this is it
+                                if revision.is_empty() {
+                                    revision = arg.clone();
+                                } else {
+                                    // This must be a path (before '--')
+                                    paths.push(arg.clone());
+                                }
+                            }
+                        }
+                    }
+                    i += 1;
+                }
+
+                 // Validation: Cannot have multiple modes
+                 let mode_count = [soft, mixed, hard].iter().filter(|&&x| x).count();
+                 if mode_count > 1 {
+                     return Err(Error::Generic("Options --soft, --mixed, --hard are mutually exclusive".to_string()));
+                 }
+
+
+                CliArgs {
+                    command: Command::Reset {
+                        revision, // Can be empty, let the command handle it
+                        paths,
+                        soft,
+                        mixed: if mode_count == 0 { true } else { mixed }, // Default to mixed if no mode specified
+                        hard,
+                    },
+                }
+            },
+            "revert" => {
+                let mut commit = String::new();
+                let mut continue_revert = false;
+                let mut abort = false;
+
+                let mut i = 2;
+                while i < args.len() {
+                    let arg = &args[i];
+                    match arg.as_str() {
+                        "--continue" => {
+                            continue_revert = true;
+                        },
+                        "--abort" => {
+                            abort = true;
+                        },
+                        a if a.starts_with('-') => {
+                            // Unknown flag
+                            return Err(Error::Generic(format!("Unknown option for revert: {}", a)));
+                        },
+                        _ => {
+                            // This is the commit to revert
+                            if commit.is_empty() {
+                                commit = arg.clone();
+                            } else {
+                                return Err(Error::Generic(format!("Unexpected argument for revert: {}", arg)));
+                            }
+                        }
+                    }
+                    i += 1;
+                }
+
+                // Validate arguments
+                if continue_revert && abort {
+                    return Err(Error::Generic("Cannot use --continue and --abort together".to_string()));
+                }
+
+                // commit is required unless using --continue or --abort
+                if commit.is_empty() && !continue_revert && !abort {
+                    return Err(Error::Generic("Commit argument is required for revert".to_string()));
+                }
+
+                // Cannot specify commit with --continue or --abort
+                if !commit.is_empty() && (continue_revert || abort) {
+                    return Err(Error::Generic("Cannot specify commit with --continue or --abort".to_string()));
+                }
+
+                CliArgs {
+                    command: Command::Revert {
+                        commit,
+                        continue_revert,
+                        abort,
+                    },
+                }
+            },
+            "rm" => {
+                // Parse rm command options
+                let mut paths = Vec::new();
+                let mut cached = false;
+                let mut force = false;
+                let mut recursive = false;
+                
+                // Process arguments
+                let mut i = 2;
+                while i < args.len() {
+                    let arg = &args[i];
+                    match arg.as_str() {
+                        "--cached" => {
+                            cached = true;
+                        },
+                        "-f" | "--force" => {
+                            force = true;
+                        },
+                        "-r" | "-R" | "--recursive" => {
+                            recursive = true;
+                        },
+                        "--" => {
+                            // Everything after -- is a path
+                            i += 1;
+                            while i < args.len() {
+                                paths.push(args[i].clone());
+                                i += 1;
+                            }
+                            break;
+                        },
+                        _ if arg.starts_with('-') => {
+                            // Unknown flag
+                            return Err(Error::Generic(format!("Unknown option for rm: {}", arg)));
+                        },
+                        _ => {
+                            // This is a path
+                            paths.push(arg.clone());
+                        }
+                    }
+                    i += 1;
+                }
+                
+                if paths.is_empty() {
+                    return Err(Error::Generic("No paths specified for removal".to_string()));
+                }
+                
+                CliArgs {
+                    command: Command::Rm {
+                        paths,
+                        cached,
+                        force,
+                        recursive,
+                    },
+                }
+            },
             _ => CliArgs {
                 command: Command::Unknown { name: command },
             },
@@ -332,24 +541,30 @@ impl CliParser {
     }
 
     // Updated format_help to include merge
-     pub fn format_help() -> String {
-         format!(
-             "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}", // Added one {}
-             "Usage: ash <command> [options]",
-             "Commands:",
-             "  init [path]                       Initialize a new repository",
-             "  add <paths...>                    Add file contents to the index",
-             "  commit -m <message>               Commit changes to the repository",
-             "  status [--porcelain] [--color=...] Show the working tree status",
-             "  diff [--cached] [paths...]        Show changes (HEAD vs index or index vs workspace)",
-             "  branch [-v] [-d|-D] [<n> [<sp>]]  Manage branches (list, create, delete)",
-             "  checkout <target>                 Switch branches or restore working tree files",
-             "  log [--oneline] [--decorate=...]  Show commit logs",
-             "  merge <branch> [-m <msg>]         Merge the specified branch into the current branch", // Added merge
-             "        --abort                     Abort the current merge resolution process",
-             "        --continue                  Continue the merge after resolving conflicts (not implemented)",
-             "Common Options:",
-             "  (Options specific to commands listed above)"
-         )
-     }
+    // Updated format_help to include revert
+    pub fn format_help() -> String {
+        format!(
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+            "Usage: ash <command> [options]",
+            "Commands:",
+            "  init [path]                       Initialize a new repository",
+            "  add <paths...>                    Add file contents to the index",
+            "  commit -m <message>               Commit changes to the repository",
+            "  status [--porcelain] [--color=...] Show the working tree status",
+            "  diff [--cached] [paths...]        Show changes (HEAD vs index or index vs workspace)",
+            "  branch [-v] [-d|-D] [<n> [<sp>]]  Manage branches (list, create, delete)",
+            "  checkout <target>                 Switch branches or restore working tree files",
+            "  log [--oneline] [--decorate=...]  Show commit logs",
+            "  merge <branch> [-m <msg>]         Merge the specified branch into the current branch",
+            "        --abort                     Abort the current merge resolution process",
+            "        --continue                  Continue the merge after resolving conflicts (not implemented)",
+            "  reset [--soft|--mixed|--hard] [<rev>] [--] [<paths>...] Reset current HEAD to the specified state",
+            "  revert <commit>                   Revert the changes introduced by a commit",
+            "        --continue                  Continue the revert operation after resolving conflicts",
+            "        --abort                     Abort the revert operation and return to pre-revert state",
+            "  rm [-f] [--cached] [-r] <paths>... Remove files from the working tree and from the index", 
+            "Common Options:",
+            "  (Options specific to commands listed above)"
+        )
+    }
 }

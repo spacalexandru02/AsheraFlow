@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::core::database::blob::Blob;
-use crate::core::database::database::{Database, GitObject};
+use crate::core::database::database::Database;
 use crate::core::database::entry::DatabaseEntry;
 use crate::core::file_mode::FileMode;
 use crate::core::index::index::Index;
@@ -76,42 +76,6 @@ impl<'a, T: MergeInputs> Resolve<'a, T> {
          Ok(()) // Index lock released by caller (main.rs) via index.write_updates()
      }
 
-
-    fn file_dir_conflict(
-        &mut self,
-        path: &Path,
-        diff: &HashMap<PathBuf, (Option<DatabaseEntry>, Option<DatabaseEntry>)>,
-        name: &str, // Branch name where the file exists (the other has the directory)
-    ) {
-        // This logic is now primarily handled within same_path_conflict and record_parent_dir_conflict
-        // Keeping the shell here, but it might be redundant or need adjustment if specific
-        // parent-based file/dir conflicts need different handling than direct ones.
-
-        let path_str = path.to_string_lossy().to_string();
-        println!("Checking legacy file/dir parent conflict for: {}", path_str);
-
-        // Consider if this loop logic is still needed or if the direct check + parent check in prepare_tree_diffs is sufficient.
-        // For now, let's keep it but be aware it might double-log or conflict with other checks.
-
-        // Example: Check parent directories (original logic)
-        /*
-        for parent in self.parent_directories(path) {
-            if let Some((old_item, new_item_opt)) = diff.get(&parent) {
-                 if let Some(new_item) = new_item_opt {
-                      // If parent is a FILE in the other diff map
-                      if !new_item.get_file_mode().is_directory() {
-                           let parent_path = parent.to_string_lossy().to_string();
-                           println!("Found parent file/dir conflict at: {}", parent_path);
-                           // ... rest of conflict recording logic ...
-                           break; // Stop checking higher parents
-                      }
-                 }
-            }
-        }
-        */
-    }
-
-
     fn apply_clean_changes(&mut self) -> Result<(), Error> {
         println!("Applying {} clean changes...", self.clean_diff.len());
         let clean_diff_clone = self.clean_diff.clone(); // Clone to allow mutable borrow of self later
@@ -178,18 +142,6 @@ impl<'a, T: MergeInputs> Resolve<'a, T> {
         }
         println!("Successfully wrote all untracked files.");
         Ok(())
-    }
-
-
-    fn parent_directories(&self, path: &Path) -> Vec<PathBuf> {
-        let mut result = Vec::new();
-        let mut current = PathBuf::from(path);
-        while let Some(parent) = current.parent() {
-            if parent.as_os_str().is_empty() { break; }
-            result.push(parent.to_path_buf());
-            current = parent.to_path_buf();
-        }
-        result
     }
 
     fn log(&self, message: String) {

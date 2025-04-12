@@ -10,8 +10,6 @@ pub struct BranchCommand;
 
 impl BranchCommand {
     pub fn execute(branch_name: &str, start_point: Option<&str>) -> Result<(), Error> {
-        let start_time = Instant::now();
-        
         // Get flags from environment variables (set in main.rs)
         let verbose = std::env::var("ASH_BRANCH_VERBOSE").unwrap_or_default() == "1";
         let delete = std::env::var("ASH_BRANCH_DELETE").unwrap_or_default() == "1";
@@ -185,7 +183,7 @@ impl BranchCommand {
             return Err(Error::Generic("Branch not deleted".to_string()));
         }
         
-        let mut repo = Repository::new(".")?;
+        let repo = Repository::new(".")?;
         
         // Check if we're trying to delete the current branch
         let current_ref = repo.refs.current_ref()?;

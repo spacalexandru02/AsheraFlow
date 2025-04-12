@@ -95,33 +95,6 @@ impl Commit {
         &self.tree
     }
     
-
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let timestamp = self.author.timestamp.timestamp();
-        let author_line = format!(
-            "{} <{}> {} +0000", 
-            self.author.name, 
-            self.author.email, 
-            timestamp
-        );
-    
-        let mut lines = Vec::with_capacity(5);
-        
-        lines.push(format!("tree {}", self.tree));
-        
-        if let Some(parent) = &self.parent {
-            lines.push(format!("parent {}", parent));
-        }
-        
-        lines.push(format!("author {}", author_line));
-        lines.push(format!("committer {}", author_line));
-    
-        lines.push(String::new()); // Empty line before message
-        lines.push(self.message.clone());
-    
-        lines.join("\n").into_bytes()
-    }
-    
     /// Parsează un commit dintr-un șir de bytes
     pub fn parse(data: &[u8]) -> Result<Self, Error> {
         let content = match str::from_utf8(data) {
