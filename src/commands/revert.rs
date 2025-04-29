@@ -1,44 +1,144 @@
-// src/commands/revert.rs
-// Implementation of the revert command that undoes the changes introduced by a commit
-use std::time::Instant;
-use std::fs;
-use crate::errors::error::Error;
-use crate::core::repository::repository::Repository;
-use crate::core::revision::Revision;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+
 use crate::core::database::commit::Commit;
-use crate::core::database::author::Author;
-use crate::core::merge::inputs::Inputs;
+use crate::core::database::database::Database;
+use crate::core::editor::Editor;
+use crate::core::refs::{Refs, HEAD};
+use crate::errors::error::Error;
+use crate::core::index::index::Index;
+use crate::core::merge::inputs;
 use crate::core::merge::resolve::Resolve;
-use crate::core::refs::ORIG_HEAD;
+use crate::core::repository::pending_commit::{PendingCommit, PendingCommitType};
+use crate::core::repository::sequencer::{Action, Sequencer};
+use crate::core::revlist::RevList;
+use crate::commands::commit_writer::{CommitWriter, COMMIT_NOTES};
+use crate::core::workspace::Workspace;
+use crate::core::revision::Revision;
+use crate::core::repository::repository::Repository;
+
+// Shared constants and utilities
+const CONFLICT_NOTES: &str = "\
+after resolving the conflicts, mark the corrected paths
+with 'ash add <paths>' or 'ash rm <paths>'
+and commit the result with 'ash commit'";
 
 pub struct RevertCommand;
 
 impl RevertCommand {
-    pub fn execute(commit_id: &str, continue_revert: bool, abort: bool) -> Result<(), Error> {
-        let start_time = Instant::now();
+    pub fn execute(
+        args: &[String],
+        continue_op: bool,
+        abort: bool,
+        quit: bool,
+        mainline: Option<u32>,
+    ) -> Result<(), Error> {
+        let root_path = Path::new(".");
+        let git_path = root_path.join(".ash");
+        let repo_path = git_path.clone();
+
+        // Verify repository exists
+        if !git_path.exists() {
+            return Err(Error::Generic("Not an AsheraFlow repository: .ash directory not found".into()));
+        }
+
+        // Initialize repository
         let mut repo = Repository::new(".")?;
         
-        // Handle continue/abort options
-        if continue_revert {
-            return Self::continue_revert(&mut repo);
+        // Create revert options map
+        let mut options = HashMap::new();
+        if let Some(mainline) = mainline {
+            options.insert(String::from("mainline"), mainline.to_string());
+        }
+
+        // Initialize sequencer
+        let mut sequencer = Sequencer::new(repo_path.clone());
+
+        if continue_op {
+            println!("Continuing revert operation...");
+            handle_continue(root_path, repo_path, &mut repo.database, &mut repo.index, &repo.refs, &mut sequencer)?;
+            return Ok(());
+        } else if abort {
+            println!("Aborting revert operation...");
+            handle_abort(root_path, repo_path, &mut repo.database, &mut repo.index, &repo.refs, &mut sequencer, PendingCommitType::Revert)?;
+            return Ok(());
+        } else if quit {
+            println!("Quitting revert operation without aborting...");
+            handle_quit(root_path, repo_path, &mut repo.database, &mut repo.index, &repo.refs, &mut sequencer, PendingCommitType::Revert)?;
+            return Ok(());
+        } else {
+            println!("Starting revert operation for {} commits...", args.len());
+            sequencer.start(&options)?;
+            
+            // Get the commits to revert and add them to the sequencer
+            store_commit_sequence(&mut sequencer, &mut repo, args)?;
+            
+            println!("Added {} commits to revert", args.len());
         }
         
-        if abort {
-            return Self::abort_revert(&mut repo);
+        // Process the first commit
+        if let Some((action, commit)) = sequencer.next_command() {
+            // Initialize commit writer after revlist processing to avoid multiple mutable borrows
+            let mut commit_writer = CommitWriter::new(
+                root_path,
+                repo_path,
+                &mut repo.database,
+                &mut repo.index,
+                &repo.refs
+            );
+            
+            match action {
+                Action::Revert => {
+                    let commit_oid = commit.get_oid().map_or_else(String::new, |s| s.clone());
+                    println!("Reverting commit: {}", commit_oid);
+                    
+                    // Create a message for the revert
+                    let message = format!(
+                        "Revert \"{}\"
+
+This reverts commit {}.",
+                        commit.title_line().trim(),
+                        commit_oid
+                    );
+                    
+                    // Get the current HEAD as parent
+                    let head_ref = repo.refs.read_head()?.unwrap_or_else(String::new);
+                    
+                    // Use CommitWriter to handle the commit creation
+                    let parents = vec![head_ref];
+                    let new_commit = commit_writer.write_commit(parents, &message, None)?;
+                    
+                    // Print commit info
+                    commit_writer.print_commit(&new_commit)?;
+                    
+                    sequencer.drop_command()?;
+                    println!("Successfully reverted commit");
+                },
+                Action::Pick => {
+                    return Err(Error::Generic("Pick action not supported in revert".into()));
+                }
+            }
         }
         
-        // Get current HEAD
-        let head_oid = match repo.refs.read_head()? {
-            Some(oid) => oid,
-            None => return Err(Error::Generic("No HEAD commit found".to_string())),
-        };
-        
-        // Resolve the commit to revert
-        let mut revision = Revision::new(&mut repo, commit_id);
-        let commit_oid = match revision.resolve("commit") {
-            Ok(oid) => oid,
+        Ok(())
+    }
+}
+
+fn store_commit_sequence(
+    sequencer: &mut Sequencer,
+    repo: &mut Repository,
+    args: &[String]
+) -> Result<(), Error> {
+    // Resolve each commit hash separately using Revision
+    let mut resolved_oids = Vec::new();
+    for arg in args {
+        let mut revision = Revision::new(repo, arg);
+        match revision.resolve("commit") {
+            Ok(oid) => {
+                resolved_oids.push(oid);
+            },
             Err(e) => {
-                // Print any errors from revision resolution
+                // Handle invalid revision
                 for err in revision.errors {
                     eprintln!("error: {}", err.message);
                     for hint in &err.hint {
@@ -47,294 +147,334 @@ impl RevertCommand {
                 }
                 return Err(e);
             }
-        };
-        
-        // Check for conflicts or local changes
-        Self::check_for_conflicts(&mut repo)?;
-        
-        // Load the commit to revert
-        let commit_obj = repo.database.load(&commit_oid)?;
-        let commit = match commit_obj.as_any().downcast_ref::<Commit>() {
-            Some(c) => c,
-            None => return Err(Error::Generic(format!("Object {} is not a commit", commit_oid))),
-        };
+        }
+    }
+    
+    // Get the commits using resolved OIDs
+    let mut commits = Vec::new();
+    for oid in resolved_oids {
+        let commit_obj = repo.database.load(&oid)?;
+        if let Some(commit) = commit_obj.as_any().downcast_ref::<Commit>() {
+            commits.push(commit.clone());
+        } else {
+            return Err(Error::Generic(format!("Object {} is not a commit", oid)));
+        }
+    }
+    
+    // Add reverts in order
+    for commit in commits.iter() {
+        sequencer.add_revert(commit.to_owned());
+    }
 
-        // Get the parent commit (the one we'll revert to)
-        let parent_oid = match commit.get_parent() {
-            Some(oid) => oid.clone(),
-            None => return Err(Error::Generic(format!("Cannot revert {} - it has no parent", commit_oid))),
-        };
-        
-        // Get the commit title for messages
-        let commit_title = commit.title_line();
-        let short_oid = &commit_oid[0..std::cmp::min(7, commit_oid.len())];
-        
-        println!("Reverting commit {}: {}", short_oid, commit_title);
-        
-        // Save the current HEAD to ORIG_HEAD
-        let orig_head_path = std::path::Path::new(ORIG_HEAD);
-        repo.refs.update_ref_file(orig_head_path, &head_oid)?;
-        
-        // Set up the merge inputs for reverting
-        let inputs = Self::create_revert_inputs(&mut repo, &head_oid, &parent_oid, &commit_oid)?;
-        
-        // Lock index for updates
-        repo.index.load_for_update()?;
-        
-        // Create the merge resolver 
-        let mut merge_resolver = Resolve::new(&mut repo.database, &repo.workspace, &mut repo.index, &inputs);
-        merge_resolver.on_progress = |msg| println!("{}", msg);
-        
-        // Perform the merge
-        match merge_resolver.execute() {
-            Ok(_) => {
-                // No conflicts, we can auto-commit
-                
-                // Write updated index
-                repo.index.write_updates()?;
-                
-                // Prepare revert commit message
-                let message = Self::revert_commit_message(&commit_title, &commit_oid);
-                
-                // Create the revert commit
-                Self::create_revert_commit(&mut repo, &message)?;
-                
-                println!("Successfully reverted commit {}", short_oid);
-            },
-            Err(e) => {
-                if e.to_string().contains("Automatic merge failed") || e.to_string().contains("fix conflicts") {
-                    // We have conflicts that need manual resolution
-                    
-                    // Write the index with conflicts
-                    if let Err(write_err) = repo.index.write_updates() {
-                        eprintln!("Failed to write index with conflicts: {}", write_err);
-                        repo.index.rollback()?;
-                        return Err(e);
-                    }
-                    
-                    // Save revert state for later continuation
-                    Self::save_revert_state(&repo, &commit_oid, &commit_title)?;
-                    
-                    println!("Revert failed due to conflicts");
-                    println!("Fix the conflicts and run 'ash revert --continue'");
-                    println!("Or run 'ash revert --abort' to cancel the revert operation");
-                    
-                    // Return the error
-                    return Err(e);
-                } else {
-                    // Other error occurred
-                    repo.index.rollback()?;
-                    return Err(e);
-                }
-            }
-        }
-        
-        let elapsed = start_time.elapsed();
-        println!("Revert completed in {:.2}s", elapsed.as_secs_f32());
-        
-        Ok(())
-    }
-    
-    // Create revert inputs for merge algorithm
-    fn create_revert_inputs(
-        repo: &mut Repository, 
-        head_oid: &str, 
-        parent_oid: &str,
-        commit_oid: &str
-    ) -> Result<Inputs, Error> {
-        // When reverting a commit, we're essentially taking HEAD and applying the inverse of the commit
-        // This means:
-        // - left_oid is the current HEAD
-        // - right_oid is the parent of the commit being reverted
-        // - base_oids are the commit being reverted
-        
-        let inputs = Inputs::new(
-            &mut repo.database,
-            &repo.refs,
-            "HEAD".to_string(),
-            format!("parent of {}", commit_oid)
-        )?;
-        
-        Ok(inputs)
-    }
-    
-    // Generate revert commit message
-    fn revert_commit_message(commit_title: &str, commit_oid: &str) -> String {
-        format!(
-            "Revert \"{}\"\n\nThis reverts commit {}.",
-            commit_title.trim(),
-            commit_oid
-        )
-    }
-    
-    // Create the revert commit
-    fn create_revert_commit(repo: &mut Repository, message: &str) -> Result<(), Error> {
-        // Get current HEAD
-        let head_oid = match repo.refs.read_head()? {
-            Some(oid) => oid,
-            None => return Err(Error::Generic("No HEAD commit found".to_string())),
-        };
-        
-        // Write tree from index
-        let tree_oid = Self::write_tree_from_index(&mut repo.database, &repo.index)?;
-        
-        // Create author
-        let author_name = std::env::var("GIT_AUTHOR_NAME").unwrap_or_else(|_| {
-            "Default Author".to_string()
-        });
-        let author_email = std::env::var("GIT_AUTHOR_EMAIL").unwrap_or_else(|_| {
-            "author@example.com".to_string()
-        });
-        let author = Author::new(author_name, author_email);
-        
-        // Create commit
-        let mut commit = Commit::new(
-            Some(head_oid.clone()), 
-            tree_oid, 
-            author.clone(), 
-            message.to_string()
-        );
-        
-        repo.database.store(&mut commit)?;
-        let commit_oid = commit.get_oid().cloned().ok_or(Error::Generic("Commit OID not set after storage".into()))?;
-        
-        // Update HEAD
-        repo.refs.update_head(&commit_oid)?;
-        
-        println!("Created revert commit: {}", &commit_oid[0..std::cmp::min(7, commit_oid.len())]);
-        
-        Ok(())
-    }
-    
-    // Save revert state for later continuation
-    fn save_revert_state(repo: &Repository, commit_oid: &str, commit_title: &str) -> Result<(), Error> {
-        let revert_dir = repo.path.join(".ash/revert");
-        fs::create_dir_all(&revert_dir)?;
-        
-        // Save commit info
-        let message_path = revert_dir.join("message");
-        let message = Self::revert_commit_message(&commit_title, &commit_oid);
-        fs::write(message_path, message.as_bytes())?;
-        
-        // Save commit OID
-        let commit_path = revert_dir.join("commit");
-        fs::write(commit_path, commit_oid.as_bytes())?;
-        
-        Ok(())
-    }
-    
-    // Continue an in-progress revert
-    fn continue_revert(repo: &mut Repository) -> Result<(), Error> {
-        // Check if there's a revert in progress
-        let revert_dir = repo.path.join(".ash/revert");
-        if !revert_dir.exists() {
-            return Err(Error::Generic("No revert in progress".to_string()));
-        }
-        
-        // Check if there are still conflicts
-        repo.index.load()?;
-        if repo.index.has_conflict() {
-            return Err(Error::Generic("You must fix conflicts first".to_string()));
-        }
-        
-        // Read saved message
-        let message_path = revert_dir.join("message");
-        let message = match fs::read_to_string(&message_path) {
-            Ok(msg) => msg,
-            Err(_) => return Err(Error::Generic("Failed to read revert message".to_string())),
-        };
-        
-        // Create revert commit
-        Self::create_revert_commit(repo, &message)?;
-        
-        // Clean up revert state
-        fs::remove_dir_all(revert_dir)?;
-        
-        println!("Revert continued successfully");
-        
-        Ok(())
-    }
-    
-    // Abort an in-progress revert
-    fn abort_revert(repo: &mut Repository) -> Result<(), Error> {
-        // Check if there's a revert in progress
-        let revert_dir = repo.path.join(".ash/revert");
-        if !revert_dir.exists() {
-            return Err(Error::Generic("No revert in progress".to_string()));
-        }
-        
-        // Restore from ORIG_HEAD
-        let orig_head_path = repo.path.join(".ash").join(ORIG_HEAD);
-        let orig_head = match fs::read_to_string(&orig_head_path) {
-            Ok(oid) => oid.trim().to_string(),
-            Err(_) => return Err(Error::Generic("Failed to read ORIG_HEAD".to_string())),
-        };
-        
-        // Perform a hard reset to ORIG_HEAD
-        println!("Restoring state before revert from ORIG_HEAD");
-        
-        // Lock the index
-        repo.index.load_for_update()?;
-        
-        // Reset the index to ORIG_HEAD
-        let tree_diff = repo.tree_diff(Some(&orig_head), None)?;
-        let mut migration = repo.migration(tree_diff);
-        migration.apply_changes()?;
-        
-        // Write the index
-        repo.index.write_updates()?;
-        
-        // Update HEAD to ORIG_HEAD
-        repo.refs.update_head(&orig_head)?;
-        
-        // Clean up revert state
-        fs::remove_dir_all(revert_dir)?;
-        
-        println!("Revert aborted successfully");
-        
-        Ok(())
-    }
-    
-    // Check for local changes that would be overwritten
-    fn check_for_conflicts(repo: &mut Repository) -> Result<(), Error> {
-        // Create Inspector to help analyze the repository state
-        let inspector = crate::core::repository::inspector::Inspector::new(
-            &repo.workspace,
-            &repo.index,
-            &repo.database
-        );
-        
-        // Check for uncommitted changes
-        let workspace_changes = inspector.analyze_workspace_changes()?;
-        
-        if !workspace_changes.is_empty() {
-            let mut error_message = String::from("Cannot revert with uncommitted changes. Please commit or stash them first:\n");
-            for (path, _) in workspace_changes {
-                error_message.push_str(&format!("  {}\n", path));
-            }
-            return Err(Error::Generic(error_message));
-        }
-        
-        Ok(())
-    }
-    
-    // Write tree from index
-    fn write_tree_from_index(database: &mut crate::core::database::database::Database, index: &crate::core::index::index::Index) -> Result<String, Error> {
-        let database_entries: Vec<_> = index.each_entry()
-            .filter(|entry| entry.stage == 0)
-            .map(|index_entry| {
-                crate::core::database::entry::DatabaseEntry::new(
-                    index_entry.get_path().to_string(),
-                    index_entry.get_oid().to_string(),
-                    &index_entry.mode_octal()
-                )
-            })
-            .collect();
-        
-        let mut root = crate::core::database::tree::Tree::build(database_entries.iter())?;
-        root.traverse(|tree| database.store(tree).map(|_| ()))?;
-        let tree_oid = root.get_oid().ok_or(Error::Generic("Tree OID not set after storage".into()))?;
-        
-        Ok(tree_oid.clone())
-    }
+    Ok(())
 }
+
+fn revert(
+    sequencer: &mut Sequencer,
+    commit: &Commit,
+    database: &mut Database,
+    index: &mut Index,
+    refs: &Refs,
+) -> Result<(), Error> {
+    // Generate merge inputs for revert
+    let inputs = revert_merge_inputs(sequencer, commit, refs)?;
+    let message = revert_commit_message(commit);
+
+    // Resolve merge
+    index.load_for_update()?;
+    
+    // Create workspace outside the borrow scope
+    let workspace = Workspace::new(Path::new("."));
+    {
+        Resolve::new(database, &workspace, index, &inputs).execute()?;
+    }
+    
+    index.write_updates()?;
+
+    // Check for conflicts before creating the commit writer
+    let has_conflict = index.has_conflict();
+
+    // Create commit writer
+    let root_path = Path::new(".");
+    let git_path = root_path.join(".ash");
+    let mut commit_writer = CommitWriter::new(
+        root_path,
+        git_path,
+        database,
+        index,
+        refs
+    );
+
+    // Handle conflicts if any
+    if has_conflict {
+        return fail_on_conflict(
+            &mut commit_writer,
+            sequencer,
+            &inputs,
+            PendingCommitType::Revert,
+            &message,
+        );
+    }
+
+    // Get editor command and prepare commit message
+    let editor_cmd = commit_writer.get_editor_command();
+    let edited_message = edit_revert_message(&mut commit_writer, &message, editor_cmd)?;
+    
+    // If message editing was aborted, abort the revert
+    let message = match edited_message {
+        Some(msg) => msg,
+        None => return Err(Error::Generic("Aborting revert due to empty commit message".into())),
+    };
+    
+    // Get the current HEAD and author
+    let head_ref = refs.read_head()?.unwrap_or_else(String::new);
+    let author = commit_writer.current_author();
+    
+    // Use CommitWriter to create the commit
+    let parents = vec![head_ref];
+    let new_commit = commit_writer.write_commit(parents, &message, Some(author))?;
+    
+    // Print commit info
+    commit_writer.print_commit(&new_commit)?;
+
+    Ok(())
+}
+
+fn revert_merge_inputs(
+    sequencer: &mut Sequencer,
+    commit: &Commit,
+    refs: &Refs,
+) -> Result<inputs::CherryPick, Error> {
+    let db_path = Path::new(".").join(".ash").join("objects");
+    let database = Database::new(db_path);
+    let commit_oid = commit.get_oid().map_or_else(String::new, |s| s.clone());
+    let short = database.short_oid(&commit_oid);
+
+    let left_name = HEAD.to_owned();
+    let left_oid = refs.read_head()?.unwrap_or_else(String::new);
+
+    let right_name = format!("parent of {}... {}", short, commit.title_line().trim());
+    let right_oid = select_parent(sequencer, commit)?;
+
+    Ok(inputs::CherryPick::new(
+        left_name,
+        right_name,
+        left_oid,
+        right_oid,
+        vec![commit_oid],
+    ))
+}
+
+fn revert_commit_message(commit: &Commit) -> String {
+    let commit_oid = commit.get_oid().map_or_else(String::new, |s| s.clone());
+    format!(
+        "Revert \"{}\"
+
+This reverts commit {}.
+",
+        commit.title_line().trim(),
+        commit_oid
+    )
+}
+
+fn edit_revert_message(
+    commit_writer: &mut CommitWriter,
+    message: &str,
+    editor_cmd: String,
+) -> Result<Option<String>, Error> {
+    let message_path = commit_writer.commit_message_path();
+    
+    Editor::edit(message_path, Some(editor_cmd), |editor| {
+        editor.write(message)?;
+        editor.write("")?;
+        editor.note(COMMIT_NOTES)?;
+
+        Ok(())
+    })
+}
+
+fn select_parent(sequencer: &mut Sequencer, commit: &Commit) -> Result<String, Error> {
+    let mainline = sequencer.get_option("mainline")?;
+    
+    let mainline = match mainline {
+        Some(value) => value.parse::<usize>().ok(),
+        None => None,
+    };
+
+    // Check if commit has multiple parents (is a merge)
+    let parent = commit.get_parent();
+    if parent.is_none() {
+        return Err(Error::Generic(format!(
+            "error: commit {} has no parent",
+            commit.get_oid().map_or_else(String::new, |s| s.clone())
+        )));
+    }
+
+    // For now, we'll just use the one parent from get_parent()
+    // In a real implementation, we'd need to load the commit object and examine all parents
+    let commit_oid = commit.get_oid().map_or_else(String::new, |s| s.clone());
+    
+    if mainline.is_some() {
+        // In a proper implementation, we'd check if this is a merge commit with multiple parents
+        return Err(Error::Generic(format!(
+            "error: mainline was specified but commit {} is not properly handled as a merge yet",
+            commit_oid
+        )));
+    }
+    
+    // Just return the first parent
+    Ok(parent.unwrap().clone())
+}
+
+fn handle_continue(
+    root_path: &Path,
+    repo_path: PathBuf,
+    database: &mut Database,
+    index: &mut Index,
+    refs: &Refs,
+    sequencer: &mut Sequencer,
+) -> Result<(), Error> {
+    index.load()?;
+
+    {
+        let mut commit_writer = CommitWriter::new(
+            root_path,
+            repo_path.clone(),
+            database,
+            index, 
+            refs
+        );
+
+        if commit_writer.pending_commit.in_progress(PendingCommitType::Revert) {
+            let editor_cmd = commit_writer.get_editor_command();
+            if let Err(err) = commit_writer.write_revert_commit(Some(editor_cmd)) {
+                return Err(Error::Generic(format!("fatal: {}", err)));
+            }
+        }
+    }
+
+    sequencer.load()?;
+    sequencer.drop_command()?;
+    resume_sequencer(sequencer, database, index, refs)?;
+
+    Ok(())
+}
+
+fn resume_sequencer(
+    sequencer: &mut Sequencer,
+    database: &mut Database,
+    index: &mut Index,
+    refs: &Refs,
+) -> Result<(), Error> {
+    while let Some((action, commit)) = sequencer.next_command() {
+        match action {
+            Action::Pick => return Err(Error::Generic("Pick action not supported in revert".into())),
+            Action::Revert => revert(sequencer, &commit, database, index, refs)?,
+        }
+        sequencer.drop_command()?;
+    }
+
+    sequencer.quit()?;
+    Ok(())
+}
+
+fn fail_on_conflict(
+    commit_writer: &mut CommitWriter,
+    sequencer: &mut Sequencer,
+    inputs: &inputs::CherryPick,
+    merge_type: PendingCommitType,
+    message: &str,
+) -> Result<(), Error> {
+    sequencer.dump()?;
+
+    commit_writer
+        .pending_commit
+        .start(&inputs.right_oid, merge_type)?;
+
+    let editor_command = commit_writer.get_editor_command();
+    let message_path = commit_writer.pending_commit.message_path.clone();
+    
+    Editor::edit(message_path, Some(editor_command), |editor| {
+        editor.write(message)?;
+        editor.write("")?;
+        editor.note("Conflicts:")?;
+        for name in commit_writer.index.conflict_paths() {
+            editor.note(&format!("\t{}", name))?;
+        }
+        editor.close();
+
+        Ok(())
+    })?;
+
+    println!("error: could not apply {}", inputs.right_name);
+    for line in CONFLICT_NOTES.lines() {
+        println!("hint: {}", line);
+    }
+
+    Err(Error::Generic("Revert failed due to conflicts".into()))
+}
+
+fn handle_abort(
+    root_path: &Path,
+    repo_path: PathBuf,
+    database: &mut Database,
+    index: &mut Index,
+    refs: &Refs,
+    sequencer: &mut Sequencer,
+    merge_type: PendingCommitType,
+) -> Result<(), Error> {
+    {
+        let mut commit_writer = CommitWriter::new(
+            root_path,
+            repo_path,
+            database,
+            index,
+            refs
+        );
+
+        if commit_writer.pending_commit.in_progress(merge_type) {
+            commit_writer.pending_commit.clear(merge_type)?;
+        }
+    }
+    
+    index.load_for_update()?;
+
+    match sequencer.abort() {
+        Ok(()) => (),
+        Err(err) => {
+            println!("warning: {}", err);
+        }
+    }
+
+    index.write_updates()?;
+    
+    Ok(())
+}
+
+fn handle_quit(
+    root_path: &Path,
+    repo_path: PathBuf,
+    database: &mut Database,
+    index: &mut Index,
+    refs: &Refs,
+    sequencer: &mut Sequencer,
+    merge_type: PendingCommitType,
+) -> Result<(), Error> {
+    {
+        let mut commit_writer = CommitWriter::new(
+            root_path,
+            repo_path,
+            database,
+            index,
+            refs
+        );
+
+        if commit_writer.pending_commit.in_progress(merge_type) {
+            commit_writer.pending_commit.clear(merge_type)?;
+        }
+    }
+    
+    sequencer.quit()?;
+
+    Ok(())
+} 

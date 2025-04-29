@@ -1,5 +1,5 @@
 // src/core/index/index.rs
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
@@ -37,12 +37,21 @@ impl Index {
         index
     }
     
+    // Getters
+    pub fn get_pathname(&self) -> &PathBuf {
+        &self.pathname
+    }
+    
     pub fn get_entry(&self, key: &str) -> Option<&Entry> {
         self.entries.get(key)
     }
     
     pub fn get_entry_mut(&mut self, key: &str) -> Option<&mut Entry> {
         self.entries.get_mut(key)
+    }
+    
+    pub fn get_keys(&self) -> &BTreeSet<String> {
+        &self.keys
     }
     
     pub fn is_changed(&self) -> bool {
@@ -61,6 +70,12 @@ impl Index {
         } else {
             Err(Error::Generic(format!("Entry not found for key: {}", path)))
         }
+    }
+    
+    pub fn clear(&mut self) {
+        self.entries.clear();
+        self.keys.clear();
+        self.changed = false;
     }
 
     pub fn add(&mut self, pathname: &Path, oid: &str, stat: &fs::Metadata) -> Result<(), Error> {
@@ -114,11 +129,6 @@ impl Index {
             Err(e) => return Err(Error::IO(e)),
         };
         
-        if file_size < HEADER_SIZE as u64 {
-            println!("Warning: Index file too small ({} bytes), initializing new index", file_size);
-            return Ok(());
-        }
-        
         let mut reader = file;
         let mut checksum = Checksum::new();
             
@@ -167,7 +177,6 @@ impl Index {
             match reader.read_exact(&mut entry_data) {
                 Ok(_) => {},
                 Err(e) => {
-                    println!("Warning: Could not read entry data: {}", e);
                     return Ok(());  // Abandon reading but don't fail
                 }
             }
@@ -263,22 +272,189 @@ impl Index {
         self.lockfile.rollback()
             .map_err(|e| Error::Lock(format!("Failed to release lock: {:?}", e)))
     }
-
+    
+    pub fn verify_integrity(&self) -> Result<bool, Error> {
+        let file_path = &self.pathname;
+        
+        if !file_path.exists() {
+            // An empty index is valid
+            return Ok(true);
+        }
+        
+        let file = match File::open(file_path) {
+            Ok(f) => f,
+            Err(e) => return Err(Error::IO(e)),
+        };
+        
+        let mut reader = file;
+        let mut checksum = Checksum::new();
+        
+        // Read and verify the header
+        let mut header_data = vec![0; HEADER_SIZE];
+        match reader.read_exact(&mut header_data) {
+            Ok(_) => checksum.update(&header_data),
+            Err(e) => return Err(Error::IO(e)),
+        }
+        
+        // Parse header
+        let signature = String::from_utf8_lossy(&header_data[0..4]).to_string();
+        if signature != HEADER_FORMAT {
+            return Err(Error::Generic(format!(
+                "Invalid index signature: expected '{}', got '{}'",
+                HEADER_FORMAT, signature
+            )));
+        }
+        
+        let version = u32::from_be_bytes([header_data[4], header_data[5], header_data[6], header_data[7]]);
+        if version != VERSION {
+            return Err(Error::Generic(format!(
+                "Unsupported index version: expected {}, got {}",
+                VERSION, version
+            )));
+        }
+        
+        let count = u32::from_be_bytes([header_data[8], header_data[9], header_data[10], header_data[11]]);
+        
+        // Read the entries
+        let metadata = fs::metadata(file_path)?;
+        let expected_size = HEADER_SIZE as u64 + (count as u64 * 62) + CHECKSUM_SIZE as u64;
+        
+        if metadata.len() < expected_size {
+            return Err(Error::Generic(format!(
+                "Index file too small: expected at least {} bytes, got {} bytes",
+                expected_size, metadata.len()
+            )));
+        }
+        
+        // Skip the entries (we're just validating the checksum)
+        let mut buffer = vec![0; metadata.len() as usize - HEADER_SIZE - CHECKSUM_SIZE];
+        match reader.read_exact(&mut buffer) {
+            Ok(_) => checksum.update(&buffer),
+            Err(e) => return Err(Error::IO(e)),
+        }
+        
+        // Verify the checksum
+        let mut stored_checksum = vec![0; CHECKSUM_SIZE];
+        match reader.read_exact(&mut stored_checksum) {
+            Ok(_) => {},
+            Err(e) => return Err(Error::IO(e)),
+        }
+        
+        let calculated_checksum = checksum.finalize();
+        
+        if stored_checksum != calculated_checksum {
+            return Err(Error::Generic(format!(
+                "Index checksum mismatch. Index file may be corrupted."
+            )));
+        }
+        
+        Ok(true)
+    }
+    
+    // Method to repair index if possible
+    pub fn repair(&mut self) -> Result<bool, Error> {
+        // Try to load the current index
+        match self.load() {
+            Ok(_) => {
+                // If we can load it, it's probably fine, just rewrite it
+                self.changed = true;
+                self.write_updates()?;
+                Ok(true)
+            },
+            Err(_) => {
+                // If we can't load it, clear and recreate it
+                self.clear();
+                self.changed = true;
+                
+                // First ensure we have a lock
+                self.lockfile.hold_for_update()
+                    .map_err(|e| Error::Generic(format!("Lock error: {:?}", e)))?;
+                
+                // Write a clean index
+                self.write_updates()?;
+                
+                Ok(false)
+            }
+        }
+    }
+    
+    // Method to check for and remove stale locks
+    pub fn check_stale_locks(&self) -> Result<bool, Error> {
+        let lock_path = self.pathname.with_extension("lock");
+        
+        if lock_path.exists() {
+            // Check if the lock file is stale (e.g., more than 1 hour old)
+            if let Ok(metadata) = fs::metadata(&lock_path) {
+                if let Ok(modified) = metadata.modified() {
+                    let now = std::time::SystemTime::now();
+                    if let Ok(duration) = now.duration_since(modified) {
+                        if duration.as_secs() > 3600 {
+                            // Lock is more than an hour old, probably stale
+                            match fs::remove_file(&lock_path) {
+                                Ok(_) => {
+                                    return Ok(true);
+                                },
+                                Err(e) => {
+                                    return Err(Error::IO(e));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Lock exists but doesn't appear stale
+            return Ok(false);
+        }
+        
+        // No lock file exists
+        Ok(false)
+    }
+    
     // Helper method to check if a file is indexed
     pub fn tracked(&self, path: &str) -> bool {
         self.entries.contains_key(path)
     }
-
-    pub fn remove(&mut self, path: &str) -> Result<(), Error> {
-        // Remove the exact entry
-        self.remove_entry(path);
+    
+    pub fn tracked_file(&self, path: &Path) -> bool {
+        self.tracked(&path.to_string_lossy())
+    }
+    
+    pub fn tracked_directory(&self, path: &Path) -> bool {
+        let path_str = path.to_string_lossy().to_string();
+        let prefix = if path_str.ends_with('/') {
+            path_str.clone()
+        } else {
+            format!("{}/", path_str)
+        };
         
-        // Remove any entries that are children of this path (for directories)
-        self.remove_children(path);
+        // Check if any key starts with this prefix
+        self.keys.iter().any(|key| key.starts_with(&prefix))
+    }
+    
+    pub fn child_paths(&self, path: &Path) -> Vec<PathBuf> {
+        let path_str = path.to_string_lossy().to_string();
+        let prefix = if path_str.ends_with('/') {
+            path_str.clone()
+        } else {
+            format!("{}/", path_str)
+        };
         
-        // Mark the index as changed
+        self.keys
+            .iter()
+            .filter(|key| key.starts_with(&prefix) || **key == path_str)
+            .map(|key| PathBuf::from(key))
+            .collect()
+    }
+    
+    pub fn remove(&mut self, path: &Path) -> Result<(), Error> {
+        let path_str = path.to_string_lossy().to_string();
+        
+        // Remove the entry and its children
+        self.remove_entry(&path_str);
+        self.remove_children(&path_str);
+        
         self.changed = true;
-        
         Ok(())
     }
     
@@ -320,19 +496,19 @@ impl Index {
         // Add each conflict stage entry
         // Stage 1: Base version
         if let Some(entry) = &entries[0] {
-            let stage1_entry = create_stage_entry(path, &entry.get_oid(), 1);
+            let mut stage1_entry = create_stage_entry(path, &entry.get_oid(), 1);
             self.store_entry(stage1_entry);
         }
         
         // Stage 2: "Ours" version
         if let Some(entry) = &entries[1] {
-            let stage2_entry = create_stage_entry(path, &entry.get_oid(), 2);
+            let mut stage2_entry = create_stage_entry(path, &entry.get_oid(), 2);
             self.store_entry(stage2_entry);
         }
         
         // Stage 3: "Theirs" version
         if let Some(entry) = &entries[2] {
-            let stage3_entry = create_stage_entry(path, &entry.get_oid(), 3);
+            let mut stage3_entry = create_stage_entry(path, &entry.get_oid(), 3);
             self.store_entry(stage3_entry);
         }
         
@@ -349,40 +525,80 @@ impl Index {
         }
         false
     }
-   
-    pub fn clear(&mut self) {
-        self.entries.clear();
-        self.keys.clear();
-        self.changed = true;
+    
+    // Get paths that have conflicts
+    pub fn conflict_paths(&self) -> Vec<String> {
+        let mut paths = HashSet::new();
+        
+        for entry in self.each_entry() {
+            if entry.stage > 0 {
+                paths.insert(entry.get_path().to_string());
+            }
+        }
+        
+        paths.into_iter().collect()
     }
     
-    // Add an entry directly from a database entry
-    pub fn add_from_db(&mut self, path: &Path, entry: &DatabaseEntry) -> Result<(), Error> {
+    // Resolve a conflict by setting the given path to the final resolution
+    pub fn resolve_conflict(&mut self, path: &Path, oid: &str, stat: &std::fs::Metadata) -> Result<(), Error> {
+        // First, remove any conflict entries for this path
         let path_str = path.to_string_lossy().to_string();
-        let file_mode = entry.get_file_mode();
+        self.remove_conflict(&path_str);
         
-        // Create a new index entry
-        let index_entry = Entry {
-            ctime: 0,
-            ctime_nsec: 0,
-            mtime: 0,
-            mtime_nsec: 0,
-            dev: 0,
-            ino: 0,
-            mode: file_mode,
-            uid: 0,
-            gid: 0,
-            size: 0,
-            oid: entry.get_oid().to_string(),
-            flags: path_str.len().min(0xfff) as u16, // Maximum length for flags is 12 bits
-            path: path_str.clone(),
-            stage: 0, // Normal stage (not a conflict)
+        // Then add the resolved entry
+        self.add(path, oid, stat)?;
+        
+        self.changed = true;
+        Ok(())
+    }
+    
+    // Remove conflict entries for a path
+    fn remove_conflict(&mut self, path_str: &str) {
+        
+        // Get all entries for this path with their stages
+        let entries_to_remove: Vec<(String, u8)> = self.entries.iter()
+            .filter(|(k, v)| k == &path_str && v.stage > 0)
+            .map(|(k, v)| (k.clone(), v.stage))
+            .collect();
+        
+        // Remove each conflict entry
+        for (key, stage) in entries_to_remove {
+            self.entries.remove(&key);
+        }
+        
+        // Check if there are any entries left for this path
+        if !self.entries.iter().any(|(k, _)| k == path_str) {
+            self.keys.remove(path_str);
+        }
+    }
+    
+    // Method to resolve directory conflicts
+    pub fn resolve_directory_conflict(&mut self, dir_path: &Path) -> Result<(), Error> {
+        let dir_path_str = dir_path.to_string_lossy().to_string();
+        
+        // Remove the conflict entries for the directory itself
+        self.remove_conflict(&dir_path_str);
+        
+        // Also remove conflicts for all files inside the directory
+        let dir_prefix = if dir_path_str.ends_with('/') {
+            dir_path_str.clone()
+        } else {
+            format!("{}/", dir_path_str)
         };
         
-        // Store the entry
-        self.store_entry(index_entry);
-        self.changed = true;
+        // Find all entries that start with this prefix
+        let conflict_paths: Vec<String> = self.entries.iter()
+            .filter(|(path, entry)| 
+                entry.stage > 0 && path.starts_with(&dir_prefix))
+            .map(|(path, _)| path.clone())
+            .collect();
         
+        // Remove each conflict entry
+        for path in conflict_paths {
+            self.remove_conflict(&path);
+        }
+        
+        self.changed = true;
         Ok(())
     }
 }

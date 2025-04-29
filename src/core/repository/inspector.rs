@@ -2,11 +2,12 @@
 use std::path::Path;
 use std::collections::HashMap;
 use crate::errors::error::Error;
+use crate::core::database::blob::Blob;
 use crate::core::database::entry::DatabaseEntry;
 use crate::core::index::entry::Entry;
 use crate::core::workspace::Workspace;
 use crate::core::index::index::Index;
-use crate::core::database::database::Database;
+use crate::core::database::database::{Database, GitObject};
 
 // Enum for change types in the repository
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -59,10 +60,7 @@ impl<'a> Inspector<'a> {
     fn directory_contains_untracked(&self, dir_path: &Path) -> Result<bool, Error> {
         if !dir_path.is_dir() {
             return Ok(false);
-        }
-        
-        println!("DEBUG: Checking if directory contains untracked files: {}", dir_path.display());
-        
+        } 
         // Get all entries in the directory
         match std::fs::read_dir(dir_path) {
             Ok(entries) => {
@@ -88,7 +86,6 @@ impl<'a> Inspector<'a> {
                             
                             // If it's a file not in the index, it's untracked
                             if path.is_file() && !self.index.tracked(&rel_path_str) {
-                                println!("DEBUG: Found untracked file: {}", rel_path_str);
                                 return Ok(true);
                             } else if path.is_dir() {
                                 // Recursively check subdirectories
@@ -128,7 +125,7 @@ impl<'a> Inspector<'a> {
         let data = match self.workspace.read_file(path) {
             Ok(d) => d,
             Err(e) => {
-                println!("WARNING: Failed to read file for comparison: {} - {}", path.display(), e);
+
                 return Ok(Some(ChangeType::Modified)); // Assume modified if we can't read it
             }
         };
@@ -141,9 +138,6 @@ impl<'a> Inspector<'a> {
         
         // Debug output to help diagnose issues
         if content_changed {
-            println!("DEBUG: File {} content differs", path.display());
-            println!("  Index OID:   {}", entry.oid);
-            println!("  Content OID: {}", actual_oid);
             return Ok(Some(ChangeType::Modified));
         }
         
@@ -176,9 +170,6 @@ impl<'a> Inspector<'a> {
         let oid_match = item.get_oid() == entry.oid;
         
         if !mode_match || !oid_match {
-            println!("DEBUG: Entry differs - mode match: {}, oid match: {}", mode_match, oid_match);
-            println!("  Tree mode: {}, Index mode: {}", item.get_mode(), entry.mode_octal());
-            println!("  Tree OID:  {}, Index OID:  {}", item.get_oid(), entry.oid);
             Some(ChangeType::Modified)
         } else {
             None
@@ -199,14 +190,9 @@ impl<'a> Inspector<'a> {
         // Compare OIDs
         let matches = workspace_oid == oid;
         
-        if !matches {
-            println!("DEBUG: File {} differs from blob {}", path.display(), oid);
-            println!("  Blob OID:      {}", oid);
-            println!("  Workspace OID: {}", workspace_oid);
-        }
-        
         Ok(!matches) // Return true if they differ
     }
+    
     
     /// Analyze all changes in the workspace compared to index
     pub fn analyze_workspace_changes(&self) -> Result<HashMap<String, ChangeType>, Error> {

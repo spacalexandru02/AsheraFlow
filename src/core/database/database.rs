@@ -76,37 +76,29 @@ impl Database {
         Ok(result)
     }
 
+    /// Metodă privată de clonare a unui obiect - implementare de bază
+    fn clone_object(&self, obj: &Box<dyn GitObject>) -> Box<dyn GitObject> {
+        // Use the new clone_box method instead of manual cloning
+        obj.clone_box()
+    }
+
     /// Stochează un obiect git în baza de date
     pub fn store(&mut self, object: &mut impl GitObject) -> Result<String, Error> {
-        println!("Storing object of type: {}", object.get_type());
         
         // Serialize object
         let content = self.serialize_object(object)?;
         
         // Calculate OID (hash)
         let oid = self.hash_content(&content);
-        println!("Calculated OID: {}", oid);
         
         // Write only if object doesn't already exist
         if !self.exists(&oid) {
-            println!("Object {} doesn't exist, writing to database", oid);
             self.write_object(&oid, &content)?;
-        } else {
-            println!("Object {} already exists in database", oid);
         }
     
         // Set OID on object
         object.set_oid(oid.clone());
         
-        // Verifică că OID-ul a fost setat corect
-        if object.get_type() == "tree" {
-            // Pentru verificare suplimentară la arbori (dacă implementați metoda get_oid())
-            if let Some(tree) = object.as_any().downcast_ref::<Tree>() {
-                if tree.get_oid().is_none() {
-                    println!("WARNING: OID not set correctly on tree after store()!");
-                }
-            }
-        }
     
         Ok(oid)
     }
@@ -114,7 +106,6 @@ impl Database {
     pub fn serialize_object(&self, object: &impl GitObject) -> Result<Vec<u8>, Error> {
         let obj_type = object.get_type();
         let content = object.to_bytes();
-        println!("Serializing {} object, content size: {} bytes", obj_type, content.len());
         
         // Format: "<type> <size>\0<content>"
         let header = format!("{} {}\0", obj_type, content.len());
@@ -205,11 +196,6 @@ impl Database {
         let obj_size: usize = parts[1].parse()
             .map_err(|_| Error::Generic(format!("Invalid size in header: {}", parts[1])))?;
         
-        // Verify size
-        if obj_size != data.len() - null_pos - 1 {
-            println!("Warning: Size mismatch in object {}: header claims {} bytes, actual content is {} bytes",
-                oid, obj_size, data.len() - null_pos - 1);
-        }
         
         // Extract content (after null byte)
         let content = &data[null_pos + 1..];
@@ -229,11 +215,9 @@ impl Database {
             }
         },
         "tree" => {
-            println!("Parsing tree object: {}", oid);
             match Tree::parse(content) {
                 Ok(tree) => Box::new(tree),
                 Err(e) => {
-                    println!("Error parsing tree {}: {}", oid, e);
                     return Err(e);
                 }
             }
@@ -241,6 +225,24 @@ impl Database {
             "commit" => match Commit::parse(content) {
                 Ok(commit) => Box::new(commit),
                 Err(e) => return Err(e),
+            },
+            "sprint-meta" => {
+                // Parse the metadata from the encoded string
+                let encoded = String::from_utf8_lossy(content).to_string();
+                if let Some(metadata) = crate::core::branch_metadata::SprintMetadata::decode(&encoded) {
+                    Box::new(crate::core::database::sprint_metadata_object::SprintMetadataObject::new(metadata))
+                } else {
+                    return Err(Error::Generic(format!("Invalid sprint metadata content: {}", encoded)))
+                }
+            },
+            "task-meta" => {
+                // Parse the metadata from the encoded string
+                let encoded = String::from_utf8_lossy(content).to_string();
+                if let Some(metadata) = crate::core::commit_metadata::TaskMetadata::decode(&encoded) {
+                    Box::new(crate::core::database::task_metadata_object::TaskMetadataObject::new(metadata))
+                } else {
+                    return Err(Error::Generic(format!("Invalid task metadata content: {}", encoded)))
+                }
             },
             _ => return Err(Error::Generic(format!("Unknown object type: {}", obj_type))),
         };
@@ -310,10 +312,47 @@ impl Database {
         
         Ok(matches)
     }
+    
+    /// Get a short representation of an object ID
+    pub fn short_oid(&self, oid: &str) -> String {
+        if oid.len() <= 7 {
+            oid.to_string()
+        } else {
+            oid[0..7].to_string()
+        }
+    }
 
     pub fn tree_diff(&mut self, a: Option<&str>, b: Option<&str>, filter: &PathFilter) -> Result<HashMap<PathBuf, (Option<DatabaseEntry>, Option<DatabaseEntry>)>, Error> {
         let mut diff = TreeDiff::new(self);
         diff.compare_oids(a, b, filter)?;
         Ok(diff.changes)
+    }
+
+    /// Obține un OID complet din unul prescurtat sau parțial
+    pub fn resolve_oid(&self, partial_oid: &str) -> Result<String, Error> {
+        // Dacă OID-ul are lungimea completă (40 de caractere), îl returnăm direct
+        if partial_oid.len() == 40 && partial_oid.chars().all(|c| c.is_ascii_hexdigit()) {
+            // Verificăm dacă obiectul există
+            if self.exists(partial_oid) {
+                return Ok(partial_oid.to_string());
+            }
+        }
+        
+        // Dacă OID-ul este parțial (minim 4 caractere), căutăm potriviri
+        if partial_oid.len() >= 4 && partial_oid.chars().all(|c| c.is_ascii_hexdigit()) {
+            let matches = self.prefix_match(partial_oid)?;
+            
+            if matches.is_empty() {
+                return Err(Error::Generic(format!("No object found with prefix {}", partial_oid)));
+            }
+            
+            if matches.len() > 1 {
+                return Err(Error::Generic(format!("Ambiguous object prefix: {} matches multiple objects", partial_oid)));
+            }
+            
+            return Ok(matches[0].clone());
+        }
+        
+        Err(Error::Generic(format!("Invalid object identifier: {}", partial_oid)))
     }
 }

@@ -1,315 +1,227 @@
-// src/commands/commit.rs - updated version
+use std::env;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
-use std::env;
-use std::collections::{HashMap, HashSet};
-use crate::core::database::tree::{TreeEntry, TREE_MODE};
-use crate::core::database::author::Author;
-use crate::core::database::commit::Commit;
-use crate::core::database::tree::Tree;
-use crate::core::editor::Editor;
+use regex::Regex;
+
+use crate::core::database::database::Database;
+use crate::core::database::commit::Commit as DatabaseCommit;
 use crate::core::index::index::Index;
 use crate::core::refs::Refs;
-use crate::core::write_commit::{WriteCommit, WriteCommitOptions, EditOption};
+use crate::core::repository::pending_commit::{PendingCommit, PendingCommitType};
+use crate::commands::commit_writer::CommitWriter;
 use crate::errors::error::Error;
-use log::{debug, info, warn, error};
-
-const COMMIT_NOTES: &str = "\
-Please enter the commit message for your changes. Lines starting
-with '#' will be ignored, and an empty message aborts the commit.
-";
+use crate::core::commit_metadata::{CommitMetadataManager, TaskMetadata, TaskStatus};
 
 pub struct CommitCommand;
 
 impl CommitCommand {
-    pub fn execute(message: &str) -> Result<(), Error> {
+    pub fn execute(message: &str, amend: bool, reuse_message: Option<&str>, edit: bool) -> Result<(), Error> {
         let start_time = Instant::now();
         
-        info!("Starting commit execution");
-
+        // Initialize repository components
         let root_path = Path::new(".");
         let git_path = root_path.join(".ash");
         
         // Verify .ash directory exists
         if !git_path.exists() {
-            error!(".ash directory not found at {}", root_path.display());
-            return Err(Error::Generic("Not an ash repository (or any of the parent directories): .ash directory not found".into()));
+            return Err(Error::Generic("Not an ash repository: .ash directory not found".into()));
         }
-
+        
         let db_path = git_path.join("objects");
-
-        debug!("Initializing components");
-        let mut database = crate::core::database::database::Database::new(db_path);
-
+        let mut database = Database::new(db_path);
+        
         // Check for the index file
         let index_path = git_path.join("index");
         if !index_path.exists() {
-            error!("Index file not found at {}", index_path.display());
             return Err(Error::Generic("No index file found. Please add some files first.".into()));
         }
-
+        
         // Check for existing index.lock file before trying to load the index
         let index_lock_path = git_path.join("index.lock");
         if index_lock_path.exists() {
-            error!("Index lock file exists: {}", index_lock_path.display());
-            return Err(Error::Lock(format!(
-                "Unable to create '.ash/index.lock': File exists.\n\
-                Another ash process seems to be running in this repository.\n\
-                If it still fails, a process may have crashed in this repository earlier:\n\
-                remove the file manually to continue."
-            )));
+            return Err(Error::Generic("Another git process seems to be running in this repository.".into()));
         }
-
+        
         let mut index = Index::new(index_path);
-
-        info!("Loading index");
+        
         // Load the index
         match index.load() {
-            Ok(_) => info!("Index loaded successfully"),
-            Err(e) => {
-                error!("Error loading index: {}", e);
-                return Err(Error::Generic(format!("Error loading index: {}", e)));
-            }
+            Ok(_) => {},
+            Err(e) => return Err(Error::Generic(format!("Error loading index: {}", e))),
         }
-
-        // Check for HEAD lock
-        let head_lock_path = git_path.join("HEAD.lock");
-        if head_lock_path.exists() {
-            error!("HEAD lock file exists: {}", head_lock_path.display());
-            return Err(Error::Lock(format!(
-                "Unable to create '.ash/HEAD.lock': File exists.\n\
-                Another ash process seems to be running in this repository.\n\
-                If it still fails, a process may have crashed in this repository earlier:\n\
-                remove the file manually to continue."
-            )));
+        
+        // Check if the index is empty
+        if index.entries.is_empty() {
+            return Err(Error::Generic("No changes staged for commit. Use 'ash add' to add files.".into()));
         }
-
+        
         let refs = Refs::new(&git_path);
         
-        // Create WriteCommitOptions
-        let options = WriteCommitOptions {
-            message: if message.is_empty() { None } else { Some(message.to_string()) },
-            file: None,
-            edit: if env::var("ASH_EDIT").unwrap_or_default() == "1" { 
-                EditOption::Always 
-            } else { 
-                EditOption::Auto 
+        // Check if we're in a task branch
+        let current_branch = match refs.current_ref() {
+            Ok(reference) => match reference {
+                crate::core::refs::Reference::Symbolic(path) => refs.short_name(&path),
+                _ => String::new(), // Detached HEAD state
             },
+            Err(_) => String::new(),
         };
         
-        // Create WriteCommit struct
-        let mut write_commit = WriteCommit::new(
+        // Extract task ID from branch or commit message
+        let mut task_id = None;
+        
+        // 1. Try to extract from branch name first
+        if current_branch.contains("-task-") {
+            let parts: Vec<&str> = current_branch.split("-task-").collect();
+            if parts.len() > 1 {
+                task_id = Some(parts[1].to_string());
+            }
+        }
+        
+        // 2. If not found, try to extract from commit message
+        if task_id.is_none() && !message.is_empty() {
+            let task_regex = Regex::new(r"((?:TASK|TEST)-\d+)").unwrap_or_else(|_| Regex::new(r"").unwrap());
+            if let Some(captures) = task_regex.captures(message) {
+                if let Some(m) = captures.get(1) {
+                    task_id = Some(m.as_str().to_string());
+                }
+            }
+        }
+        
+        // Create the commit writer
+        let mut commit_writer = CommitWriter::new(
+            root_path,
+            git_path.clone(),
             &mut database,
             &mut index,
-            &refs,
-            root_path,
-            &options
+            &refs
         );
         
-        // Get initial message
-        let initial_message = write_commit.read_message()?;
+        // Check if there is a pending merge or other operation
+        if commit_writer.pending_commit.in_progress(PendingCommitType::Merge) {
+            return commit_writer.resume_merge(PendingCommitType::Merge, get_editor_command());
+        } else if commit_writer.pending_commit.in_progress(PendingCommitType::CherryPick) {
+            return commit_writer.resume_merge(PendingCommitType::CherryPick, get_editor_command());
+        } else if commit_writer.pending_commit.in_progress(PendingCommitType::Revert) {
+            return commit_writer.resume_merge(PendingCommitType::Revert, get_editor_command());
+        }
         
-        // Compose final message
-        let composed_message = write_commit.compose_message(initial_message, COMMIT_NOTES)?;
+        // If amending, use the amend function
+        if amend {
+            return commit_writer.handle_amend(get_editor_command());
+        }
         
-        // If no message is provided, abort the commit
-        let message = match composed_message {
-            Some(msg) => msg,
-            None => {
-                println!("Aborting commit due to empty commit message");
-                return Ok(());
+        // Get the message
+        let mut msg = None;
+        
+        if !message.is_empty() {
+            msg = Some(message.to_string());
+        } else if let Some(rev) = reuse_message {
+            // Reuse message from another commit
+            msg = commit_writer.reused_message(rev)?;
+            if msg.is_none() {
+                return Err(Error::Generic(format!("Could not get message for revision: {}", rev)));
             }
-        };
+        }
         
-        info!("Reading HEAD");
-        // Get the parent commit OID
-        let parent = match refs.read_head() {
-            Ok(p) => {
-                info!("HEAD read successfully: {:?}", p);
-                p
-            },
-            Err(e) => {
-                error!("Error reading HEAD: {:?}", e);
-                return Err(e);
-            }
-        };
-        
-        // Create a clone of parent for later use
-        let parent_clone = parent.clone();
-        
-        // Convert optional parent to Vec
-        let parents = match &parent {
-            Some(p) => vec![p.clone()],
-            None => vec![],
-        };
-        
-        // Check for changes
-        let tree_oid = write_commit.write_tree()?;
-        
-        // Check if parent tree matches current tree
-        let mut no_changes = false;
-        
-        // Create a separate Database for this operation
-        let mut temp_database = crate::core::database::database::Database::new(
-            git_path.join("objects")
-        );
-        
-        if let Some(parent_oid) = &parent_clone {
-            match temp_database.load(parent_oid) {
-                Ok(parent_obj) => {
-                    if let Some(parent_commit) = parent_obj.as_any().downcast_ref::<Commit>() {
-                        let parent_tree_oid = parent_commit.get_tree();
-                        info!("Parent commit tree OID: {}", parent_tree_oid);
-                        if &tree_oid == parent_tree_oid {
-                            info!("Tree OIDs match. No changes detected.");
-                            no_changes = true;
-                        } else {
-                            debug!("Tree OIDs differ: Current={}, Parent={}", tree_oid, parent_tree_oid);
+        // If we should edit the message, or if no message was provided
+        if edit || msg.is_none() {
+            // Use the editor to get the message
+            let edited_message = commit_writer.compose_message(get_editor_command(), msg.as_deref())?;
+            
+            if let Some(message_text) = edited_message {
+                // Check in edited message for task ID before we mutate message_text
+                if task_id.is_none() {
+                    let task_regex = Regex::new(r"((?:TASK|TEST)-\d+)").unwrap_or_else(|_| Regex::new(r"").unwrap());
+                    if let Some(captures) = task_regex.captures(&message_text) {
+                        if let Some(m) = captures.get(1) {
+                            task_id = Some(m.as_str().to_string());
                         }
+                    }
+                }
+                
+                msg = Some(message_text);
+            } else {
+                // If the editor returned None, abort the commit
+                return Err(Error::Generic("Aborting commit due to empty commit message".to_string()));
+            }
+        }
+        
+        // Verify we have a message
+        if let Some(message_text) = msg {
+            if message_text.trim().is_empty() {
+                return Err(Error::Generic("Aborting commit due to empty commit message".to_string()));
+            }
+            
+            // Get the parent commit OID
+            let parent = match refs.read_head() {
+                Ok(p) => {
+                    if let Some(oid) = p {
+                        vec![oid]
+                    } else {
+                        Vec::new()
                     }
                 },
-                Err(_) => {
-                    // Unable to load parent commit - assume there are changes
+                Err(e) => {
+                    return Err(e);
                 }
-            }
-        }
-
-        if no_changes {
-            return Err(Error::Generic("No changes staged for commit.".into()));
-        }
-        
-        // Create commit
-        let commit = write_commit.create_commit(parents, message)?;
-        
-        // Update HEAD reference
-        refs.update_head(commit.get_oid().unwrap_or(&String::new()))?;
-        
-        // Print commit info
-        write_commit.print_commit(&commit);
-        
-        // Count changed files with a separate database instance
-        let mut counting_database = crate::core::database::database::Database::new(
-            git_path.join("objects")
-        );
-        let changed_files_count = Self::count_changed_files(&commit, &mut counting_database)?;
-        
-        // Show elapsed time
-        let elapsed = start_time.elapsed();
-        println!(
-            "{} file{} changed ({:.2}s)",
-            changed_files_count,
-            if changed_files_count == 1 { "" } else { "s" },
-            elapsed.as_secs_f32()
-        );
-
-        Ok(())
-    }
-    
-    // Helper method to count changed files
-    fn count_changed_files(commit: &Commit, database: &mut crate::core::database::database::Database) -> Result<usize, Error> {
-        let mut count = 0;
-        
-        // If it's a root commit, just count entries in the tree
-        if commit.get_parent().is_none() {
-            let tree_oid = commit.get_tree();
-            let mut files = HashMap::<String, String>::new();
-            Self::collect_files_from_tree(database, tree_oid, PathBuf::new(), &mut files)?;
-            return Ok(files.len());
-        }
-        
-        // Compare with parent commit
-        let parent_oid = commit.get_parent().unwrap();
-        let parent_obj = database.load(parent_oid)?;
-        
-        if let Some(parent_commit) = parent_obj.as_any().downcast_ref::<Commit>() {
-            let parent_tree_oid = parent_commit.get_tree();
-            let tree_oid = commit.get_tree();
+            };
             
-            let mut parent_files = HashMap::<String, String>::new();
-            let mut current_files = HashMap::<String, String>::new();
+            // Create and write the commit
+            let commit = commit_writer.write_commit(parent, &message_text, None)?;
             
-            Self::collect_files_from_tree(database, parent_tree_oid, PathBuf::new(), &mut parent_files)?;
-            Self::collect_files_from_tree(database, tree_oid, PathBuf::new(), &mut current_files)?;
+            // Print commit information
+            commit_writer.print_commit(&commit)?;
             
-            let all_paths: HashSet<_> = parent_files.keys().chain(current_files.keys()).collect();
-            
-            for path in all_paths {
-                match (parent_files.get(path), current_files.get(path)) {
-                    (Some(old_oid), Some(new_oid)) if old_oid != new_oid => count += 1,
-                    (None, Some(_)) => count += 1,
-                    (Some(_), None) => count += 1,
-                    _ => {}
-                }
-            }
-        }
-        
-        Ok(count)
-    }
-    
-    // Existing helper method to collect files - unchanged
-    fn collect_files_from_tree(
-        database: &mut crate::core::database::database::Database,
-        tree_oid: &str,
-        prefix: PathBuf,
-        files: &mut HashMap<String, String>
-    ) -> Result<(), Error> {
-        let obj = database.load(tree_oid)?;
-
-        if let Some(tree) = obj.as_any().downcast_ref::<Tree>() {
-            for (name, entry) in tree.get_entries() {
-                let entry_path = if prefix.as_os_str().is_empty() { PathBuf::from(name) } else { prefix.join(name) };
-                let entry_path_str = entry_path.to_string_lossy().to_string();
-                match entry {
-                    TreeEntry::Blob(oid, mode) => {
-                        if *mode == TREE_MODE || mode.is_directory() {
-                            Self::collect_files_from_tree(database, &oid, entry_path, files)?;
+            // Update task status if we have a task ID
+            if let Some(id) = task_id.as_ref() {
+                // Get task metadata manager
+                let metadata_manager = CommitMetadataManager::new(root_path);
+                
+                // Get task metadata
+                if let Ok(Some(mut task_metadata)) = metadata_manager.get_task_metadata(id) {
+                    // If task is in Todo status, update it to InProgress
+                    if task_metadata.status == TaskStatus::Todo {
+                        task_metadata.status = TaskStatus::InProgress;
+                        
+                        // Make sure started_at is set
+                        if task_metadata.started_at.is_none() {
+                            task_metadata.started_at = Some(
+                                std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_secs()
+                            );
+                        }
+                        
+                        // Store updated task metadata
+                        if let Err(e) = metadata_manager.store_task_metadata(&task_metadata) {
+                            println!("Warning: Failed to update task status: {}", e);
                         } else {
-                            files.insert(entry_path_str, oid.clone());
+                            println!("Task {} status updated to InProgress", id);
                         }
-                    },
-                    TreeEntry::Tree(subtree) => {
-                        if let Some(subtree_oid) = subtree.get_oid() {
-                            Self::collect_files_from_tree(database, subtree_oid, entry_path, files)?;
+                    }
+                    
+                    // Add the commit to task commit list
+                    if let Some(oid) = commit.get_oid() {
+                        task_metadata.commit_ids.push(oid.to_string());
+                        if let Err(e) = metadata_manager.store_task_metadata(&task_metadata) {
+                            println!("Warning: Failed to update task commits: {}", e);
                         }
                     }
                 }
             }
-            return Ok(());
+            
+            println!("Commit completed in {:?}", start_time.elapsed());
+            Ok(())
+        } else {
+            Err(Error::Generic("No commit message provided".to_string()))
         }
-
-        if obj.get_type() == "blob" {
-            let blob_data = obj.to_bytes();
-            match Tree::parse(&blob_data) {
-                Ok(parsed_tree) => {
-                    for (name, entry) in parsed_tree.get_entries() {
-                        let entry_path = if prefix.as_os_str().is_empty() { PathBuf::from(name) } else { prefix.join(name) };
-                        let entry_path_str = entry_path.to_string_lossy().to_string();
-                        match entry {
-                            TreeEntry::Blob(oid, mode) => {
-                                if *mode == TREE_MODE || mode.is_directory() {
-                                    Self::collect_files_from_tree(database, &oid, entry_path, files)?;
-                                } else {
-                                    files.insert(entry_path_str, oid.clone());
-                                }
-                            },
-                            TreeEntry::Tree(subtree) => {
-                                if let Some(subtree_oid) = subtree.get_oid() {
-                                    Self::collect_files_from_tree(database, subtree_oid, entry_path, files)?;
-                                }
-                            }
-                        }
-                    }
-                    return Ok(());
-                },
-                Err(_) => {
-                    if !prefix.as_os_str().is_empty() {
-                        let path_str = prefix.to_string_lossy().to_string();
-                        files.insert(path_str, tree_oid.to_string());
-                        return Ok(());
-                    }
-                }
-            }
-        }
-        Ok(())
     }
+}
+
+pub fn get_editor_command() -> Option<String> {
+    env::var("GIT_EDITOR")
+        .or_else(|_| env::var("VISUAL"))
+        .or_else(|_| env::var("EDITOR"))
+        .ok()
 }

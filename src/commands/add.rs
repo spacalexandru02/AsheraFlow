@@ -57,6 +57,16 @@ impl AddCommand {
         // Flag to track if we have deleted directories
         let mut has_deleted_dirs = false;
         
+        // Track the number of files we successfully process
+        let mut added_count = 0;
+        let mut deleted_count = 0;
+        let mut unchanged_count = 0;
+        // Keep track of paths that were actually processed
+        let mut processed_paths: Vec<PathBuf> = Vec::new();
+        // Track new vs modified files
+        let mut new_files = 0;
+        let mut modified_files = 0;
+        
         // Check each path
         for path_str in paths {
             let path = PathBuf::from(path_str);
@@ -75,7 +85,6 @@ impl AddCommand {
                 
                 // Handle case where the path is exactly a file in the index
                 if existing_oids.contains_key(&rel_path_str) {
-                    println!("File {} has been deleted, will remove from index", rel_path_str);
                     files_to_delete.insert(rel_path_str);
                     continue;
                 }
@@ -92,7 +101,6 @@ impl AddCommand {
                 // Find all entries that start with this prefix (meaning they're in this directory)
                 for key in existing_oids.keys() {
                     if key.starts_with(&prefix_to_check) || key == &rel_path_str {
-                        println!("Found index entry {} under directory {}, will remove", key, rel_path_str);
                         files_to_delete.insert(key.clone());
                         has_matches = true;
                     }
@@ -147,18 +155,12 @@ impl AddCommand {
             return Ok(());
         }
         
-        // Track the number of files we successfully process
-        let mut added_count = 0;
-        let mut deleted_count = 0;
-        let mut unchanged_count = 0;
-        
         // First, handle deleted files
         for path_str in &files_to_delete {
             if index.entries.remove(path_str).is_some() {
                 index.keys.remove(path_str);
                 index.changed = true;
                 deleted_count += 1;
-                println!("Removed {} from index", path_str);
             }
         }
         
@@ -247,6 +249,17 @@ impl AddCommand {
                 return Err(e);
             }
             
+            // Record the processed path
+            processed_paths.push(file_path.clone());
+            
+            // Determine if it's a new or modified file
+            let file_path_str = file_path.to_string_lossy().to_string();
+            if existing_oids.contains_key(&file_path_str) {
+                modified_files += 1;
+            } else {
+                new_files += 1;
+            }
+            
             added_count += 1;
         }
         
@@ -260,42 +273,13 @@ impl AddCommand {
                 
                 // Only load from HEAD if we have a commit
                 if let Ok(Some(head_oid)) = refs.read_head() {
-                    println!("Examining HEAD commit: {}", head_oid);
-                    
                     if let Ok(commit_obj) = database.load(&head_oid) {
                         if let Some(commit) = commit_obj.as_any().downcast_ref::<Commit>() {
                             let root_tree_oid = commit.get_tree();
-                            println!("Root tree OID: {}", root_tree_oid);
                             
                             // Recursively collect all files from HEAD tree
                             Self::collect_files_from_tree(&mut database, root_tree_oid, PathBuf::new(), &mut head_files)?;
-                            
-                            println!("Found {} files in HEAD", head_files.len());
                         }
-                    }
-                }
-                
-                // Count how many files are new vs modified
-                let mut new_files = 0;
-                let mut modified_files = 0;
-                
-                for path in &files_to_add {
-                    let path_str = path.to_string_lossy().to_string();
-                    
-                    if head_files.contains_key(&path_str) {
-                        // Get current OID from index
-                        let current_oid = index.get_entry(&path_str)
-                            .map(|entry| entry.get_oid())
-                            .unwrap_or("");
-                        
-                        // Compare OIDs to see if the file has changed
-                        if let Some(head_oid) = head_files.get(&path_str) {
-                            if head_oid != current_oid {
-                                modified_files += 1;
-                            }
-                        }
-                    } else {
-                        new_files += 1;
                     }
                 }
                 
@@ -321,6 +305,13 @@ impl AddCommand {
                     ));
                 }
                 
+                // Dacă nu am determinat niciun fișier, folosim added_count
+                if message.is_empty() && added_count > 0 {
+                    message = format!("{} file{}", 
+                                     added_count,
+                                     if added_count == 1 { "" } else { "s" });
+                }
+                
                 if deleted_count > 0 {
                     if !message.is_empty() {
                         message.push_str(" and ");
@@ -330,11 +321,6 @@ impl AddCommand {
                         deleted_count,
                         if deleted_count == 1 { "" } else { "s" }
                     ));
-                }
-                
-                if message.is_empty() {
-                    message = format!("{} file{}", added_count + deleted_count, 
-                        if (added_count + deleted_count) == 1 { "" } else { "s" });
                 }
                 
                 if unchanged_count > 0 {
@@ -381,8 +367,6 @@ impl AddCommand {
         prefix: PathBuf,
         files: &mut HashMap<String, String>
     ) -> Result<(), Error> {
-        println!("Traversing tree: {} at path: {}", tree_oid, prefix.display());
-        
         // Load the object
         let obj = database.load(tree_oid)?;
         
@@ -402,22 +386,17 @@ impl AddCommand {
                     TreeEntry::Blob(oid, mode) => {
                         // If this is a directory entry masquerading as a blob
                         if *mode == TREE_MODE || mode.is_directory() {
-                            println!("Found directory stored as blob: {} -> {}", entry_path_str, oid);
                             // Recursively process this directory
                             Self::collect_files_from_tree(database, oid, entry_path, files)?;
                         } else {
                             // Regular file
-                            println!("Found file: {} -> {}", entry_path_str, oid);
                             files.insert(entry_path_str, oid.clone());
                         }
                     },
                     TreeEntry::Tree(subtree) => {
                         if let Some(subtree_oid) = subtree.get_oid() {
-                            println!("Found directory: {} -> {}", entry_path_str, subtree_oid);
                             // Recursively process this directory
                             Self::collect_files_from_tree(database, subtree_oid, entry_path, files)?;
-                        } else {
-                            println!("Warning: Tree entry without OID: {}", entry_path_str);
                         }
                     }
                 }
@@ -428,14 +407,10 @@ impl AddCommand {
         
         // If object is a blob, try to parse it as a tree
         if obj.get_type() == "blob" {
-            println!("Object is a blob, attempting to parse as tree...");
-            
             // Attempt to parse blob as a tree (this handles directories stored as blobs)
             let blob_data = obj.to_bytes();
             match Tree::parse(&blob_data) {
                 Ok(parsed_tree) => {
-                    println!("Successfully parsed blob as tree with {} entries", parsed_tree.get_entries().len());
-                    
                     // Process each entry in the parsed tree
                     for (name, entry) in parsed_tree.get_entries() {
                         let entry_path = if prefix.as_os_str().is_empty() {
@@ -449,21 +424,16 @@ impl AddCommand {
                         match entry {
                             TreeEntry::Blob(oid, mode) => {
                                 if *mode == TREE_MODE || mode.is_directory() {
-                                    println!("Found directory in parsed tree: {} -> {}", entry_path_str, oid);
                                     // Recursively process this directory
                                     Self::collect_files_from_tree(database, oid, entry_path, files)?;
                                 } else {
-                                    println!("Found file in parsed tree: {} -> {}", entry_path_str, oid);
                                     files.insert(entry_path_str, oid.clone());
                                 }
                             },
                             TreeEntry::Tree(subtree) => {
                                 if let Some(subtree_oid) = subtree.get_oid() {
-                                    println!("Found directory in parsed tree: {} -> {}", entry_path_str, subtree_oid);
                                     // Recursively process this directory
                                     Self::collect_files_from_tree(database, subtree_oid, entry_path, files)?;
-                                } else {
-                                    println!("Warning: Tree entry without OID in parsed tree: {}", entry_path_str);
                                 }
                             }
                         }
@@ -471,16 +441,13 @@ impl AddCommand {
                     
                     return Ok(());
                 },
-                Err(e) => {
+                Err(_) => {
                     // If we're at a non-root path, this might be a file
                     if !prefix.as_os_str().is_empty() {
                         let path_str = prefix.to_string_lossy().to_string();
-                        println!("Adding file at path: {} -> {}", path_str, tree_oid);
                         files.insert(path_str, tree_oid.to_string());
                         return Ok(());
                     }
-                    
-                    println!("Failed to parse blob as tree: {}", e);
                 }
             }
         }
@@ -492,19 +459,15 @@ impl AddCommand {
             for (path, oid) in files.clone() {  // Clone to avoid borrowing issues
                 // Only look at top-level directory entries (no path separators)
                 if !path.contains('/') {
-                    println!("Checking top-level entry for deeper traversal: {} -> {}", path, oid);
-                    
                     // Try to load and traverse it as a directory
                     let dir_path = PathBuf::from(&path);
-                    if let Err(e) = Self::collect_files_from_tree(database, &oid, dir_path, files) {
-                        println!("Error traversing {}: {}", path, e);
+                    if let Err(_) = Self::collect_files_from_tree(database, &oid, dir_path, files) {
                         // Continue with other entries even if this one fails
                     }
                 }
             }
         }
         
-        println!("Object {} is neither a tree nor a blob that can be parsed as a tree", tree_oid);
         Ok(())
     }
 }

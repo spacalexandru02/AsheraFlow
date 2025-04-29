@@ -219,6 +219,16 @@ impl Pager {
         Ok(())
     }
     
+    /// Check if the pager exited early (user pressed 'q')
+    pub fn exited_early(&self) -> bool {
+        self.early_exit
+    }
+    
+    /// Disable the pager
+    pub fn disable(&mut self) {
+        self.enabled = false;
+    }
+    
     /// Check if the pager is enabled
     pub fn is_enabled(&self) -> bool {
         self.enabled && !self.early_exit

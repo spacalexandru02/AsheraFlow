@@ -5,13 +5,14 @@ use std::any::Any;
 use std::str;
 use std::collections::HashMap;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Commit {
-    oid: Option<String>,
-    parent: Option<String>,
-    tree: String,
-    author: Author,
-    message: String,
+    pub oid: Option<String>,
+    pub parent: Option<String>,
+    pub tree: String,
+    pub author: Author,
+    pub committer: Author,
+    pub message: String,
 }
 
 impl GitObject for Commit {
@@ -20,12 +21,20 @@ impl GitObject for Commit {
     }
 
     fn to_bytes(&self) -> Vec<u8> {
-        let timestamp = self.author.timestamp.timestamp();
+        let author_timestamp = self.author.timestamp.timestamp();
         let author_line = format!(
             "{} <{}> {} +0000", 
             self.author.name, 
             self.author.email, 
-            timestamp
+            author_timestamp
+        );
+
+        let committer_timestamp = self.committer.timestamp.timestamp();
+        let committer_line = format!(
+            "{} <{}> {} +0000", 
+            self.committer.name, 
+            self.committer.email, 
+            committer_timestamp
         );
     
         let mut lines = Vec::with_capacity(5);
@@ -37,7 +46,7 @@ impl GitObject for Commit {
         }
         
         lines.push(format!("author {}", author_line));
-        lines.push(format!("committer {}", author_line));
+        lines.push(format!("committer {}", committer_line));
     
         lines.push(String::new()); // Empty line before message
         lines.push(self.message.clone());
@@ -65,7 +74,25 @@ impl Commit {
             oid: None,
             parent,
             tree,
+            author: author.clone(),
+            committer: author,
+            message,
+        }
+    }
+
+    pub fn new_with_committer(
+        parent: Option<String>,
+        tree: String,
+        author: Author,
+        committer: Author,
+        message: String
+    ) -> Self {
+        Commit {
+            oid: None,
+            parent,
+            tree,
             author,
+            committer,
             message,
         }
     }
@@ -83,6 +110,10 @@ impl Commit {
         Some(&self.author)
     }
     
+    pub fn get_committer(&self) -> Option<&Author> {
+        Some(&self.committer)
+    }
+    
     pub fn get_message(&self) -> &str {
         &self.message
     }
@@ -93,6 +124,41 @@ impl Commit {
     
     pub fn get_tree(&self) -> &str {
         &self.tree
+    }
+    
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let author_timestamp = self.author.timestamp.timestamp();
+        let author_line = format!(
+            "{} <{}> {} +0000", 
+            self.author.name, 
+            self.author.email, 
+            author_timestamp
+        );
+
+        let committer_timestamp = self.committer.timestamp.timestamp();
+        let committer_line = format!(
+            "{} <{}> {} +0000", 
+            self.committer.name, 
+            self.committer.email, 
+            committer_timestamp
+        );
+    
+        let mut lines = Vec::with_capacity(5);
+        
+        lines.push(format!("tree {}", self.tree));
+        
+        if let Some(parent) = &self.parent {
+            lines.push(format!("parent {}", parent));
+        }
+        
+        lines.push(format!("author {}", author_line));
+        lines.push(format!("committer {}", committer_line));
+    
+        lines.push(String::new()); // Empty line before message
+        lines.push(self.message.clone());
+    
+        lines.join("\n").into_bytes()
     }
     
     /// Parsează un commit dintr-un șir de bytes
@@ -141,10 +207,18 @@ impl Commit {
         let author_str = headers.get("author")
             .ok_or_else(|| Error::Generic("Missing author in commit".to_string()))?;
         
+        let committer_str = headers.get("committer")
+            .unwrap_or(author_str);
+        
         // Parsează autor - implementare simplificată
         let author = match Author::parse(author_str) {
             Ok(author) => author,
             Err(_) => return Err(Error::Generic("Invalid author format".to_string())),
+        };
+
+        let committer = match Author::parse(committer_str) {
+            Ok(committer) => committer,
+            Err(_) => author.clone(),
         };
 
         Ok(Commit {
@@ -152,6 +226,7 @@ impl Commit {
             parent,
             tree,
             author,
+            committer,
             message,
         })
     }

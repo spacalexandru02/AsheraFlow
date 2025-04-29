@@ -1,6 +1,7 @@
 // src/core/repository/migration.rs
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use crate::core::database::blob::Blob;
 use crate::core::database::tree::{Tree, TreeEntry};
 use crate::core::file_mode::FileMode;
 use crate::errors::error::Error;
@@ -52,13 +53,28 @@ impl<'a> Migration<'a> {
         }
     }
     
+    // Metodă pentru a șterge toate conflictele în cazul utilizării flag-ului force
+    pub fn remove_all_conflicts(&mut self) {
+        // Golim toate listele de conflicte
+        for (_, conflict_set) in self.conflicts.iter_mut() {
+            conflict_set.clear();
+        }
+        
+        // Golim și lista de erori
+        self.errors.clear();
+        
+        println!("Force flag applied - ignoring potential conflicts");
+    }
 
     pub fn apply_changes(&mut self) -> Result<(), Error> {
         // Analyze changes using Inspector to detect conflicts
         self.analyze_changes()?;
         
-        // Check if there are any conflicts that would prevent checkout
-        self.check_conflicts()?;
+        // Check if there are any conflicts that would prevent checkout, doar dacă erori nu e goală
+        // Dacă am aplicat force flag, vom avea erori și conflicts goale
+        if !self.errors.is_empty() {
+            self.check_conflicts()?;
+        }
         
         // Apply the planned changes
         self.execute_changes()?;
@@ -216,6 +232,28 @@ impl<'a> Migration<'a> {
         Ok(())
     }
     
+    // Helper method to find all potentially empty directories in the workspace
+    fn find_all_empty_directories(&self) -> Result<HashSet<PathBuf>, Error> {
+        let mut dirs = HashSet::new();
+        
+        // Get all files from index
+        for entry in self.repo.index.each_entry() {
+            let path = PathBuf::from(entry.get_path());
+            
+            // Add all parent directories
+            let mut current = path.parent();
+            while let Some(parent) = current {
+                if parent.as_os_str().is_empty() || parent.to_string_lossy() == "." {
+                    break;
+                }
+                dirs.insert(parent.to_path_buf());
+                current = parent.parent();
+            }
+        }
+        
+        Ok(dirs)
+    }
+    
     fn analyze_changes(&mut self) -> Result<(), Error> {
         println!("Analyzing changes for migration");
         
@@ -359,6 +397,14 @@ impl<'a> Migration<'a> {
     
     // Check for conflicts and return appropriate error if any found
     fn check_conflicts(&mut self) -> Result<(), Error> {
+        // Verificăm dacă există conflicte
+        let has_conflicts = self.conflicts.iter().any(|(_, paths)| !paths.is_empty());
+        
+        // Dacă nu avem conflicte, returnăm OK
+        if !has_conflicts {
+            return Ok(());
+        }
+        
         // Error messages for each conflict type
         let messages = HashMap::from([
             (ConflictType::StaleFile, (
@@ -371,7 +417,7 @@ impl<'a> Migration<'a> {
             )),
             (ConflictType::UntrackedOverwritten, (
                 "The following untracked working tree files would be overwritten by checkout:",
-                "Please move or remove them before you switch branches."
+                "Please move or remove them before you checkout."
             )),
             (ConflictType::UntrackedRemoved, (
                 "The following untracked working tree files would be removed by checkout:",
@@ -423,114 +469,99 @@ impl<'a> Migration<'a> {
     }
     
     // Execute all planned changes
-    // In src/core/repository/migration.rs
-// Modified execute_changes method for better directory cleanup
-
-fn execute_changes(&mut self) -> Result<(), Error> {
-    println!("Executing {} changes", self.changes_to_make.len());
-
-    // Clone the changes to avoid borrowing issues
-    let changes_clone = self.changes_to_make.clone();
-
-    // Keep track of directories that might need cleanup
-    let mut affected_dirs = HashSet::new();
-
-    // First, handle deletions
-    for change in &changes_clone {
-        if let Change::Delete { path } = change {
-            println!("Processing deletion for: {}", path.display());
-            // *** START MODIFICATION ***
-            // Check the type in the workspace before removing
-            let full_path = self.repo.workspace.root_path.join(path);
-            if full_path.is_dir() {
-                println!("  -> Removing directory using force_remove_directory");
-                self.repo.workspace.force_remove_directory(path)?;
-            } else {
-                // If it's a file or doesn't exist, remove_file handles it
-                println!("  -> Removing file using remove_file");
+    fn execute_changes(&mut self) -> Result<(), Error> {
+        println!("Executing {} changes", self.changes_to_make.len());
+        
+        // Clone the changes to avoid borrowing issues
+        let changes_clone = self.changes_to_make.clone();
+        
+        // Keep track of directories that might need cleanup
+        let mut affected_dirs = HashSet::new();
+        
+        // First, handle deletions
+        for change in &changes_clone {
+            if let Change::Delete { path } = change {
+                println!("Removing file: {}", path.display());
                 self.repo.workspace.remove_file(path)?;
-            }
-            // *** END MODIFICATION ***
-
-            // Also remove from index
-            let path_str = path.to_string_lossy().to_string();
-            self.repo.index.remove(&path_str)?;
-
-            // Add parent directories to the affected dirs list
-            if let Some(parent) = path.parent() {
-                if !(parent.as_os_str().is_empty() || parent.to_string_lossy() == ".") {
-                    affected_dirs.insert(parent.to_path_buf());
-                }
-            }
-        }
-    }
-
-    // Find all directories needed for new/updated files
-    let mut needed_dirs = HashSet::new();
-    for change in &changes_clone {
-        match change {
-            Change::Create { path, .. } | Change::Update { path, .. } => {
-                // Add all parent directories
-                let mut current = path.parent();
-                while let Some(parent) = current {
-                    if parent.as_os_str().is_empty() || parent.to_string_lossy() == "." {
-                        break;
+                
+                // Also remove from index
+                let path_str = path.to_string_lossy().to_string();
+                self.repo.index.remove(&PathBuf::from(&path_str))?;
+                
+                // Add parent directories to the affected dirs list
+                if let Some(parent) = path.parent() {
+                    if !(parent.as_os_str().is_empty() || parent.to_string_lossy() == ".") {
+                        affected_dirs.insert(parent.to_path_buf());
                     }
-                    needed_dirs.insert(parent.to_path_buf());
-                    current = parent.parent();
                 }
-            },
-            _ => {}
+            }
         }
-    }
-
-    // Sort the directories by path length to ensure we create them in order
-    let mut dir_list: Vec<_> = needed_dirs.iter().cloned().collect();
-    dir_list.sort_by_key(|p| p.to_string_lossy().len());
-
-    // Create all needed directories
-    for dir in dir_list {
-        println!("Ensuring directory exists: {}", dir.display()); // Changed log message slightly
-        self.repo.workspace.make_directory(&dir)?;
-    }
-
-    // Now apply file creations and updates
-    for change in changes_clone {
-        match change {
-            Change::Create { path, entry } | Change::Update { path, entry } => {
-                // Check if this is a directory entry
-                if entry.get_mode() == "040000" || FileMode::parse(entry.get_mode()).is_directory() {
-                    // Ensure directory exists (already done mostly, but good to be sure)
-                    println!("Ensuring directory exists (via Create/Update): {}", path.display());
-                    self.repo.workspace.make_directory(&path)?;
-
-                    // Process directory contents
-                   // self.process_directory_contents(&path, &entry.get_oid())?; // Potentially complex, ensure needed
-                } else {
-                    // Write the file and update index
-                    println!("Writing file: {}", path.display());
-                    self.write_file(&path, &entry)?;
-                }
-            },
-            _ => {} // Deletions already handled
+        
+        // Find all directories needed for new/updated files
+        let mut needed_dirs = HashSet::new();
+        for change in &changes_clone {
+            match change {
+                Change::Create { path, .. } | Change::Update { path, .. } => {
+                    // Add all parent directories
+                    let mut current = path.parent();
+                    while let Some(parent) = current {
+                        if parent.as_os_str().is_empty() || parent.to_string_lossy() == "." {
+                            break;
+                        }
+                        needed_dirs.insert(parent.to_path_buf());
+                        current = parent.parent();
+                    }
+                },
+                _ => {}
+            }
         }
-    }
-
-    // Clean up affected directories - we'll use the improved recursive method
-    // which will automatically clean up parent directories as well
-    // NOTE: This cleanup might be redundant if make_directory is robust, but leave for now.
-    for dir in affected_dirs {
-        // Skip if this directory is needed for new/updated files
-        if needed_dirs.contains(&dir) {
-            continue;
+        
+        // Sort the directories by path length to ensure we create them in order
+        let mut dir_list: Vec<_> = needed_dirs.iter().cloned().collect();
+        dir_list.sort_by_key(|p| p.to_string_lossy().len());
+        
+        // Create all needed directories
+        for dir in dir_list {
+            println!("Creating directory: {}", dir.display());
+            self.repo.workspace.make_directory(&dir)?;
         }
-
-        println!("Checking if previously affected directory is now empty: {}", dir.display());
-        self.repo.workspace.remove_directory(&dir)?;
+        
+        // Now apply file creations and updates
+        for change in changes_clone {
+            match change {
+                Change::Create { path, entry } | Change::Update { path, entry } => {
+                    // Check if this is a directory entry
+                    if entry.get_mode() == "040000" || FileMode::parse(entry.get_mode()).is_directory() {
+                        println!("Creating directory: {}", path.display());
+                        self.repo.workspace.make_directory(&path)?;
+                        
+                        // Process directory contents
+                        self.process_directory_contents(&path, &entry.get_oid())?;
+                    } else {
+                        // Write the file and update index
+                        println!("Writing file: {}", path.display());
+                        self.write_file(&path, &entry)?;
+                    }
+                },
+                _ => {}
+            }
+        }
+        
+        // Clean up affected directories - we'll use the improved recursive method 
+        // which will automatically clean up parent directories as well
+        for dir in affected_dirs {
+            // Skip if this directory is needed for new/updated files
+            if needed_dirs.contains(&dir) {
+                continue;
+            }
+            
+            println!("Checking if directory is empty: {}", dir.display());
+            self.repo.workspace.remove_directory(&dir)?;
+        }
+        
+        Ok(())
     }
-
-    Ok(())
-}
+    
     // Write a file to the workspace and update the index
     fn write_file(&mut self, path: &Path, entry: &DatabaseEntry) -> Result<(), Error> {
         // Get blob contents
@@ -543,6 +574,273 @@ fn execute_changes(&mut self) -> Result<(), Error> {
         // Update index
         if let Ok(stat) = self.repo.workspace.stat_file(path) {
             self.repo.index.add(path, &entry.get_oid(), &stat)?;
+        }
+        
+        Ok(())
+    }
+    
+    // Process a directory's contents recursively
+    fn process_directory_contents(&mut self, directory_path: &Path, directory_oid: &str) -> Result<(), Error> {
+        println!("Processing directory contents: {}", directory_path.display());
+        
+        // Load the tree object
+        let obj = self.repo.database.load(directory_oid)?;
+        
+        // Make sure it's a tree
+        if let Some(tree) = obj.as_any().downcast_ref::<Tree>() {
+            // Build a comprehensive list of all files that should exist in target state
+            let mut target_files = HashMap::new();
+            
+            // First, collect all files that should exist in this directory and subdirectories in the target state
+            self.collect_all_target_files(tree, directory_path, &mut target_files)?;
+            
+            // Now, get current files in the workspace
+            let current_files = self.get_all_workspace_files(directory_path)?;
+            
+            // Debug output
+            println!("Target files for {}: {}", directory_path.display(), target_files.len());
+            for (path, (oid, _)) in &target_files {
+                println!("  Target file: {} -> {}", path.display(), oid);
+            }
+            
+            println!("Current files for {}: {}", directory_path.display(), current_files.len());
+            for path in &current_files {
+                println!("  Current file: {}", path.display());
+            }
+            
+            // First ensure all directories exist
+            let mut directories = HashSet::new();
+            for path in target_files.keys() {
+                if let Some(parent) = path.parent() {
+                    // Skip the top directory
+                    if parent != directory_path {
+                        directories.insert(parent.to_path_buf());
+                    }
+                }
+            }
+            
+            // Sort directories by depth to create parent dirs first
+            let mut dir_list: Vec<_> = directories.into_iter().collect();
+            dir_list.sort_by_key(|p| p.components().count());
+            
+            // Create all necessary directories
+            for dir in dir_list {
+                println!("Creating directory: {}", dir.display());
+                self.repo.workspace.make_directory(&dir)?;
+            }
+            
+            // Now create/update all target files
+            for (path, (oid, _)) in &target_files {
+                // Create parent directories if needed
+                if let Some(parent) = path.parent() {
+                    if parent != directory_path && !parent.exists() {
+                        println!("Creating parent directory: {}", parent.display());
+                        self.repo.workspace.make_directory(parent)?;
+                    }
+                }
+                
+                // Write the file content
+                println!("Writing file: {}", path.display());
+                
+                // Get and write the blob content
+                let blob_obj = self.repo.database.load(oid)?;
+                let blob_data = blob_obj.to_bytes();
+                self.repo.workspace.write_file(path, &blob_data)?;
+                
+                // Update index
+                if let Ok(stat) = self.repo.workspace.stat_file(path) {
+                    self.repo.index.add(path, oid, &stat)?;
+                }
+            }
+            
+            // Find files that exist in current state but not in target state
+            let files_to_remove: Vec<_> = current_files
+                .difference(&target_files.keys().cloned().collect())
+                .cloned()
+                .collect();
+            
+            // Sort files by depth (deepest first) to avoid issues with removing parent dirs first
+            let mut sorted_files_to_remove = files_to_remove.clone();
+            sorted_files_to_remove.sort_by(|a, b| {
+                let a_depth = a.components().count();
+                let b_depth = b.components().count();
+                b_depth.cmp(&a_depth) // Descending order - deepest first
+            });
+            
+            // Delete files that exist in current state but not in target state
+            for file_path in sorted_files_to_remove {
+                println!("Removing file that doesn't exist in target: {}", file_path.display());
+                self.repo.workspace.remove_file(&file_path)?;
+                
+                // Also remove from index
+                let path_str = file_path.to_string_lossy().to_string();
+                self.repo.index.remove(&PathBuf::from(&path_str))?;
+            }
+        }
+        
+        Ok(())
+    }
+
+    fn get_current_entries_in_dir(&self, dir_path: &Path) -> Result<HashSet<PathBuf>, Error> {
+        let mut entries = HashSet::new();
+        let full_dir_path = self.repo.workspace.root_path.join(dir_path);
+        
+        // Skip if directory doesn't exist
+        if !full_dir_path.exists() || !full_dir_path.is_dir() {
+            return Ok(entries);
+        }
+        
+        // Add this directory's files and subdirectories recursively
+        self.collect_entries_recursive(&full_dir_path, dir_path, &mut entries)?;
+        
+        Ok(entries)
+    }
+
+    fn collect_entries_recursive(&self, full_path: &Path, rel_path: &Path, entries: &mut HashSet<PathBuf>) -> Result<(), Error> {
+        // Skip if path doesn't exist
+        if !full_path.exists() {
+            return Ok(());
+        }
+        
+        // Add this entry if it's not the root directory we're checking
+        if rel_path.as_os_str().len() > 0 {
+            entries.insert(rel_path.to_path_buf());
+        }
+        
+        // If it's a directory, process contents
+        if full_path.is_dir() {
+            if let Ok(dir_entries) = std::fs::read_dir(full_path) {
+                for entry_result in dir_entries {
+                    if let Ok(entry) = entry_result {
+                        let entry_path = entry.path();
+                        let entry_name = entry.file_name();
+                        
+                        // Skip hidden files and directories
+                        if entry_name.to_string_lossy().starts_with('.') {
+                            continue;
+                        }
+                        
+                        // Get relative path
+                        let entry_rel_path = rel_path.join(entry_name);
+                        
+                        // Recursively collect this entry
+                        self.collect_entries_recursive(&entry_path, &entry_rel_path, entries)?;
+                    }
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
+    // Get all current files in a specific directory
+    fn get_current_files_in_dir(&self, dir_path: &Path) -> Result<HashSet<PathBuf>, Error> {
+        let mut files = HashSet::new();
+        let dir_prefix = dir_path.to_string_lossy().to_string();
+        
+        // Get files from index that match this directory
+        for entry in self.repo.index.each_entry() {
+            let path = PathBuf::from(entry.get_path());
+            
+            if (path.starts_with(dir_path) || 
+                entry.get_path().starts_with(&dir_prefix)) &&
+               path != *dir_path {
+                files.insert(path);
+            }
+        }
+        
+        Ok(files)
+    }
+
+    fn get_all_workspace_files(&mut self, dir_path: &Path) -> Result<HashSet<PathBuf>, Error> {
+        let mut files = HashSet::new();
+        let full_dir_path = self.repo.workspace.root_path.join(dir_path);
+        
+        // Skip if directory doesn't exist
+        if !full_dir_path.exists() || !full_dir_path.is_dir() {
+            return Ok(files);
+        }
+        
+        self.collect_files_recursive(&full_dir_path, dir_path, &mut files)?;
+        
+        Ok(files)
+    }
+
+    fn collect_files_recursive(&mut self, full_path: &Path, rel_path: &Path, files: &mut HashSet<PathBuf>) -> Result<(), Error> {
+        // Skip if path doesn't exist
+        if !full_path.exists() {
+            return Ok(());
+        }
+        
+        // If it's a file, add it
+        if full_path.is_file() {
+            files.insert(rel_path.to_path_buf());
+            return Ok(());
+        }
+        
+        // If it's a directory, process contents
+        if full_path.is_dir() {
+            if let Ok(dir_entries) = std::fs::read_dir(full_path) {
+                for entry_result in dir_entries {
+                    if let Ok(entry) = entry_result {
+                        let entry_path = entry.path();
+                        let entry_name = entry.file_name();
+                        
+                        // Skip .ash directory and hidden files
+                        if entry_name.to_string_lossy() == ".ash" || 
+                        entry_name.to_string_lossy().starts_with('.') {
+                            continue;
+                        }
+                        
+                        // Get relative path
+                        let entry_rel_path = rel_path.join(entry_name);
+                        
+                        // Process this entry
+                        self.collect_files_recursive(&entry_path, &entry_rel_path, files)?;
+                    }
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
+    fn collect_all_target_files(
+        &mut self,
+        tree: &Tree,
+        base_path: &Path,
+        target_files: &mut HashMap<PathBuf, (String, FileMode)>
+    ) -> Result<(), Error> {
+        // Process each entry in the tree
+        for (name, entry) in tree.get_entries() {
+            let entry_path = base_path.join(name);
+            
+            match entry {
+                TreeEntry::Blob(oid, mode) => {
+                    if mode.is_directory() {
+                        // It's a directory stored as a blob, load it and process recursively
+                        let subtree_obj = self.repo.database.load(oid)?;
+                        if let Some(subtree) = subtree_obj.as_any().downcast_ref::<Tree>() {
+                            self.collect_all_target_files(subtree, &entry_path, target_files)?;
+                        } else if let Ok(subtree) = Tree::parse(&subtree_obj.to_bytes()) {
+                            // Try parsing as a tree in case it's stored as a blob
+                            self.collect_all_target_files(&subtree, &entry_path, target_files)?;
+                        }
+                    } else {
+                        // It's a file, add to target files
+                        target_files.insert(entry_path, (oid.clone(), *mode));
+                    }
+                },
+                TreeEntry::Tree(subtree) => {
+                    if let Some(subtree_oid) = subtree.get_oid() {
+                        // It's a directory, load and process recursively
+                        let subtree_obj = self.repo.database.load(subtree_oid)?;
+                        if let Some(subtree) = subtree_obj.as_any().downcast_ref::<Tree>() {
+                            self.collect_all_target_files(subtree, &entry_path, target_files)?;
+                        }
+                    }
+                }
+            }
         }
         
         Ok(())

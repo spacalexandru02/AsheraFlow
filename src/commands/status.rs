@@ -54,10 +54,6 @@ impl StatusCommand {
             // Convert to seconds and nanoseconds for comparison
             let stat_mtime_sec = stat.mtime() as u32;
             let stat_mtime_nsec = stat.mtime_nsec() as u32;
-
-            println!("Comparare timestamps pentru {}", entry.path);
-            println!("Index mtime: {}.{}", entry.get_mtime(), entry.get_mtime_nsec());
-            println!("File mtime: {}.{}", stat_mtime_sec, stat_mtime_nsec);
             
             // Compare modification times
             entry.get_mtime() == stat_mtime_sec && entry.get_mtime_nsec() == stat_mtime_nsec
@@ -168,75 +164,49 @@ impl StatusCommand {
 
     /// Diagnostic function to inspect objects in the database
     fn diagnose_object(database: &mut Database, oid: &str) -> Result<(), Error> {
-        println!("Diagnostic for object: {}", oid);
-        
-        // Try to load the object
         match database.load(oid) {
             Ok(obj) => {
-                println!("  Successfully loaded object");
-                println!("  Object type: {}", obj.get_type());
-                
-                // Try to cast to different types
                 if let Some(tree) = obj.as_any().downcast_ref::<Tree>() {
-                    println!("  Object is a Tree with {} entries", tree.get_entries().len());
-                    
-                    // Print the entries
                     for (name, entry) in tree.get_entries() {
                         match entry {
                             TreeEntry::Blob(entry_oid, mode) => {
-                                println!("    Entry: {} (blob, mode {}) -> {}", name, mode, entry_oid);
+                                if *mode == TREE_MODE || mode.is_directory() {
+                                    Self::diagnose_object(database, entry_oid)?;
+                                }
                             },
                             TreeEntry::Tree(subtree) => {
                                 if let Some(subtree_oid) = subtree.get_oid() {
-                                    println!("    Entry: {} (tree) -> {}", name, subtree_oid);
-                                } else {
-                                    println!("    Entry: {} (tree) -> <no OID>", name);
+                                    Self::diagnose_object(database, subtree_oid)?;
                                 }
                             }
                         }
                     }
                 } else if let Some(_blob) = obj.as_any().downcast_ref::<Blob>() {
-                    println!("  Object is a Blob");
-                    
-                    // Try to read and parse the blob as a tree
-                    println!("  Attempting to parse blob as tree...");
-                    let bytes = obj.to_bytes();
-                    match Tree::parse(&bytes) {
-                        Ok(tree) => {
-                            println!("  Successfully parsed blob as tree with {} entries", tree.get_entries().len());
-                            
-                            // Print the entries
-                            for (name, entry) in tree.get_entries() {
-                                match entry {
-                                    TreeEntry::Blob(entry_oid, mode) => {
-                                        println!("    Entry: {} (blob, mode {}) -> {}", name, mode, entry_oid);
-                                    },
-                                    TreeEntry::Tree(subtree) => {
-                                        if let Some(subtree_oid) = subtree.get_oid() {
-                                            println!("    Entry: {} (tree) -> {}", name, subtree_oid);
-                                        } else {
-                                            println!("    Entry: {} (tree) -> <no OID>", name);
-                                        }
+                    let blob_data = obj.to_bytes();
+                    if let Ok(tree) = Tree::parse(&blob_data) {
+                        for (name, entry) in tree.get_entries() {
+                            match entry {
+                                TreeEntry::Blob(entry_oid, mode) => {
+                                    if *mode == TREE_MODE || mode.is_directory() {
+                                        Self::diagnose_object(database, entry_oid)?;
+                                    }
+                                },
+                                TreeEntry::Tree(subtree) => {
+                                    if let Some(subtree_oid) = subtree.get_oid() {
+                                        Self::diagnose_object(database, subtree_oid)?;
                                     }
                                 }
                             }
-                        },
-                        Err(e) => {
-                            println!("  Failed to parse blob as tree: {}", e);
                         }
                     }
                 } else if let Some(commit) = obj.as_any().downcast_ref::<Commit>() {
-                    println!("  Object is a Commit");
-                    println!("  Tree: {}", commit.get_tree());
-                } else {
-                    println!("  Object is of unknown type");
+                    Self::diagnose_object(database, commit.get_tree())?;
                 }
             },
             Err(e) => {
-                println!("  Failed to load object: {}", e);
+                return Err(e);
             }
         }
-        
         Ok(())
     }
 
@@ -247,54 +217,39 @@ impl StatusCommand {
     ) -> Result<HashMap<String, DatabaseEntry>, Error> {
         let mut head_tree = HashMap::new();
         
-        println!("Loading HEAD tree");
-        
-        // Read HEAD reference
         if let Some(head_oid) = refs.read_head()? {
-            println!("HEAD OID: {}", head_oid);
-            
-            // Load the commit
             let commit_obj = match database.load(&head_oid) {
                 Ok(obj) => {
-                    println!("DEBUG: Successfully loaded commit object");
                     obj
                 },
                 Err(e) => {
-                    println!("DEBUG: Failed to load commit: {}", e);
                     return Err(e);
                 }
             };
             
             let commit = match commit_obj.as_any().downcast_ref::<Commit>() {
                 Some(c) => {
-                    println!("DEBUG: Successfully cast to Commit");
                     c
                 },
                 None => {
-                    println!("DEBUG: Object is not a Commit");
                     return Err(Error::Generic("Object is not a commit".to_string()));
                 }
             };
             
             let root_tree_oid = commit.get_tree();
-            println!("Commit tree OID: {}", root_tree_oid);
             
-            // Diagnose the root tree
             Self::diagnose_object(database, root_tree_oid)?;
             
-            // Also diagnose the src directory if it exists
             if let Ok(root_obj) = database.load(root_tree_oid) {
                 if let Some(root_tree) = root_obj.as_any().downcast_ref::<Tree>() {
                     for (name, entry) in root_tree.get_entries() {
                         if name == "src" {
                             match entry {
                                 TreeEntry::Blob(oid, _) => {
-                                    println!("Diagnosing src directory (blob):");
                                     Self::diagnose_object(database, oid)?;
                                 },
                                 TreeEntry::Tree(subtree) => {
                                     if let Some(oid) = subtree.get_oid() {
-                                        println!("Diagnosing src directory (tree):");
                                         Self::diagnose_object(database, oid)?;
                                     }
                                 }
@@ -304,20 +259,11 @@ impl StatusCommand {
                 }
             }
             
-            // Use a proper generic recursive traversal to build the complete head_tree
             Self::traverse_tree_structure(database, root_tree_oid, PathBuf::new(), &mut head_tree)?;
-            
-            println!("Found {} entries in HEAD tree", head_tree.len());
-            for (path, entry) in &head_tree {
-                println!("  {} -> {}", path, entry.get_oid());
-            }
-        } else {
-            println!("No HEAD found, tree is empty");
         }
         
         Ok(head_tree)
     }
-    /// Recursively traverse the tree structure
     /// Recursively traverse the tree structure with special handling for directories
     fn traverse_tree_structure(
         database: &mut Database,
@@ -325,8 +271,6 @@ impl StatusCommand {
         prefix: PathBuf,
         head_tree: &mut HashMap<String, DatabaseEntry>
     ) -> Result<(), Error> {
-        println!("Traversing tree: {} at path: {}", tree_oid, prefix.display());
-        
         // Load the tree object
         let obj = database.load(tree_oid)?;
         
@@ -345,7 +289,6 @@ impl StatusCommand {
                 match entry {
                     TreeEntry::Blob(oid, mode) => {
                         // Store file entry in the head_tree
-                        println!("  Found file in HEAD: {} -> {}", path_str, oid);
                         head_tree.insert(
                             path_str.clone(),
                             DatabaseEntry::new(
@@ -357,13 +300,11 @@ impl StatusCommand {
                     },
                     TreeEntry::Tree(subtree) => {
                         if let Some(subtree_oid) = subtree.get_oid() {
-                            println!("  Found directory in HEAD: {} -> {}", path_str, subtree_oid);
-                            
                             // Store directory entry in the head_tree
                             head_tree.insert(
                                 path_str.clone(),
                                 DatabaseEntry::new(
-                                    path_str.clone(),
+                                    path_str,
                                     subtree_oid.clone(),
                                     &TREE_MODE.to_octal_string()
                                 )
@@ -379,8 +320,6 @@ impl StatusCommand {
             // Sometimes blobs are used to store directories (special handling)
             let blob_data = obj.to_bytes();
             if let Ok(parsed_tree) = Tree::parse(&blob_data) {
-                println!("  Successfully parsed blob as tree with {} entries", parsed_tree.get_entries().len());
-                
                 // Process entries in the parsed tree
                 for (name, entry) in parsed_tree.get_entries() {
                     let entry_path = if prefix.as_os_str().is_empty() {
@@ -393,7 +332,6 @@ impl StatusCommand {
                     
                     match entry {
                         TreeEntry::Blob(blob_oid, mode) => {
-                            println!("  Found file in parsed tree: {} -> {}", path_str, blob_oid);
                             head_tree.insert(
                                 path_str.clone(),
                                 DatabaseEntry::new(
@@ -405,11 +343,10 @@ impl StatusCommand {
                         },
                         TreeEntry::Tree(subtree) => {
                             if let Some(subtree_oid) = subtree.get_oid() {
-                                println!("  Found directory in parsed tree: {} -> {}", path_str, subtree_oid);
                                 head_tree.insert(
                                     path_str.clone(),
                                     DatabaseEntry::new(
-                                        path_str.clone(),
+                                        path_str,
                                         subtree_oid.clone(),
                                         &TREE_MODE.to_octal_string()
                                     )
@@ -436,39 +373,22 @@ impl StatusCommand {
     ) {
         let path = index_entry.get_path();
         
-        println!("Comparing index with HEAD for {}", path);
-        println!("  Index OID: {}", index_entry.get_oid());
-        
-        // If HEAD tree is empty (first commit case)
         if head_tree.is_empty() {
-            println!("  HEAD tree is empty, marking file as added: {}", path);
             Self::record_change(changed, changes, path.to_string(), ChangeType::IndexAdded);
             return;
         }
         
-        // Check if this file exists in HEAD
         if let Some(head_entry) = head_tree.get(path) {
-            println!("  HEAD OID: {}", head_entry.get_oid());
-            
-            // Skip if this is a directory entry
             if Self::is_directory_from_mode(head_entry.get_mode()) {
-                println!("  Skipping directory entry: {}", path);
                 return;
             }
             
-            // Compare OIDs
             let oids_match = index_entry.get_oid() == head_entry.get_oid();
-            println!("  OIDs match: {}", oids_match);
             
-            // Content comparison - if OIDs differ, file has been modified
             if !oids_match {
-                println!("  Content changed (different OIDs), marking as modified");
                 Self::record_change(changed, changes, path.to_string(), ChangeType::IndexModified);
-            } else {
-                println!("  File is unchanged in index");
             }
         } else {
-            println!("  File not found in HEAD, marking as added: {}", path);
             Self::record_change(changed, changes, path.to_string(), ChangeType::IndexAdded);
         }
     }
@@ -480,31 +400,20 @@ impl StatusCommand {
         changed: &mut HashSet<String>,
         changes: &mut HashMap<String, HashSet<ChangeType>>
     ) {
-        // Skip this check if HEAD is empty
         if head_tree.is_empty() {
-            println!("HEAD tree is empty, skipping deleted files check");
             return;
         }
         
-        println!("Checking for files in HEAD that are missing from index");
-        
-        // Find entries that are in HEAD but not in index
         for (path, head_entry) in head_tree {
-            // Skip if this is a directory
             if Self::is_directory_from_mode(head_entry.get_mode()) {
-                println!("  Skipping directory entry: {}", path);
                 continue;
             }
             
-            // Check if this file exists in the index
             if !index.tracked(path) {
-                // Check if this file is part of a directory that might be tracked in a different way
                 if Self::is_parent_of_tracked_files(path, index) {
-                    println!("  Directory {} contains tracked files, not marking as deleted", path);
                     continue;
                 }
                 
-                println!("  File in HEAD but not in index: {}", path);
                 Self::record_change(changed, changes, path.clone(), ChangeType::IndexDeleted);
             }
         }
@@ -649,10 +558,6 @@ impl StatusCommand {
                     Ok(data) => {
                         // Calculate hash using database
                         let computed_oid = database.hash_file_data(&data);
-                        
-                        println!("Verifying file: {}", path);
-                        println!("  Index hash: {}", oid);
-                        println!("  Computed hash: {}", computed_oid);
                         
                         if &computed_oid != oid {
                             // File has changed, mark as modified

@@ -41,6 +41,88 @@ impl Workspace {
         patterns
     }
 
+    // List files recursively, applying ignore patterns
+    pub fn list_files(&self) -> Result<Vec<PathBuf>, Error> {
+        let ignore_patterns = self.load_ignore_patterns();
+        let mut files = Vec::new();
+        self.list_files_recursive(&self.root_path, PathBuf::new(), &mut files, &ignore_patterns)?;
+        Ok(files)
+    }
+
+
+     // Helper for recursive listing
+     fn list_files_recursive(
+         &self,
+         abs_dir_path: &Path,
+         rel_dir_path: PathBuf, // Pass relative path for checking ignores
+         files: &mut Vec<PathBuf>,
+         ignore_patterns: &HashSet<String>,
+     ) -> Result<(), Error> {
+         match fs::read_dir(abs_dir_path) {
+             Ok(entries) => {
+                 for entry_result in entries {
+                     match entry_result {
+                         Ok(entry) => {
+                             let entry_abs_path = entry.path();
+                             let file_name = entry.file_name();
+
+                             // Construct relative path for ignore checking
+                             let entry_rel_path = rel_dir_path.join(&file_name);
+                             let rel_path_str = entry_rel_path.to_string_lossy().to_string().replace("\\", "/"); // Normalize
+
+                             // --- Ignore Check ---
+                             if self.matches_any_pattern(&rel_path_str, ignore_patterns) {
+                                 // If the pattern specifically targets a directory (ends with /), ignore it and don't recurse
+                                 // Also ignore if it's an exact match for a non-directory pattern
+                                  if entry_abs_path.is_dir() {
+                                       // Check if any pattern matches this directory specifically
+                                       let dir_pattern_match = ignore_patterns.iter().any(|p| {
+                                            let norm_p = p.replace("\\", "/");
+                                            (norm_p.ends_with('/') && rel_path_str.starts_with(&norm_p[..norm_p.len()-1])) || norm_p == rel_path_str
+                                       });
+                                       if dir_pattern_match {
+                                            //println!("Ignoring directory and contents: {}", rel_path_str);
+                                            continue; // Skip recursion
+                                       }
+                                  } else {
+                                       // If it's a file and matches any pattern, ignore it
+                                       //println!("Ignoring file: {}", rel_path_str);
+                                       continue;
+                                  }
+                             }
+                             // --- End Ignore Check ---
+
+                             if entry_abs_path.is_dir() {
+                                 // Recursively scan subdirectories
+                                 self.list_files_recursive(&entry_abs_path, entry_rel_path, files, ignore_patterns)?;
+                             } else if entry_abs_path.is_file() {
+                                 // Add file if it's not ignored
+                                 files.push(entry_rel_path);
+                             }
+                         },
+                         Err(e) => {
+                              if e.kind() == std::io::ErrorKind::PermissionDenied {
+                                   eprintln!("Warning: Permission denied reading entry in {}", abs_dir_path.display());
+                                   continue;
+                              } else {
+                                   return Err(Error::IO(e));
+                              }
+                         }
+                     }
+                 }
+                 Ok(())
+             },
+             Err(e) => {
+                 if e.kind() == std::io::ErrorKind::PermissionDenied {
+                     eprintln!("Warning: Permission denied reading directory {}", abs_dir_path.display());
+                     Ok(())
+                 } else {
+                     Err(Error::IO(e))
+                 }
+             }
+         }
+     }
+
     // List files starting from a specific path (for add command)
     pub fn list_files_from(&self, start_path: &Path, index_entries: &HashMap<String, String>) -> Result<(Vec<PathBuf>, Vec<String>), Error> {
         let mut files_found = Vec::new();
@@ -272,7 +354,6 @@ impl Workspace {
         println!("  Attempting to remove file/dir at: {}", full_path.display());
         if full_path.exists() {
             if full_path.is_file() {
-                println!("    Path is a file, calling std::fs::remove_file");
                 match std::fs::remove_file(&full_path) {
                     Ok(_) => println!("    std::fs::remove_file succeeded for file."),
                     Err(e) => {
@@ -281,10 +362,8 @@ impl Workspace {
                     }
                 }
             } else if full_path.is_dir() {
-                 println!("    Warning: remove_file called on a directory: {}. Use force_remove_directory instead.", full_path.display());
                  return Err(Error::Generic(format!("Attempted to use remove_file on directory: {}", full_path.display())));
             } else {
-                println!("    Path exists but is not a file or directory (e.g., symlink?): {}", full_path.display());
                   match std::fs::remove_file(&full_path) { // Try removing anyway
                      Ok(_) => println!("    Successfully removed non-file/non-dir path."),
                      Err(e) => {
@@ -364,6 +443,47 @@ impl Workspace {
         } else {
              //println!("Directory does not exist, nothing to force remove: {}", full_path.display()); // Reduce noise
              Ok(())
+        }
+    }
+
+    pub fn remove(&self, path: &Path) -> Result<(), Error> {
+        // Remove the file first
+        self.remove_file(path)?;
+        
+        // Try to remove parent directories if they become empty
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() {
+                self.remove_directory(parent)?;
+            }
+        }
+        
+        Ok(())
+    }
+
+    pub fn read_head(&self) -> Result<String, Error> {
+        let head_path = self.root_path.join(".ash/HEAD");
+        
+        if !head_path.exists() {
+            return Err(Error::Generic("HEAD file not found".to_string()));
+        }
+        
+        let content = std::fs::read_to_string(head_path).map_err(Error::IO)?;
+        let content = content.trim();
+        
+        // Check if it's a symbolic reference
+        if content.starts_with("ref: ") {
+            let ref_path = content[5..].trim();
+            let full_ref_path = self.root_path.join(".ash").join(ref_path);
+            
+            if !full_ref_path.exists() {
+                return Err(Error::Generic(format!("Referenced file not found: {}", ref_path)));
+            }
+            
+            let ref_content = std::fs::read_to_string(full_ref_path).map_err(Error::IO)?;
+            Ok(ref_content.trim().to_string())
+        } else {
+            // Direct reference to a commit
+            Ok(content.to_string())
         }
     }
 }

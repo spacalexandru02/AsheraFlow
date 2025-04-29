@@ -4,6 +4,9 @@ use std::fmt;
 pub struct FileMode(pub u32);
 
 impl FileMode {
+    /// Mod pentru symlink-uri
+    pub const SYMLINK: u32 = 0o120000;
+
     pub const REGULAR: FileMode = FileMode(0o100644);
     pub const EXECUTABLE: FileMode = FileMode(0o100755);
     pub const DIRECTORY: FileMode = FileMode(0o040000);

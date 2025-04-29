@@ -83,7 +83,6 @@ impl<'a> Bases<'a> {
              if is_ancestor_check.find()?.contains(&commit.to_string()) { // Verifică dacă commit e printre strămoși
                 // Dacă `commit` este strămoș al lui `other_oid`, atunci `commit` este redundant
                 self.redundant.insert(commit.to_string());
-                 println!("DEBUG Bases: Marking {} as redundant (ancestor of {})", commit, other_oid);
                 // Putem ieși devreme dacă l-am marcat deja
                  return Ok(());
              }
@@ -96,7 +95,6 @@ impl<'a> Bases<'a> {
              if is_descendant_check.find()?.contains(&other_oid_str.to_string()) {
                  // Dacă `other_oid_str` este strămoș al lui `commit`, atunci `other_oid_str` este redundant
                  self.redundant.insert(other_oid_str.to_string());
-                  println!("DEBUG Bases: Marking {} as redundant (ancestor of {})", other_oid_str, commit);
              }
          }
 

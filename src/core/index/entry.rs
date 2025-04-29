@@ -22,7 +22,8 @@ pub struct Entry {
     pub oid: String,
     pub flags: u16,
     pub path: String,
-    pub stage: u8, 
+    // Add this field:
+    pub stage: u8,  // 0 = normal, 1 = base, 2 = ours, 3 = theirs
 }
 
 impl Entry {
@@ -270,4 +271,62 @@ impl Entry {
         // Update mode using the new FileMode struct
         self.set_mode(FileMode::from_metadata(stat));
     }
+
+    pub fn mode_match(&self, stat: &std::fs::Metadata) -> bool {
+        let file_mode = FileMode::from_metadata(stat);
+        FileMode::are_equivalent(self.mode.0, file_mode.0)
+    }
+    
+    // Check if file timestamps match the entry's timestamps
+    pub fn time_match(&self, stat: &std::fs::Metadata) -> bool {
+        // We'll be more lenient with timestamp comparisons to avoid false positives
+        // This is just an optimization, as we always check content hashes anyway
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            
+            // Convert to seconds and nanoseconds for comparison
+            let stat_mtime_sec = stat.mtime() as u32;
+            
+            // Instead of comparing nanoseconds, just check seconds
+            // This avoids issues with filesystem timestamp precision
+            self.get_mtime() == stat_mtime_sec
+        }
+        
+        #[cfg(not(unix))]
+        {
+            // On Windows, we don't have the same granularity, so convert to seconds
+            if let Ok(mtime) = stat.modified() {
+                if let Ok(duration) = mtime.duration_since(std::time::UNIX_EPOCH) {
+                    let stat_mtime_sec = duration.as_secs() as u32;
+                    return self.get_mtime() == stat_mtime_sec;
+                }
+            }
+            
+            // If we can't get the modification time, assume they don't match
+            false
+        }
+    }
+    
+    /// Check if a file is executable
+    fn is_executable(&self, stat: &std::fs::Metadata) -> bool {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            return stat.permissions().mode() & 0o111 != 0;
+        }
+        
+        #[cfg(not(unix))]
+        {
+            // Windows doesn't have simple executable bit
+            // Just check if file has .exe, .bat, etc. extension
+            let path = Path::new(&self.path);
+            if let Some(ext) = path.extension() {
+                let ext_str = ext.to_string_lossy().to_lowercase();
+                return ext_str == "exe" || ext_str == "bat" || ext_str == "cmd";
+            }
+            false
+        }
+    }
+    
 }

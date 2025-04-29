@@ -1,7 +1,12 @@
 #[derive(Debug)]
 pub enum Command {
     Init { path: String },
-    Commit { message: String },
+    Commit { 
+        message: String,
+        amend: bool,
+        reuse_message: Option<String>,
+        edit: bool,
+    },
     Add { paths: Vec<String> },
     Status { porcelain: bool, color: String }, 
     Diff { paths: Vec<String>, cached: bool },
@@ -25,24 +30,71 @@ pub enum Command {
         message: Option<String>,
         abort: bool,
         continue_merge: bool,
-    },
-    Reset {
-        revision: String,
-        paths: Vec<String>,
-        soft: bool,
-        mixed: bool,
-        hard: bool,
-    },
-    Revert {
-        commit: String,
-        continue_revert: bool,
-        abort: bool,
+        tool: Option<String>, 
     },
     Rm {
-        paths: Vec<String>,
+        files: Vec<String>,
         cached: bool,
         force: bool,
         recursive: bool,
+    },
+    Reset {
+        files: Vec<String>,
+        soft: bool,
+        mixed: bool,
+        hard: bool,
+        force: bool,
+        reuse_message: Option<String>,
+    },
+    CherryPick {
+        args: Vec<String>,
+        r#continue: bool,
+        abort: bool,
+        quit: bool,
+        mainline: Option<u32>,
+    },
+    Revert {
+        args: Vec<String>,
+        r#continue: bool,
+        abort: bool,
+        quit: bool,
+        mainline: Option<u32>,
+    },
+    // Sprint management commands
+    SprintStart {
+        name: String,
+        duration: u32, // Duration in days
+    },
+    SprintInfo {},
+    SprintCommitMap {
+        sprint_name: Option<String>,
+    },
+    SprintBurndown {
+        sprint_name: Option<String>,
+    },
+    SprintVelocity {},
+    SprintAdvance {
+        name: String,
+        start_date: String,
+        end_date: String,
+    },
+    SprintView {},
+    // Task management commands
+    TaskCreate {
+        id: String,
+        description: String,
+        story_points: Option<u32>,
+    },
+    TaskComplete {
+        id: String,
+        story_points: Option<i32>,
+        auto_merge: bool,
+    },
+    TaskStatus {
+        id: String,
+    },
+    TaskList {
+        args: Vec<String>,
     },
     Unknown { name: String },
 }

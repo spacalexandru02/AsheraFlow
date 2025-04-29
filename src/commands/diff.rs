@@ -252,7 +252,7 @@ impl DiffCommand {
                         // Dacă aceasta este o intrare de director deghizată ca blob
                         if *mode == TREE_MODE || mode.is_directory() {
                             // Procesează recursiv acest director
-                            if let Err(e) = Self::collect_files_from_tree(database, &oid, entry_path, files) {
+                            if let Err(e) = Self::collect_files_from_tree(database, oid, entry_path, files) {
                                 println!("Warning: Error traversing directory '{}': {}", entry_path_str, e);
                             }
                         } else {
@@ -293,7 +293,7 @@ impl DiffCommand {
                         TreeEntry::Blob(oid, mode) => {
                             if *mode == TREE_MODE || mode.is_directory() {
                                 // Procesează recursiv acest director
-                                if let Err(e) = Self::collect_files_from_tree(database, &oid, entry_path, files) {
+                                if let Err(e) = Self::collect_files_from_tree(database, oid, entry_path, files) {
                                     println!("Warning: Error traversing directory '{}': {}", entry_path_str, e);
                                 }
                             } else {

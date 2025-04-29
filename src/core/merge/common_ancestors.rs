@@ -54,6 +54,14 @@ impl<'a> CommonAncestors<'a> {
     }
 
     pub fn find(&mut self) -> Result<Vec<String>, Error> {
+        // Set of flags that indicate both parents are present
+        let both_parents: HashSet<Flag> = {
+            let mut set = HashSet::new();
+            set.insert(Flag::Parent1);
+            set.insert(Flag::Parent2);
+            set
+        };
+
         // Process the queue until all remaining commits are stale
         while !self.all_stale() {
             // Pop the front commit OID from the queue

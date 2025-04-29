@@ -1,8 +1,6 @@
-// src/main.rs
 use std::collections::HashMap;
 use std::env;
 use std::process;
-use cli::args::CliArgs;
 use cli::args::Command;
 use cli::parser::CliParser;
 use commands::checkout::CheckoutCommand;
@@ -11,15 +9,36 @@ use commands::diff::DiffCommand;
 use commands::init::InitCommand;
 use commands::add::AddCommand;
 use commands::log::LogCommand;
-use commands::reset::ResetCommand;
-use commands::rm::RmCommand;
 use commands::status::StatusCommand;
 use commands::branch::BranchCommand;
+// Imports for merge and related operations
 use commands::merge::MergeCommand;
+use commands::merge_tool::MergeToolCommand;
+use commands::rm::RmCommand;
+use commands::reset::ResetCommand;
+// Sprint and task imports
+use commands::sprint::{
+    SprintStartCommand, SprintInfoCommand, SprintCommitMapCommand,
+    SprintBurndownCommand, SprintVelocityCommand, SprintAdvanceCommand,
+    SprintViewCommand,
+};
+use commands::task::task_create::TaskCreateCommand;
+use commands::task::task_complete::TaskCompleteCommand;
+use commands::task::task_status::TaskStatusCommand;
+use commands::task::task_list::TaskListCommand;
+use std::path::Path;
+use crate::core::index::index::Index;
+use crate::core::refs::Refs;
+use crate::errors::error::Error;
+use std::time::Instant;
+use crate::core::repository::repository::Repository;
+use crate::core::database::database::Database;
+use commands::commit_writer::CommitWriter;
+use crate::core::repository::pending_commit::PendingCommitType;
+use commands::commit::get_editor_command;
+use commands::cherry_pick::CherryPickCommand;
 use commands::revert::RevertCommand;
-use env_logger::Builder;
-use log::{LevelFilter, info};
-use std::fs::OpenOptions;
+use crate::core::commit_metadata::{CommitMetadataManager, TaskStatus};
 
 mod cli;
 mod commands;
@@ -27,261 +46,429 @@ mod validators;
 mod errors;
 mod core;
 
-fn main() {
-    // --- Inițializare Logging ---
-    let mut builder = Builder::from_default_env();
-    if let Ok(log_path) = env::var("ASH_LOG_FILE") {
-        match OpenOptions::new().create(true).append(true).open(&log_path) {
-            Ok(file) => {
-                builder.target(env_logger::Target::Pipe(Box::new(file)));
-                eprintln!("[Logging detailed output to: {}]", log_path);
-            }
-            Err(e) => {
-                eprintln!("Warning: Could not open or create log file '{}': {}. Logging to stderr.", log_path, e);
-                builder.target(env_logger::Target::Stderr);
-            }
-        }
-    } else {
-        builder.target(env_logger::Target::Stderr);
-    }
-    builder.filter_level(LevelFilter::Info);
-    // builder.filter_module("AsheraFlow", LevelFilter::Trace);
-    builder.init();
-    info!("AsheraFlow application starting...");
-    // --- Sfârșit Inițializare Logging ---
+// Definim constanta ORIG_HEAD local
+const ORIG_HEAD: &str = "ORIG_HEAD";
 
+fn main() {
     let args: Vec<String> = env::args().collect();
 
     match CliParser::parse(args) {
-        Ok(cli_args) => handle_command(cli_args),
-        Err(e) => {
-             // Logarea erorii de parsare poate fi utilă aici
-             log::error!("CLI parsing failed: {}", e); // Folosim log::error direct
-             exit_with_error(&e.to_string())
-        },
-    }
-}
-
-fn handle_command(cli_args: CliArgs) {
-    info!("Handling command: {:?}", cli_args.command);
-    match cli_args.command {
-        Command::Init { path } => handle_init_command(&path),
-        Command::Commit { message } => handle_commit_command(&message),
-        Command::Add { paths } => handle_add_command(&paths),
-        Command::Status { porcelain, color } => handle_status_command(porcelain, &color),
-        Command::Diff { paths, cached } => handle_diff_command(&paths, cached),
-        Command::Branch { name, start_point, verbose, delete, force } =>
-            handle_branch_command(&name, start_point.as_deref(), verbose, delete, force),
-        Command::Checkout { target } => handle_checkout_command(&target),
-        Command::Log { revisions, abbrev, format, patch, decorate } =>
-            handle_log_command(&revisions, abbrev, &format, patch, &decorate),
-        Command::Merge { branch, message, abort, continue_merge } => {
-                if abort {
-                    info!("Merge abort requested.");
-                    println!("Merge abort functionality not fully implemented yet.");
+        Ok(cli_args) => {
+            match cli_args.command {
+                Command::Init { path } => handle_init_command(&path),
+                Command::Commit { message, amend, reuse_message, edit } => 
+                    handle_commit_command(&message, amend, reuse_message, edit),
+                Command::Add { paths } => handle_add_command(&paths),
+                Command::Status { porcelain, color } => handle_status_command(porcelain, &color),
+                Command::Diff { paths, cached } => handle_diff_command(&paths, cached),
+                Command::Branch { name, start_point, verbose, delete, force } => {
+                    handle_branch_command(&name, start_point.as_deref(), verbose, delete, force)
+                },
+                Command::Checkout { target } => handle_checkout_command(&target),
+                Command::Log { revisions, abbrev, format, patch, decorate } => {
+                    handle_log_command(&revisions, abbrev, &format, patch, &decorate)
+                },
+                Command::Merge { branch, message, abort, continue_merge, tool } => {
+                    if abort {
+                        handle_merge_abort_command();
+                    } else if continue_merge {
+                        match handle_merge_continue_command() {
+                            Ok(_) => process::exit(0),
+                            Err(e) => exit_with_error(&format!("fatal: {}", e)),
+                        }
+                    } else if tool.is_some() && branch.is_empty() {
+                        handle_merge_tool_command(tool.as_deref());
+                    } else {
+                        handle_merge_command(&branch, message.as_deref());
+                    }
+                },
+                Command::Rm { files, cached, force, recursive } => {
+                    handle_rm_command(&files, cached, force, recursive)
+                },
+                Command::Reset { files, soft, mixed, hard, force, reuse_message } => {
+                    handle_reset_command(&files, soft, mixed, hard, force, reuse_message.as_deref())
+                },
+                Command::CherryPick { args, r#continue, abort, quit, mainline } => {
+                    handle_cherry_pick_command(&args, r#continue, abort, quit, mainline)
+                },
+                Command::Revert { args, r#continue, abort, quit, mainline } => {
+                    handle_revert_command(&args, r#continue, abort, quit, mainline)
+                },
+                // Sprint management commands
+                Command::SprintStart { name, duration } => {
+                    handle_sprint_start_command(&name, duration)
+                },
+                Command::SprintInfo {} => {
+                    handle_sprint_info_command()
+                },
+                Command::SprintCommitMap { sprint_name } => {
+                    handle_sprint_commitmap_command(sprint_name.as_deref())
+                },
+                // Add other sprint command handlers
+                Command::SprintBurndown { sprint_name } => {
+                    handle_sprint_burndown_command(sprint_name.as_deref())
+                },
+                Command::SprintVelocity {} => {
+                    handle_sprint_velocity_command()
+                },
+                Command::SprintAdvance { name, start_date, end_date } => {
+                    handle_sprint_advance_command(&name, &start_date, &end_date)
+                },
+                Command::SprintView {} => {
+                    handle_sprint_view_command()
+                },
+                // Task management commands
+                Command::TaskCreate { id, description, story_points } => {
+                    handle_task_create_command(&id, &description, story_points)
+                },
+                Command::TaskComplete { id, story_points: _, auto_merge } => {
+                    handle_task_complete_command(&id, auto_merge)
+                },
+                Command::TaskStatus { id } => {
+                    handle_task_status_command(&id)
+                },
+                Command::TaskList { args } => handle_task_list_command(&args),
+                Command::Unknown { name } => {
+                    println!("Unknown command: {}", name);
+                    println!("{}", CliParser::format_help());
                     process::exit(1);
-                } else if continue_merge {
-                    info!("Merge continue requested.");
-                    println!("Merge continue functionality not fully implemented yet.");
-                    process::exit(1);
-                } else {
-                    info!("Handling normal merge for branch '{}'", branch);
-                    handle_merge_command(&branch, message.as_deref())
                 }
-            },
-        Command::Reset { revision, paths, soft, mixed, hard } => {
-            handle_reset_command(&revision, &paths, soft, mixed, hard)
+            }
         },
-        Command::Revert { commit, continue_revert, abort } => {
-            handle_revert_command(&commit, continue_revert, abort)
-        },
-        Command::Rm { paths, cached, force, recursive } => handle_rm_command(&paths, cached, force, recursive),
-        Command::Unknown { name } => {
-             // Logarea poate fi utilă
-             log::error!("Unknown command received: {}", name);
-             exit_with_error(&format!("'{}' is not a ash command", name))
-        },
+        Err(e) => {
+            if e.to_string().contains("Usage:") {
+                // Handle the case where no command is given
+                println!("{}", e);
+            } else {
+                println!("Error parsing command: {}", e);
+            }
+            process::exit(1);
+        }
     }
 }
 
-
-fn handle_commit_command(message: &str) {
-     info!("Executing CommitCommand with message: '{}'", message);
-    match CommitCommand::execute(message) {
+fn handle_commit_command(message: &str, amend: bool, reuse_message: Option<String>, edit: bool) {
+    match CommitCommand::execute(message, amend, reuse_message.as_deref(), edit) {
         Ok(_) => process::exit(0),
-        Err(e) => {
-             // Nu mai logăm aici, lăsăm exit_with_error să afișeze mesajul simplu
-             exit_with_error(&e.to_string())
-        },
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
     }
 }
 
 fn handle_init_command(path: &str) {
-    info!("Executing InitCommand for path: '{}'", path);
     match InitCommand::execute(path) {
         Ok(_) => process::exit(0),
-        Err(e) => {
-             // Nu mai logăm aici
-             exit_with_error(&e.to_string())
-        },
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
     }
 }
 
 fn handle_add_command(paths: &[String]) {
-     info!("Executing AddCommand for paths: {:?}", paths);
     match AddCommand::execute(paths) {
         Ok(_) => process::exit(0),
-        Err(e) => {
-             // Nu mai logăm aici
-             exit_with_error(&e.to_string())
-        },
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
     }
 }
 
 fn handle_status_command(porcelain: bool, color: &str) {
-     info!("Executing StatusCommand (porcelain: {}, color: {})", porcelain, color);
+    // Set color mode environment variable
     std::env::set_var("ASH_COLOR", color);
+
     match StatusCommand::execute(porcelain) {
         Ok(_) => process::exit(0),
-        Err(e) => {
-             // Nu mai logăm aici
-             exit_with_error(&e.to_string())
-        },
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
     }
 }
 
 fn handle_diff_command(paths: &[String], cached: bool) {
-     info!("Executing DiffCommand (cached: {}, paths: {:?})", cached, paths);
     match DiffCommand::execute(paths, cached) {
         Ok(_) => process::exit(0),
-        Err(e) => {
-             // Nu mai logăm aici
-             exit_with_error(&e.to_string())
-        },
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
     }
 }
 
 fn handle_branch_command(name: &str, start_point: Option<&str>, verbose: bool, delete: bool, force: bool) {
-    info!(
-        "Executing BranchCommand (name: '{}', start: {:?}, verbose: {}, delete: {}, force: {})",
-        name, start_point, verbose, delete, force
-    );
-    if verbose { std::env::set_var("ASH_BRANCH_VERBOSE", "1"); }
-    if delete { std::env::set_var("ASH_BRANCH_DELETE", "1"); }
-    if force { std::env::set_var("ASH_BRANCH_FORCE", "1"); }
+    // Set environment variables to pass flag information
+    if verbose {
+        std::env::set_var("ASH_BRANCH_VERBOSE", "1");
+    }
+    if delete {
+        std::env::set_var("ASH_BRANCH_DELETE", "1");
+    }
+    if force {
+        std::env::set_var("ASH_BRANCH_FORCE", "1");
+    }
+
     match BranchCommand::execute(name, start_point) {
         Ok(_) => process::exit(0),
-        Err(e) => {
-             // Nu mai logăm aici
-             exit_with_error(&e.to_string())
-        },
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
     }
 }
 
 
 fn handle_log_command(revisions: &[String], abbrev: bool, format: &str, patch: bool, decorate: &str) {
-     info!("Executing LogCommand (revisions: {:?}, options: abbrev={}, format={}, patch={}, decorate={})",
-           revisions, abbrev, format, patch, decorate);
+    // Convert options to HashMap for easier handling
     let mut options = HashMap::new();
     options.insert("abbrev".to_string(), abbrev.to_string());
     options.insert("format".to_string(), format.to_string());
     options.insert("patch".to_string(), patch.to_string());
     options.insert("decorate".to_string(), decorate.to_string());
+
     match LogCommand::execute(revisions, &options) {
         Ok(_) => process::exit(0),
-        Err(e) => {
-             // Nu mai logăm aici
-             exit_with_error(&e.to_string())
-        },
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
     }
 }
 
 fn handle_checkout_command(target: &str) {
-    info!("Executing CheckoutCommand for target: '{}'", target);
     match CheckoutCommand::execute(target) {
         Ok(_) => process::exit(0),
-        Err(e) => {
-             // Nu mai logăm aici
-             exit_with_error(&e.to_string())
-        },
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
     }
 }
 
-fn handle_merge_command(branch: &str, message: Option<&str>) {
-     info!("Executing MergeCommand for branch '{}' with message: {:?}", branch, message);
-    match MergeCommand::execute(branch, message) {
-        Ok(_) => {
-             info!("Merge completed successfully.");
-            process::exit(0);
-        }
-        Err(e) => {
-            let error_message = e.to_string();
-            if error_message == "Already up to date." {
-                info!("Merge resulted in 'Already up to date.'");
-                println!("{}", error_message); // Afișăm mesajul standard
-                process::exit(0);
-            }
-            else if error_message.contains("fix conflicts") ||
-                    error_message.contains("Automatic merge failed") ||
-                    error_message.contains("untracked working tree files would be overwritten by merge") ||
-                    error_message.contains("Your local changes to the following files would be overwritten by merge")
-            {
-                 // Logăm eroarea specifică intern, dar afișăm mesajul simplu
-                 log::error!("Merge failed: {}", error_message);
-                exit_with_error(&error_message);
-            }
-            else {
-                 // Logăm eroarea generală intern
-                 log::error!("Merge command failed generally: {}", error_message);
-                 // Păstrăm prefixul distinctiv pentru erori generale de merge, dar fără "fatal:"
-                 exit_with_error(&format!("merge failed: {}", error_message));
-            }
-        }
-    }
-}
-
-fn handle_reset_command(revision: &str, paths: &[String], soft: bool, mixed: bool, hard: bool)  {
-    info!("Executing ResetCommand with revision: {:?}, paths: {:?}",revision, paths);
-    match  ResetCommand::execute(revision, paths, soft, mixed, hard)  {
+// Add function to handle merge_tool command
+fn handle_merge_tool_command(tool: Option<&str>) {
+    match MergeToolCommand::execute(tool) {
         Ok(_) => process::exit(0),
-        Err(e) => {
-             exit_with_error(&e.to_string())
-        },
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
     }
 }
 
-fn handle_revert_command(commit: &str, continue_revert: bool, abort: bool) {
-    info!("Executing RevertCommand for commit: '{}', continue: {}, abort: {}", 
-        commit, continue_revert, abort);
+/// Handles merge continue operation
+fn handle_merge_continue_command() -> Result<(), Error> {
+    println!("Checking for unresolved conflicts...");
     
-    match RevertCommand::execute(commit, continue_revert, abort) {
-        Ok(_) => process::exit(0),
-        Err(e) => {
-            if e.to_string().contains("fix conflicts") || 
-               e.to_string().contains("Automatic merge failed") {
-                // Don't prepend "fatal:" for conflict errors
-                exit_with_error(&e.to_string());
-            } else {
-                exit_with_error(&e.to_string());
-            }
-        },
-    }
-}
-
-fn handle_rm_command(paths: &[String], cached: bool, force: bool, recursive: bool) -> ! {
-    info!("Executing RmCommand (paths: {:?}, cached: {}, force: {}, recursive: {})", 
-        paths, cached, force, recursive);
+    // Initialize repository components
+    let root_path = Path::new(".");
+    let git_path = root_path.join(".ash");
     
-    match RmCommand::execute(paths, cached, force, recursive) {
-        Ok(_) => process::exit(0),
-        Err(e) => {
-            exit_with_error(&e.to_string())
-        },
+    if !git_path.exists() {
+        return Err(Error::Generic("Not an AsheraFlow repository: .ash directory not found".into()));
+    }
+    
+    let db_path = git_path.join("objects");
+    let mut database = Database::new(db_path);
+    
+    // Check for the index file
+    let index_path = git_path.join("index");
+    if !index_path.exists() {
+        return Err(Error::Generic("No index file found.".into()));
+    }
+    
+    // Load the index
+    let mut index = Index::new(index_path);
+    match index.load() {
+        Ok(_) => println!("Index loaded successfully"),
+        Err(e) => return Err(Error::Generic(format!("Error loading index: {}", e))),
+    }
+    
+    // Check for unresolved conflicts BEFORE creating CommitWriter
+    if index.has_conflict() {
+        return Err(Error::Generic(
+            "Cannot continue due to unresolved conflicts. Fix conflicts and add the files.".into(),
+        ));
+    }
+    
+    // Create refs object
+    let refs = Refs::new(&git_path);
+    
+    // Create CommitWriter
+    let mut commit_writer = CommitWriter::new(
+        root_path,
+        git_path.clone(),
+        &mut database,
+        &mut index,
+        &refs
+    );
+    
+    // If all conflicts are resolved, check for pending operation type and resume it
+    if commit_writer.pending_commit.in_progress(PendingCommitType::Merge) {
+        return commit_writer.resume_merge(PendingCommitType::Merge, get_editor_command());
+    } else if commit_writer.pending_commit.in_progress(PendingCommitType::CherryPick) {
+        return commit_writer.resume_merge(PendingCommitType::CherryPick, get_editor_command());
+    } else if commit_writer.pending_commit.in_progress(PendingCommitType::Revert) {
+        return commit_writer.resume_merge(PendingCommitType::Revert, get_editor_command());
+    } else {
+        return Err(Error::Generic(
+            "No merge, cherry-pick, or revert in progress. Nothing to continue.".into(),
+        ));
     }
 }
 
-// exit_with_error rămâne la fel
+fn handle_rm_command(files: &[String], cached: bool, force: bool, recursive: bool) {
+    match RmCommand::execute(files, cached, force, recursive) {
+        Ok(_) => process::exit(0),
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
+    }
+}
+
+fn handle_reset_command(files: &[String], soft: bool, mixed: bool, hard: bool, force: bool, reuse_message: Option<&str>) {
+    match ResetCommand::execute(files, soft, mixed, hard, force, reuse_message) {
+        Ok(_) => process::exit(0),
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
+    }
+}
+
+fn handle_cherry_pick_command(commits: &[String], continue_op: bool, abort: bool, quit: bool, mainline: Option<u32>) {
+    match CherryPickCommand::execute(commits, continue_op, abort, quit, mainline) {
+        Ok(_) => process::exit(0),
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
+    }
+}
+
+fn handle_revert_command(commits: &[String], continue_op: bool, abort: bool, quit: bool, mainline: Option<u32>) {
+    match RevertCommand::execute(commits, continue_op, abort, quit, mainline) {
+        Ok(_) => process::exit(0),
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
+    }
+}
+
 fn exit_with_error(message: &str) -> ! {
-    eprintln!("{}", message); // Afișează mesajul simplu pe stderr
-    process::exit(1);
+    eprintln!("{}", message); // Afișează eroarea pe stderr
+    // Poți adăuga logica de afișare a mesajului de ajutor aici dacă dorești
+    // if message.contains("Usage:") || ... {
+    //     eprintln!("\n{}", CliParser::format_help());
+    // }
+    process::exit(1); // Ieșim cu cod de eroare (1)
+}
+
+// --- Păstrează funcția handle_merge_command originală ---
+fn handle_merge_command(branch: &str, message: Option<&str>) {
+    match MergeCommand::execute(branch, message) {
+        Ok(_) => process::exit(0),
+        Err(e) => {
+            // Pentru erori specifice de merge, dorim să afișăm un mesaj mai clar
+            if e.to_string().contains("Already up to date") {
+                println!("Already up to date.");
+                process::exit(0);
+            } else if e.to_string().contains("fix conflicts") {
+                // Dacă există conflicte, dorim să afișăm un mesaj de eroare mai clar
+                println!("{}", e);
+                println!("Conflicts detected. Fix conflicts and then run 'ash merge --continue'");
+                process::exit(1);
+            } else {
+                exit_with_error(&format!("fatal: {}", e));
+            }
+        }
+    }
+}
+
+// Funcție pentru a gestiona merge abort
+fn handle_merge_abort_command() {
+    // Inițializare repository
+    let mut repo = match Repository::new(".") {
+        Ok(r) => r,
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
+    };
+    
+    // Verificăm dacă există un merge în desfășurare
+    let git_path = Path::new(".").join(".ash");
+    let merge_head_path = git_path.join("MERGE_HEAD");
+    if !merge_head_path.exists() {
+        exit_with_error("fatal: There is no merge to abort");
+    }
+    
+    // Ștergem fișierele specifice merge-ului
+    let _ = std::fs::remove_file(merge_head_path);
+    let _ = std::fs::remove_file(git_path.join("MERGE_MSG"));
+    
+    // Citim HEAD-ul original
+    let orig_head_path = git_path.join(ORIG_HEAD);
+    let orig_head = match std::fs::read_to_string(&orig_head_path) {
+        Ok(content) => content.trim().to_string(),
+        Err(e) => exit_with_error(&format!("fatal: Failed to read ORIG_HEAD: {}", e)),
+    };
+    
+    // Folosim ResetCommand pentru a face un hard reset la starea originală
+    match ResetCommand::execute(&[orig_head], false, false, true, true, None) {
+        Ok(_) => {
+            println!("Merge aborted");
+            process::exit(0);
+        },
+        Err(e) => exit_with_error(&format!("fatal: Failed to reset to ORIG_HEAD: {}", e)),
+    }
+}
+
+// Sprint command handlers
+fn handle_sprint_start_command(name: &str, duration: u32) {
+    match SprintStartCommand::execute(name, duration) {
+        Ok(_) => process::exit(0),
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
+    }
+}
+
+fn handle_sprint_info_command() {
+    match SprintInfoCommand::execute() {
+        Ok(_) => process::exit(0),
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
+    }
+}
+
+fn handle_sprint_commitmap_command(sprint_name: Option<&str>) {
+    match SprintCommitMapCommand::execute(sprint_name) {
+        Ok(_) => process::exit(0),
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
+    }
+}
+
+// Add other sprint command handlers
+fn handle_sprint_burndown_command(sprint_name: Option<&str>) {
+    match SprintBurndownCommand::execute(sprint_name) {
+        Ok(_) => process::exit(0),
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
+    }
+}
+
+fn handle_sprint_velocity_command() {
+    match SprintVelocityCommand::execute() {
+        Ok(_) => process::exit(0),
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
+    }
+}
+
+fn handle_sprint_advance_command(name: &str, start_date: &str, end_date: &str) {
+    match SprintAdvanceCommand::execute(name, start_date, end_date) {
+        Ok(_) => process::exit(0),
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
+    }
+}
+
+fn handle_sprint_view_command() {
+    match SprintViewCommand::execute() {
+        Ok(_) => process::exit(0),
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
+    }
+}
+
+// Task command handlers
+fn handle_task_create_command(id: &str, description: &str, story_points: Option<u32>) {
+    match TaskCreateCommand::execute(id, description, story_points) {
+        Ok(_) => process::exit(0),
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
+    }
+}
+
+fn handle_task_complete_command(id: &str, auto_merge: bool) {
+    match TaskCompleteCommand::execute(id, auto_merge) {
+        Ok(_) => process::exit(0),
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
+    }
+}
+
+fn handle_task_status_command(id: &str) {
+    match TaskStatusCommand::execute(id) {
+        Ok(_) => process::exit(0),
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
+    }
+}
+
+fn handle_task_list_command(args: &[String]) {
+    let command = TaskListCommand {
+        repo_path: String::from("."),
+        args: args.to_vec(),
+    };
+    
+    match command.execute() {
+        Ok(_) => process::exit(0),
+        Err(e) => exit_with_error(&format!("fatal: {}", e)),
+    }
 }

@@ -39,10 +39,6 @@ impl Inputs {
         // 1. Call Bases::new with only the database argument
         let mut common = Bases::new(database)?;
         let base_oids = common.find(&left_oid, &right_oid)?;
-        println!("DEBUG: Found base_oids: {:?}", base_oids); // <-- Adaugă aici
-        println!("DEBUG: left_oid: {}", left_oid); // <-- Adaugă aici
-        let is_ff = base_oids == vec![left_oid.clone()]; // <-- Verifică logica
-        println!("DEBUG: is_fast_forward check result: {}", is_ff); 
         // 2. Call common.find with the left_oid and right_oid arguments
         let base_oids = common.find(&left_oid, &right_oid)?;
 

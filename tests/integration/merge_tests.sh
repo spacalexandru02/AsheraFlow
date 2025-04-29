@@ -7,35 +7,16 @@
 if [ -n "$1" ]; then
     ASH_EXECUTABLE="$1"
 elif [ -f "./target/release/AsheraFlow" ]; then
-    ASH_EXECUTABLE="$(pwd)/target/release/AsheraFlow" # Assumes script run from project root
+    ASH_EXECUTABLE="$(pwd)/target/release/AsheraFlow"
 elif [ -f "./target/debug/AsheraFlow" ]; then
-    ASH_EXECUTABLE="$(pwd)/target/debug/AsheraFlow" # Assumes script run from project root
-elif [ -f "../../target/release/AsheraFlow" ]; then
-     # If run from tests/integration directory
-    ASH_EXECUTABLE="$(pwd)/../../target/release/AsheraFlow"
-elif [ -f "../../target/debug/AsheraFlow" ]; then
-     # If run from tests/integration directory
-    ASH_EXECUTABLE="$(pwd)/../../target/debug/AsheraFlow"
+    ASH_EXECUTABLE="$(pwd)/target/debug/AsheraFlow"
 else
     echo "ASH executable not found. Build the project or provide the path as an argument."
-    echo "Usage: $0 [path-to-ash-executable] (run from project root or tests/integration)"
+    echo "Usage: $0 [path-to-ash-executable]"
     exit 1
 fi
 
-# Ensure ASH_EXECUTABLE is an absolute path
-ASH_EXECUTABLE=$(cd "$(dirname "$ASH_EXECUTABLE")" && pwd)/$(basename "$ASH_EXECUTABLE")
-
-# --- Logging Setup ---
-# Get the directory where the script resides
-SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-# Define the log file path within the script's directory
-LOG_FILE="$SCRIPT_DIR/merge_tests.log"
-# Clear the log file at the start of the run
-> "$LOG_FILE"
-# --- End Logging Setup ---
-
-# Log initial messages to file and console
-echo "Using ASH executable: $ASH_EXECUTABLE" | tee -a "$LOG_FILE"
+echo "Using ASH executable: $ASH_EXECUTABLE"
 ASH_CMD="$ASH_EXECUTABLE" # Alias for easier use
 
 set -e # Exit immediately if a command exits with a non-zero status.
@@ -43,12 +24,8 @@ set -e # Exit immediately if a command exits with a non-zero status.
 
 # --- Test Environment Setup ---
 TEST_DIR=$(mktemp -d)
-echo "Using temporary directory for test repos: ${TEST_DIR}" | tee -a "$LOG_FILE"
-echo "Logging detailed output to: ${LOG_FILE}" | tee -a "$LOG_FILE"
-
-ORIGINAL_PWD=$(pwd) # Save original PWD if needed, although TEST_DIR is used
+echo "Using temporary directory: ${TEST_DIR}"
 cd "$TEST_DIR" || exit 1
-
 
 # --- Colors and Counters ---
 RED="\033[0;31m"
@@ -65,13 +42,11 @@ function setup_repo() {
     rm -rf "$repo_name" .ash 2>/dev/null || true
     mkdir -p "$repo_name"
     cd "$repo_name"
-    # Redirect init output to log file
-    "$ASH_CMD" init . >> "$LOG_FILE" 2>&1
+    "$ASH_CMD" init . > /dev/null
     # Configure git user locally for commits (important for Author info)
     export GIT_AUTHOR_NAME="Test User"
     export GIT_AUTHOR_EMAIL="test@example.com"
-    # Log initialization message
-    echo -e "${BLUE}Initialized repo in $(pwd)${RESET}" | tee -a "$LOG_FILE"
+    echo -e "${BLUE}Initialized repo in $(pwd)${RESET}"
     cd .. # Go back to TEST_DIR
 }
 
@@ -81,51 +56,39 @@ function create_commit() {
     local content="$3"
     local message="$4"
     local branch
-    # Ensure we are checking the correct HEAD file location relative to the repo
-    branch=$(cd "$repo_name" && cat .ash/HEAD 2>/dev/null | sed 's|ref: refs/heads/||' || echo "master")
+    branch=$(cd "$repo_name" && cat .ash/HEAD | sed 's|ref: refs/heads/||') # Get current branch name
 
     echo "$content" > "$repo_name/$file_name"
-    # Redirect add/commit output to log file
-    (cd "$repo_name" && "$ASH_CMD" add "$file_name" >> "$LOG_FILE" 2>&1) || { echo "Add command failed in create_commit" | tee -a "$LOG_FILE"; exit 1; }
-    (cd "$repo_name" && "$ASH_CMD" commit -m "$message" >> "$LOG_FILE" 2>&1) || { echo "Commit command failed in create_commit" | tee -a "$LOG_FILE"; exit 1; }
-    # Log commit message
-    echo "  Commit on '$branch': '$message' ($file_name)" | tee -a "$LOG_FILE"
+    (cd "$repo_name" && "$ASH_CMD" add "$file_name" > /dev/null)
+    (cd "$repo_name" && "$ASH_CMD" commit -m "$message" > /dev/null)
+    echo "  Commit on '$branch': '$message' ($file_name)"
 }
-
 
 function run_cmd() {
     local repo_name="$1"
     shift # Remove repo_name from args
-    # Log command being run
-    echo -e "${YELLOW}  CMD [in $repo_name]: ${ASH_CMD} $@${RESET}" | tee -a "$LOG_FILE"
-    # Redirect stdout and stderr to the main log file, appending
-    if (cd "$repo_name" && "$ASH_CMD" "$@") >> "$LOG_FILE" 2>&1; then
-        # Log success
-        echo -e "${GREEN}  CMD OK${RESET}" | tee -a "$LOG_FILE"
+    echo -e "${YELLOW}  CMD [in $repo_name]: ${ASH_CMD} $@${RESET}"
+    if (cd "$repo_name" && "$ASH_CMD" "$@") > >(tee -a stdout.log) 2> >(tee -a stderr.log >&2); then
+        echo -e "${GREEN}  CMD OK${RESET}"
         return 0
     else
         local exit_code=$?
-        # Log failure
-        echo -e "${RED}  CMD FAILED (Exit Code: $exit_code)${RESET}" | tee -a "$LOG_FILE"
-        # Show relevant part of log on console in case of failure
-        echo -e "${RED}--- Start Log Output Snippet [${LOG_FILE}] ---${RESET}" # Log snippet header to console only
-        tail -n 50 "$LOG_FILE" # Show last N lines on console
-        echo -e "${RED}--- End Log Output Snippet (Full log in ${LOG_FILE}) ---${RESET}" # Log snippet footer to console only
+        echo -e "${RED}  CMD FAILED (Exit Code: $exit_code)${RESET}"
+        cat stdout.log stderr.log # Print output on failure
         return $exit_code
     fi
 }
-
 
 # Function to check command success (ignores output)
 function check_success() {
     local repo_name="$1"
     shift
-    echo -e "${YELLOW}  CHECK SUCCESS [in $repo_name]: ${ASH_CMD} $@${RESET}" | tee -a "$LOG_FILE"
-    if (cd "$repo_name" && "$ASH_CMD" "$@") >> "$LOG_FILE" 2>&1; then
-        echo -e "${GREEN}  CHECK OK${RESET}" | tee -a "$LOG_FILE"
+    echo -e "${YELLOW}  CHECK SUCCESS [in $repo_name]: ${ASH_CMD} $@${RESET}"
+    if (cd "$repo_name" && "$ASH_CMD" "$@") > /dev/null 2>&1; then
+        echo -e "${GREEN}  CHECK OK${RESET}"
         return 0
     else
-        echo -e "${RED}  CHECK FAILED${RESET}" | tee -a "$LOG_FILE"
+        echo -e "${RED}  CHECK FAILED${RESET}"
         return 1
     fi
 }
@@ -134,12 +97,12 @@ function check_success() {
 function check_failure() {
     local repo_name="$1"
     shift
-    echo -e "${YELLOW}  CHECK FAILURE [in $repo_name]: ${ASH_CMD} $@${RESET}" | tee -a "$LOG_FILE"
-    if ! (cd "$repo_name" && "$ASH_CMD" "$@") >> "$LOG_FILE" 2>&1; then
-        echo -e "${GREEN}  CHECK OK (Expected Failure)${RESET}" | tee -a "$LOG_FILE"
+    echo -e "${YELLOW}  CHECK FAILURE [in $repo_name]: ${ASH_CMD} $@${RESET}"
+    if ! (cd "$repo_name" && "$ASH_CMD" "$@") > /dev/null 2>&1; then
+        echo -e "${GREEN}  CHECK OK (Expected Failure)${RESET}"
         return 0
     else
-        echo -e "${RED}  CHECK FAILED (Expected Failure, but Succeeded)${RESET}" | tee -a "$LOG_FILE"
+        echo -e "${RED}  CHECK FAILED (Expected Failure, but Succeeded)${RESET}"
         return 1
     fi
 }
@@ -149,46 +112,27 @@ function assert_file_contains() {
     local file_path="$2"
     local expected_content="$3"
     local msg="$4"
-    echo -e "${YELLOW}TEST: $msg${RESET}" | tee -a "$LOG_FILE"
-    # Construct full path based on whether repo_name is provided
-    local full_file_path
-    if [ -z "$repo_name" ]; then
-        # If repo_name is empty, assume file_path is relative to TEST_DIR
-        full_file_path="$file_path"
-    else
-        full_file_path="$repo_name/$file_path" # Path is inside the repo directory
-    fi
-
-    # Check if file exists before trying to grep
-    if [ ! -f "$full_file_path" ]; then
-        echo -e "${RED}FAIL: $msg - File '$full_file_path' does not exist for checking content.${RESET}" | tee -a "$LOG_FILE"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        return 1
-    fi
-
-    if grep -qF "$expected_content" "$full_file_path"; then
-        echo -e "${GREEN}PASS: $msg${RESET}" | tee -a "$LOG_FILE"
+    echo -e "${YELLOW}TEST: $msg${RESET}"
+    if grep -qF "$expected_content" "$repo_name/$file_path"; then
+        echo -e "${GREEN}PASS: $msg${RESET}"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
-        echo -e "${RED}FAIL: $msg - File '$full_file_path' does not contain '$expected_content'. Actual content:${RESET}" | tee -a "$LOG_FILE"
-        # Log file content to the log file as well
-        cat "$full_file_path" >> "$LOG_FILE"
-        cat "$full_file_path" # Also show on console
+        echo -e "${RED}FAIL: $msg - File '$repo_name/$file_path' does not contain '$expected_content'. Actual content:${RESET}"
+        cat "$repo_name/$file_path"
         TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
 }
-
 
 function assert_file_exists() {
     local repo_name="$1"
     local file_path="$2"
     local msg="$3"
-     echo -e "${YELLOW}TEST: $msg${RESET}" | tee -a "$LOG_FILE"
+     echo -e "${YELLOW}TEST: $msg${RESET}"
     if [ -f "$repo_name/$file_path" ]; then
-        echo -e "${GREEN}PASS: $msg${RESET}" | tee -a "$LOG_FILE"
+        echo -e "${GREEN}PASS: $msg${RESET}"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
-        echo -e "${RED}FAIL: $msg - File '$repo_name/$file_path' does not exist.${RESET}" | tee -a "$LOG_FILE"
+        echo -e "${RED}FAIL: $msg - File '$repo_name/$file_path' does not exist.${RESET}"
         TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
 }
@@ -197,12 +141,12 @@ function assert_file_not_exists() {
     local repo_name="$1"
     local file_path="$2"
     local msg="$3"
-     echo -e "${YELLOW}TEST: $msg${RESET}" | tee -a "$LOG_FILE"
+     echo -e "${YELLOW}TEST: $msg${RESET}"
     if [ ! -f "$repo_name/$file_path" ] && [ ! -d "$repo_name/$file_path" ]; then
-        echo -e "${GREEN}PASS: $msg${RESET}" | tee -a "$LOG_FILE"
+        echo -e "${GREEN}PASS: $msg${RESET}"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
-        echo -e "${RED}FAIL: $msg - Path '$repo_name/$file_path' exists when it shouldn't.${RESET}" | tee -a "$LOG_FILE"
+        echo -e "${RED}FAIL: $msg - Path '$repo_name/$file_path' exists when it shouldn't.${RESET}"
         TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
 }
@@ -211,26 +155,16 @@ function assert_conflict_markers() {
     local repo_name="$1"
     local file_path="$2"
     local msg="$3"
-    echo -e "${YELLOW}TEST: $msg${RESET}" | tee -a "$LOG_FILE"
-    # Check if file exists before trying to grep
-    if [ ! -f "$repo_name/$file_path" ]; then
-        echo -e "${RED}FAIL: $msg - File '$repo_name/$file_path' does not exist for checking conflict markers.${RESET}" | tee -a "$LOG_FILE"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        return 1
-    fi
-
+    echo -e "${YELLOW}TEST: $msg${RESET}"
     if grep -q '<<<<<<<' "$repo_name/$file_path" && grep -q '=======' "$repo_name/$file_path" && grep -q '>>>>>>>' "$repo_name/$file_path"; then
-        echo -e "${GREEN}PASS: $msg${RESET}" | tee -a "$LOG_FILE"
+        echo -e "${GREEN}PASS: $msg${RESET}"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
-        echo -e "${RED}FAIL: $msg - Conflict markers not found in '$repo_name/$file_path'. Actual content:${RESET}" | tee -a "$LOG_FILE"
-        # Log file content to the log file as well
-        cat "$repo_name/$file_path" >> "$LOG_FILE"
-        cat "$repo_name/$file_path" # Also show on console
+        echo -e "${RED}FAIL: $msg - Conflict markers not found in '$repo_name/$file_path'. Actual content:${RESET}"
+        cat "$repo_name/$file_path"
         TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
 }
-
 
 function get_head_oid() {
     local repo_name="$1"
@@ -246,7 +180,7 @@ function get_branch_oid() {
 # --- Test Cases ---
 
 function test_fast_forward_merge() {
-    echo -e "\n${BLUE}--- Test: Fast-Forward Merge ---${RESET}" | tee -a "$LOG_FILE"
+    echo -e "\n${BLUE}--- Test: Fast-Forward Merge ---${RESET}"
     local repo="ff_repo"
     setup_repo "$repo"
     create_commit "$repo" "file1.txt" "Initial content" "Initial commit"
@@ -266,45 +200,32 @@ function test_fast_forward_merge() {
     assert_file_contains "$repo" "file2.txt" "Feature content" "FF Merge: file2.txt content check"
 
     if [ "$master_commit_oid" == "$feature_commit_oid" ]; then
-        echo -e "${GREEN}PASS: FF Merge: master OID matches feature OID${RESET}" | tee -a "$LOG_FILE"
+        echo -e "${GREEN}PASS: FF Merge: master OID matches feature OID${RESET}"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
-        echo -e "${RED}FAIL: FF Merge: master OID ($master_commit_oid) does not match feature OID ($feature_commit_oid)${RESET}" | tee -a "$LOG_FILE"
+        echo -e "${RED}FAIL: FF Merge: master OID ($master_commit_oid) does not match feature OID ($feature_commit_oid)${RESET}"
         TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
     cd "$TEST_DIR" # Ensure we are in the base test directory
 }
 
 function test_already_up_to_date() {
-    echo -e "\n${BLUE}--- Test: Already Up-to-Date Merge ---${RESET}" | tee -a "$LOG_FILE"
+    echo -e "\n${BLUE}--- Test: Already Up-to-Date Merge ---${RESET}"
     local repo="uptodate_repo"
     setup_repo "$repo"
     create_commit "$repo" "file1.txt" "Content" "Initial"
     run_cmd "$repo" branch feature
     # Merge feature into master (should be fast-forward)
-    run_cmd "$repo" merge feature # First merge output goes to log file
-    # Add a small pause to allow the OS to release the lock file
-    sleep 0.1
-    # Try merging again, capture output specifically for assertion
-    local merge_output
-    merge_output=$(cd "$repo" && "$ASH_CMD" merge feature 2>&1) || true # Capture stdout/stderr, ignore exit code for check
-    echo "$merge_output" >> "$LOG_FILE" # Append this specific output to main log too
-    # Assert directly on the captured output string
-    echo -e "${YELLOW}TEST: Already Up-to-Date: Output check${RESET}" | tee -a "$LOG_FILE"
-    if echo "$merge_output" | grep -qF "Already up to date."; then
-         echo -e "${GREEN}PASS: Already Up-to-Date: Output check${RESET}" | tee -a "$LOG_FILE"
-         TESTS_PASSED=$((TESTS_PASSED + 1))
-    else
-         echo -e "${RED}FAIL: Already Up-to-Date: Output check - Expected 'Already up to date.' not found. Actual output:${RESET}" | tee -a "$LOG_FILE"
-         echo "$merge_output" # Show output on console on failure
-         TESTS_FAILED=$((TESTS_FAILED + 1))
-    fi
+    run_cmd "$repo" merge feature > /dev/null
+    # Try merging again
+    run_cmd "$repo" merge feature > merge_output.log
+    assert_file_contains "merge_output.log" "Already up to date." "Already Up-to-Date: Output check"
+    rm merge_output.log stdout.log stderr.log 2>/dev/null
     cd "$TEST_DIR"
 }
 
-
 function test_recursive_merge_no_conflict() {
-    echo -e "\n${BLUE}--- Test: Recursive Merge (No Conflict) ---${RESET}" | tee -a "$LOG_FILE"
+    echo -e "\n${BLUE}--- Test: Recursive Merge (No Conflict) ---${RESET}"
     local repo="recursive_repo"
     setup_repo "$repo"
     create_commit "$repo" "common.txt" "Base" "Base commit"
@@ -315,9 +236,7 @@ function test_recursive_merge_no_conflict() {
     local master_oid=$(get_head_oid "$repo")
 
     # Feature branch changes
-    # Replace 'checkout -b' with separate 'branch' and 'checkout' commands
-    run_cmd "$repo" branch feature "$base_oid"     # Create feature branch pointing to base_oid
-    run_cmd "$repo" checkout feature               # Switch to the new feature branch
+    run_cmd "$repo" checkout -b feature "$base_oid" # Create feature from base
     create_commit "$repo" "feature_file.txt" "Feature change" "Commit on feature"
     local feature_oid=$(get_branch_oid "$repo" "feature")
 
@@ -333,18 +252,18 @@ function test_recursive_merge_no_conflict() {
     assert_file_contains "$repo" "feature_file.txt" "Feature change" "Recursive Merge: feature_file content"
 
     if [ "$merge_commit_oid" != "$master_oid" ] && [ "$merge_commit_oid" != "$feature_oid" ]; then
-         echo -e "${GREEN}PASS: Recursive Merge: New merge commit created ($merge_commit_oid)${RESET}" | tee -a "$LOG_FILE"
+         echo -e "${GREEN}PASS: Recursive Merge: New merge commit created ($merge_commit_oid)${RESET}"
          TESTS_PASSED=$((TESTS_PASSED + 1))
          # Optionally check merge commit parents using log
     else
-         echo -e "${RED}FAIL: Recursive Merge: Did not create a new merge commit.${RESET}" | tee -a "$LOG_FILE"
+         echo -e "${RED}FAIL: Recursive Merge: Did not create a new merge commit.${RESET}"
          TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
     cd "$TEST_DIR"
 }
 
 function test_content_conflict() {
-    echo -e "\n${BLUE}--- Test: Content Conflict Merge ---${RESET}" | tee -a "$LOG_FILE"
+    echo -e "\n${BLUE}--- Test: Content Conflict Merge ---${RESET}"
     local repo="conflict_repo"
     setup_repo "$repo"
     create_commit "$repo" "conflict.txt" "line1\nline2\nline3" "Base content"
@@ -356,21 +275,18 @@ function test_content_conflict() {
     run_cmd "$repo" commit -m "Modify line 1 on master"
 
     # Feature changes
-    # Replace 'checkout -b' with separate 'branch' and 'checkout' commands
-    run_cmd "$repo" branch feature "$base_oid"
-    run_cmd "$repo" checkout feature
+    run_cmd "$repo" checkout -b feature "$base_oid"
     echo -e "line1\nline2\nline3_feature" > "$repo/conflict.txt"
     run_cmd "$repo" add conflict.txt
     run_cmd "$repo" commit -m "Modify line 3 on feature"
 
     # Merge and expect failure
     run_cmd "$repo" checkout master
-    echo -e "${YELLOW}TEST: Content Conflict: Merge command failed as expected${RESET}" | tee -a "$LOG_FILE"
     if ! run_cmd "$repo" merge feature; then
-        echo -e "${GREEN}PASS: Content Conflict: Merge command failed as expected${RESET}" | tee -a "$LOG_FILE"
+        echo -e "${GREEN}PASS: Content Conflict: Merge command failed as expected${RESET}"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
-        echo -e "${RED}FAIL: Content Conflict: Merge command succeeded unexpectedly${RESET}" | tee -a "$LOG_FILE"
+        echo -e "${RED}FAIL: Content Conflict: Merge command succeeded unexpectedly${RESET}"
         TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
 
@@ -381,7 +297,7 @@ function test_content_conflict() {
 }
 
 function test_file_directory_conflict() {
-    echo -e "\n${BLUE}--- Test: File/Directory Conflict Merge ---${RESET}" | tee -a "$LOG_FILE"
+    echo -e "\n${BLUE}--- Test: File/Directory Conflict Merge ---${RESET}"
     local repo="filedir_repo"
     setup_repo "$repo"
     create_commit "$repo" "dummy.txt" "dummy" "Initial"
@@ -394,21 +310,18 @@ function test_file_directory_conflict() {
     run_cmd "$repo" commit -m "Add file a/b on master"
 
     # Feature: Create file a
-    # Replace 'checkout -b' with separate 'branch' and 'checkout' commands
-    run_cmd "$repo" branch feature "$base_oid"
-    run_cmd "$repo" checkout feature
+    run_cmd "$repo" checkout -b feature "$base_oid"
     echo "feature file" > "$repo/a"
     run_cmd "$repo" add a
     run_cmd "$repo" commit -m "Add file a on feature"
 
     # Merge and expect failure
     run_cmd "$repo" checkout master
-    echo -e "${YELLOW}TEST: File/Dir Conflict: Merge command failed as expected${RESET}" | tee -a "$LOG_FILE"
     if ! run_cmd "$repo" merge feature; then
-        echo -e "${GREEN}PASS: File/Dir Conflict: Merge command failed as expected${RESET}" | tee -a "$LOG_FILE"
+        echo -e "${GREEN}PASS: File/Dir Conflict: Merge command failed as expected${RESET}"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
-        echo -e "${RED}FAIL: File/Dir Conflict: Merge command succeeded unexpectedly${RESET}" | tee -a "$LOG_FILE"
+        echo -e "${RED}FAIL: File/Dir Conflict: Merge command succeeded unexpectedly${RESET}"
         TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
     # Check for specific error message or conflicted state in index/status if implemented
@@ -416,7 +329,7 @@ function test_file_directory_conflict() {
 }
 
 function test_modify_delete_conflict() {
-    echo -e "\n${BLUE}--- Test: Modify/Delete Conflict Merge ---${RESET}" | tee -a "$LOG_FILE"
+    echo -e "\n${BLUE}--- Test: Modify/Delete Conflict Merge ---${RESET}"
     local repo="moddel_repo"
     setup_repo "$repo"
     create_commit "$repo" "moddel.txt" "Original" "Base commit"
@@ -428,21 +341,18 @@ function test_modify_delete_conflict() {
     run_cmd "$repo" commit -m "Modify on master"
 
     # Feature: Delete file
-    # Replace 'checkout -b' with separate 'branch' and 'checkout' commands
-    run_cmd "$repo" branch feature "$base_oid"
-    run_cmd "$repo" checkout feature
+    run_cmd "$repo" checkout -b feature "$base_oid"
     rm "$repo/moddel.txt"
     run_cmd "$repo" add moddel.txt # Use add to record deletion
     run_cmd "$repo" commit -m "Delete on feature"
 
     # Merge and expect failure
     run_cmd "$repo" checkout master
-    echo -e "${YELLOW}TEST: Modify/Delete Conflict: Merge command failed as expected${RESET}" | tee -a "$LOG_FILE"
     if ! run_cmd "$repo" merge feature; then
-        echo -e "${GREEN}PASS: Modify/Delete Conflict: Merge command failed as expected${RESET}" | tee -a "$LOG_FILE"
+        echo -e "${GREEN}PASS: Modify/Delete Conflict: Merge command failed as expected${RESET}"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
-        echo -e "${RED}FAIL: Modify/Delete Conflict: Merge command succeeded unexpectedly${RESET}" | tee -a "$LOG_FILE"
+        echo -e "${RED}FAIL: Modify/Delete Conflict: Merge command succeeded unexpectedly${RESET}"
         TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
     # Check for specific error message or conflicted state in index/status if implemented
@@ -450,15 +360,13 @@ function test_modify_delete_conflict() {
 }
 
 function test_merge_fail_untracked_overwrite() {
-    echo -e "\n${BLUE}--- Test: Merge Fail (Untracked Overwrite) ---${RESET}" | tee -a "$LOG_FILE"
+    echo -e "\n${BLUE}--- Test: Merge Fail (Untracked Overwrite) ---${RESET}"
     local repo="untracked_repo"
     setup_repo "$repo"
     create_commit "$repo" "common.txt" "Base" "Base commit"
     local base_oid=$(get_head_oid "$repo")
     create_commit "$repo" "master_file.txt" "Master" "Master change"
-    # Replace 'checkout -b' with separate 'branch' and 'checkout' commands
-    run_cmd "$repo" branch feature "$base_oid"
-    run_cmd "$repo" checkout feature
+    run_cmd "$repo" checkout -b feature "$base_oid"
     create_commit "$repo" "feature_file.txt" "Feature" "Feature change" # This file will conflict
 
     # Create untracked file that merge would create
@@ -466,12 +374,11 @@ function test_merge_fail_untracked_overwrite() {
     echo "Untracked content" > "$repo/feature_file.txt"
 
     # Merge and expect failure
-    echo -e "${YELLOW}TEST: Untracked Overwrite: Merge command failed as expected${RESET}" | tee -a "$LOG_FILE"
     if ! run_cmd "$repo" merge feature; then
-        echo -e "${GREEN}PASS: Untracked Overwrite: Merge command failed as expected${RESET}" | tee -a "$LOG_FILE"
+        echo -e "${GREEN}PASS: Untracked Overwrite: Merge command failed as expected${RESET}"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
-        echo -e "${RED}FAIL: Untracked Overwrite: Merge command succeeded unexpectedly${RESET}" | tee -a "$LOG_FILE"
+        echo -e "${RED}FAIL: Untracked Overwrite: Merge command succeeded unexpectedly${RESET}"
         TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
     assert_file_contains "$repo" "feature_file.txt" "Untracked content" "Untracked Overwrite: File should remain unchanged"
@@ -479,15 +386,13 @@ function test_merge_fail_untracked_overwrite() {
 }
 
 function test_merge_fail_uncommitted_changes() {
-    echo -e "\n${BLUE}--- Test: Merge Fail (Uncommitted Changes) ---${RESET}" | tee -a "$LOG_FILE"
+    echo -e "\n${BLUE}--- Test: Merge Fail (Uncommitted Changes) ---${RESET}"
     local repo="uncommitted_repo"
     setup_repo "$repo"
     create_commit "$repo" "common.txt" "Base" "Base commit"
     local base_oid=$(get_head_oid "$repo")
     create_commit "$repo" "master_file.txt" "Master" "Master change"
-    # Replace 'checkout -b' with separate 'branch' and 'checkout' commands
-    run_cmd "$repo" branch feature "$base_oid"
-    run_cmd "$repo" checkout feature
+    run_cmd "$repo" checkout -b feature "$base_oid"
     create_commit "$repo" "feature_file.txt" "Feature" "Feature change"
 
     # Modify tracked file without committing
@@ -495,12 +400,11 @@ function test_merge_fail_uncommitted_changes() {
     echo "Uncommitted modification" >> "$repo/master_file.txt"
 
     # Merge and expect failure
-    echo -e "${YELLOW}TEST: Uncommitted Changes: Merge command failed as expected${RESET}" | tee -a "$LOG_FILE"
     if ! run_cmd "$repo" merge feature; then
-        echo -e "${GREEN}PASS: Uncommitted Changes: Merge command failed as expected${RESET}" | tee -a "$LOG_FILE"
+        echo -e "${GREEN}PASS: Uncommitted Changes: Merge command failed as expected${RESET}"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
-        echo -e "${RED}FAIL: Uncommitted Changes: Merge command succeeded unexpectedly${RESET}" | tee -a "$LOG_FILE"
+        echo -e "${RED}FAIL: Uncommitted Changes: Merge command succeeded unexpectedly${RESET}"
         TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
     assert_file_contains "$repo" "master_file.txt" "Uncommitted modification" "Uncommitted Changes: File should retain changes"
@@ -509,6 +413,8 @@ function test_merge_fail_uncommitted_changes() {
 
 
 # --- Run Tests ---
+# Clear logs for new run
+rm -f stdout.log stderr.log
 
 test_fast_forward_merge
 test_already_up_to_date
@@ -520,19 +426,18 @@ test_merge_fail_untracked_overwrite
 test_merge_fail_uncommitted_changes
 
 # --- Summary ---
-echo -e "\n${BLUE}--- Test Summary ---${RESET}" | tee -a "$LOG_FILE"
-echo -e "${GREEN}Tests Passed: $TESTS_PASSED${RESET}" | tee -a "$LOG_FILE"
+echo -e "\n${BLUE}--- Test Summary ---${RESET}"
+echo -e "${GREEN}Tests Passed: $TESTS_PASSED${RESET}"
 if [ "$TESTS_FAILED" -gt 0 ]; then
-    echo -e "${RED}Tests Failed: $TESTS_FAILED${RESET}" | tee -a "$LOG_FILE"
+    echo -e "${RED}Tests Failed: $TESTS_FAILED${RESET}"
 else
-    echo -e "${GREEN}Tests Failed: $TESTS_FAILED${RESET}" | tee -a "$LOG_FILE"
+    echo -e "${GREEN}Tests Failed: $TESTS_FAILED${RESET}"
 fi
 
 # --- Cleanup ---
-cd "$ORIGINAL_PWD" # Go back to original directory before removing TEST_DIR
+cd ..
 rm -rf "$TEST_DIR"
-echo "Cleaned up temporary directory: $TEST_DIR" | tee -a "$LOG_FILE"
-# Log file remains in tests/integration/merge_tests.log
+echo "Cleaned up temporary directory: $TEST_DIR"
 
 # Exit with status code indicating failure if any tests failed
 if [ "$TESTS_FAILED" -gt 0 ]; then
