@@ -1,4 +1,4 @@
-# AsheraFlow 🚀
+# AsheraFlow 🌿
 
 AsheraFlow is an innovative Version Control System (VCS) built entirely in Rust, specially adapted for Agile teams using the Scrum methodology. It seamlessly integrates Scrum artifacts, such as sprints and tasks, directly into the command-line interface (CLI), aiming to eliminate the gap between code management and project management.
 
