@@ -11,7 +11,6 @@ use crate::core::merge::inputs;
 use crate::core::merge::resolve::Resolve;
 use crate::core::repository::pending_commit::{PendingCommit, PendingCommitType};
 use crate::core::repository::sequencer::{Action, Sequencer};
-use crate::core::revlist::RevList;
 use crate::commands::commit_writer::{CommitWriter, COMMIT_NOTES};
 use crate::core::workspace::Workspace;
 use crate::core::revision::Revision;
@@ -123,6 +122,7 @@ This reverts commit {}.",
         Ok(())
     }
 }
+    /// Handles the 'revert' command for undoing specific commits in AsheraFlow.
 
 fn store_commit_sequence(
     sequencer: &mut Sequencer,

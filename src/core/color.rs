@@ -1,5 +1,4 @@
-// Update src/core/color.rs to include a toggle feature
-
+/// Provides ANSI color codes and utilities for colored terminal output in AsheraFlow.
 use std::env;
 
 pub struct Color;
@@ -31,7 +30,7 @@ impl Color {
     pub const UNDERLINE: &'static str = "\x1b[4m";
     pub const REVERSED: &'static str = "\x1b[7m";
 
-    // Check if colors should be enabled
+    /// Checks if colors should be enabled for terminal output.
     fn is_enabled() -> bool {
         // Check for color support
         if let Ok(color_value) = env::var("ASH_COLOR") {
@@ -46,7 +45,7 @@ impl Color {
         }
     }
 
-    // Detect if terminal supports colors
+    /// Detects if the terminal supports colors.
     fn has_color_support() -> bool {
         if let Ok(term) = env::var("TERM") {
             // Most terminals with color support have TERM with "color" or "256"

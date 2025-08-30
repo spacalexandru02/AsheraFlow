@@ -1,3 +1,5 @@
+/// Module for AsheraFlow commands.
+/// Contains implementations for all commands supported by the CLI.
 pub mod init;
 pub mod commit;
 pub mod add;

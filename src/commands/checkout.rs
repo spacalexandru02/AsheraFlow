@@ -7,9 +7,13 @@ use crate::core::color::Color;
 use crate::core::refs::Reference;
 use crate::core::database::commit::Commit;
 
+/// Implements the 'checkout' command for AsheraFlow.
+/// Handles switching branches or restoring working tree files.
 pub struct CheckoutCommand;
 
 impl CheckoutCommand {
+    /// Executes the checkout command, switching to the specified target branch or commit.
+    /// Returns an error if the target cannot be resolved or migration fails.
     pub fn execute(target: &str) -> Result<(), Error> {
         let start_time = Instant::now();
         

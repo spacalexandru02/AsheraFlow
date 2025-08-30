@@ -1,4 +1,5 @@
-// src/commands/merge_tool.rs
+/// Implements the 'merge-tool' command for AsheraFlow.
+/// Handles launching external merge tools and resolving conflicts.
 use std::process::Command;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -12,20 +13,13 @@ use crate::core::index::index::Index;
 use crate::core::workspace::Workspace;
 use crate::core::database::database::Database;
 use crate::core::database::blob::Blob;
-use crate::core::refs::Refs;
 use crate::core::color::Color;
-use crate::core::file_mode::FileMode;
-use crate::core::diff::diff;
 
+/// Main struct for the merge-tool command logic.
 pub struct MergeToolCommand;
 
-// Constants for conflict markers
-const MERGE_MARKER_OURS_BEGIN: &str = "<<<<<<< OURS\n";
-const MERGE_MARKER_MIDDLE: &str = "=======\n";
-const MERGE_MARKER_THEIRS_END: &str = ">>>>>>> THEIRS\n";
-const MERGE_MARKER_BASE_BEGIN: &str = "||||||| BASE\n";
 
-// Structure to hold conflict information
+/// Structure to hold conflict information for merge operations.
 struct ConflictInfo {
     path_str: String,
     path: PathBuf,

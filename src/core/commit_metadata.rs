@@ -9,6 +9,7 @@ use crate::core::database::commit::Commit;
 use crate::core::repository::repository::Repository;
 use crate::core::database::task_metadata_object::TaskMetadataObject;
 
+/// Represents the status of a task in AsheraFlow.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TaskStatus {
     Todo,
@@ -16,6 +17,7 @@ pub enum TaskStatus {
     Done,
 }
 
+/// Stores metadata for a task, including description, status, and commit history.
 #[derive(Debug, Clone)]
 pub struct TaskMetadata {
     pub id: String,
@@ -29,6 +31,7 @@ pub struct TaskMetadata {
 }
 
 impl TaskMetadata {
+    /// Creates a new TaskMetadata instance with default status and timestamps.
     pub fn new(id: String, description: String, story_points: Option<u32>) -> Self {
         TaskMetadata {
             id,
@@ -45,12 +48,12 @@ impl TaskMetadata {
         }
     }
 
-    // Generate a commit message format for tasks
+    /// Generates a commit message format for tasks.
     pub fn format_commit_message(&self, message: &str) -> String {
         format!("[Task-{}] {}", self.id, message)
     }
 
-    // Extract task metadata from commit message
+    /// Extracts task metadata from a commit message.
     pub fn extract_from_message(message: &str) -> Option<String> {
         lazy_static::lazy_static! {
             static ref TASK_REGEX: Regex = Regex::new(r"^\[Task-([^\]]+)\]").unwrap();
@@ -194,15 +197,15 @@ impl CommitMetadataManager {
     
     // Store task metadata in the object database
     pub fn store_task_metadata(&self, task: &TaskMetadata) -> Result<(), Error> {
-        // Creăm un repository și avem acces la database
+        // Create a repository and get access to database
         let repo_str = self.repo_path.to_str().unwrap_or(".");
         let mut repo = Repository::new(repo_str)?;
         
-        // Creăm obiectul de metadate și îl stocăm în database
+        // Create the metadata object and store it in database
         let mut meta_obj = TaskMetadataObject::new(task.clone());
         let oid = repo.database.store(&mut meta_obj)?;
         
-        // Creăm o referință specială pentru metadatele task-ului
+        // Create a special reference for task metadata
         let meta_ref = format!("refs/meta/task/{}", task.id);
         repo.refs.update_ref(&meta_ref, &oid)?;
         
@@ -211,18 +214,18 @@ impl CommitMetadataManager {
     
     // Get task metadata by ID from the object database
     pub fn get_task_metadata(&self, task_id: &str) -> Result<Option<TaskMetadata>, Error> {
-        // Creăm un repository și avem acces la database
+        // Create a repository and get access to database
         let repo_str = self.repo_path.to_str().unwrap_or(".");
         let mut repo = Repository::new(repo_str)?;
         
-        // Citim referința pentru metadate
+        // Read the reference for metadata
         let meta_ref = format!("refs/meta/task/{}", task_id);
         let oid = match repo.refs.read_ref(&meta_ref)? {
             Some(oid) => oid,
             None => return Ok(None),
         };
         
-        // Încărcăm obiectul din database
+        // Load the object from database
         let obj = repo.database.load(&oid)?;
         if let Some(meta_obj) = obj.as_any().downcast_ref::<TaskMetadataObject>() {
             Ok(Some(meta_obj.get_metadata().clone()))
@@ -233,13 +236,13 @@ impl CommitMetadataManager {
     
     // Find all tasks related to a sprint (based on branch)
     pub fn find_sprint_tasks(&self, sprint_branch: &str) -> Result<Vec<TaskMetadata>, Error> {
-        // Creăm un repository și avem acces la database
+        // Create a repository and get access to database
         let repo_str = self.repo_path.to_str().unwrap_or(".");
         let repo = Repository::new(repo_str)?;
         
         let mut tasks = Vec::new();
         
-        // Obținem toate referințele meta/task/*
+        // Get all meta/task/* references
         let refs = repo.refs.list_refs_with_prefix("refs/meta/task/")?;
             
         // First load all task metadata

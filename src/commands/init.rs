@@ -1,4 +1,5 @@
-// Modified src/commands/init.rs
+/// Implements the 'init' command for AsheraFlow.
+/// Handles repository initialization and directory setup.
 use crate::core::repository::repository::Repository;
 use crate::errors::error::Error;
 use crate::validators::path_validator::PathValidator;
@@ -6,12 +7,15 @@ use crate::core::refs::Refs;
 use std::fs;
 use std::path::Path;
 
+/// Main struct for the init command logic.
 pub struct InitCommand;
 
-// Default branch name
+/// Default branch name used for new repositories.
 const DEFAULT_BRANCH: &str = "master";
 
 impl InitCommand {
+    /// Executes the init command, initializing a new repository at the specified path.
+    /// Returns an error if the path is invalid or directory creation fails.
     pub fn execute(path: &str) -> Result<(), Error> {
         // Use the init-specific validator
         PathValidator::validate_for_init(path)?;

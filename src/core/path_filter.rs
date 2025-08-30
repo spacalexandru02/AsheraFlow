@@ -1,17 +1,17 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-/// A trie structure for efficiently matching file paths
+/// A trie structure for efficiently matching file paths in AsheraFlow.
 #[derive(Debug, Clone)]
 struct Trie {
-    /// Whether this node represents a path that was in the input list
+    /// Whether this node represents a path that was in the input list.
     matched: bool,
-    /// Child nodes in the trie
+    /// Child nodes in the trie.
     children: HashMap<String, Trie>,
 }
 
 impl Trie {
-    /// Create a new trie node
+    /// Creates a new trie node.
     fn new(matched: bool) -> Self {
         Trie {
             matched,
@@ -19,7 +19,7 @@ impl Trie {
         }
     }
     
-    /// Creates a trie from a list of paths
+    /// Creates a trie from a list of paths.
     fn from_paths(paths: &[PathBuf]) -> Self {
         let mut root = Trie::new(paths.is_empty());
         
@@ -39,17 +39,17 @@ impl Trie {
     }
 }
 
-/// A filter for selecting paths that match a given set of criteria
+/// A filter for selecting paths that match a given set of criteria in AsheraFlow.
 #[derive(Debug, Clone)]
 pub struct PathFilter {
-    /// The trie structure used for matching
+    /// The trie structure used for matching.
     routes: Trie,
-    /// The current path being examined
+    /// The current path being examined.
     path: PathBuf,
 }
 
 impl PathFilter {
-    /// Create a new path filter with no filters (matches everything)
+    /// Creates a new path filter with no filters (matches everything).
     pub fn new() -> Self {
         PathFilter {
             routes: Trie::new(true),

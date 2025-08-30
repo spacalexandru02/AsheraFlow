@@ -11,12 +11,10 @@ use commands::add::AddCommand;
 use commands::log::LogCommand;
 use commands::status::StatusCommand;
 use commands::branch::BranchCommand;
-// Imports for merge and related operations
 use commands::merge::MergeCommand;
 use commands::merge_tool::MergeToolCommand;
 use commands::rm::RmCommand;
 use commands::reset::ResetCommand;
-// Sprint and task imports
 use commands::sprint::{
     SprintStartCommand, SprintInfoCommand, SprintCommitMapCommand,
     SprintBurndownCommand, SprintVelocityCommand, SprintAdvanceCommand,
@@ -30,7 +28,6 @@ use std::path::Path;
 use crate::core::index::index::Index;
 use crate::core::refs::Refs;
 use crate::errors::error::Error;
-use std::time::Instant;
 use crate::core::repository::repository::Repository;
 use crate::core::database::database::Database;
 use commands::commit_writer::CommitWriter;
@@ -38,7 +35,6 @@ use crate::core::repository::pending_commit::PendingCommitType;
 use commands::commit::get_editor_command;
 use commands::cherry_pick::CherryPickCommand;
 use commands::revert::RevertCommand;
-use crate::core::commit_metadata::{CommitMetadataManager, TaskStatus};
 
 mod cli;
 mod commands;
@@ -46,12 +42,16 @@ mod validators;
 mod errors;
 mod core;
 
-// Definim constanta ORIG_HEAD local
+/// Entry point for the AsheraFlow CLI application.
+/// Parses command-line arguments and dispatches to the appropriate command handler.
+
+/// Constant representing the original HEAD reference used in merge operations.
 const ORIG_HEAD: &str = "ORIG_HEAD";
 
 fn main() {
     let args: Vec<String> = env::args().collect();
 
+    // Parse CLI arguments and execute the corresponding command
     match CliParser::parse(args) {
         Ok(cli_args) => {
             match cli_args.command {
@@ -147,6 +147,7 @@ fn main() {
     }
 }
 
+/// Handles the 'commit' command, creating a new commit or amending an existing one.
 fn handle_commit_command(message: &str, amend: bool, reuse_message: Option<String>, edit: bool) {
     match CommitCommand::execute(message, amend, reuse_message.as_deref(), edit) {
         Ok(_) => process::exit(0),
@@ -154,6 +155,7 @@ fn handle_commit_command(message: &str, amend: bool, reuse_message: Option<Strin
     }
 }
 
+/// Handles the 'init' command, initializing a new AsheraFlow repository.
 fn handle_init_command(path: &str) {
     match InitCommand::execute(path) {
         Ok(_) => process::exit(0),
@@ -161,6 +163,7 @@ fn handle_init_command(path: &str) {
     }
 }
 
+/// Handles the 'add' command, staging files for commit.
 fn handle_add_command(paths: &[String]) {
     match AddCommand::execute(paths) {
         Ok(_) => process::exit(0),
@@ -168,16 +171,16 @@ fn handle_add_command(paths: &[String]) {
     }
 }
 
+/// Handles the 'status' command, displaying the current state of the working directory and index.
 fn handle_status_command(porcelain: bool, color: &str) {
-    // Set color mode environment variable
     std::env::set_var("ASH_COLOR", color);
-
     match StatusCommand::execute(porcelain) {
         Ok(_) => process::exit(0),
         Err(e) => exit_with_error(&format!("fatal: {}", e)),
     }
 }
 
+/// Handles the 'diff' command, showing changes between commits, commit and working tree, etc.
 fn handle_diff_command(paths: &[String], cached: bool) {
     match DiffCommand::execute(paths, cached) {
         Ok(_) => process::exit(0),
@@ -185,8 +188,8 @@ fn handle_diff_command(paths: &[String], cached: bool) {
     }
 }
 
+/// Handles the 'branch' command, managing branches (create, delete, list, etc.).
 fn handle_branch_command(name: &str, start_point: Option<&str>, verbose: bool, delete: bool, force: bool) {
-    // Set environment variables to pass flag information
     if verbose {
         std::env::set_var("ASH_BRANCH_VERBOSE", "1");
     }
@@ -196,7 +199,6 @@ fn handle_branch_command(name: &str, start_point: Option<&str>, verbose: bool, d
     if force {
         std::env::set_var("ASH_BRANCH_FORCE", "1");
     }
-
     match BranchCommand::execute(name, start_point) {
         Ok(_) => process::exit(0),
         Err(e) => exit_with_error(&format!("fatal: {}", e)),
@@ -204,20 +206,20 @@ fn handle_branch_command(name: &str, start_point: Option<&str>, verbose: bool, d
 }
 
 
+/// Handles the 'log' command, displaying commit logs with various formatting options.
 fn handle_log_command(revisions: &[String], abbrev: bool, format: &str, patch: bool, decorate: &str) {
-    // Convert options to HashMap for easier handling
     let mut options = HashMap::new();
     options.insert("abbrev".to_string(), abbrev.to_string());
     options.insert("format".to_string(), format.to_string());
     options.insert("patch".to_string(), patch.to_string());
     options.insert("decorate".to_string(), decorate.to_string());
-
     match LogCommand::execute(revisions, &options) {
         Ok(_) => process::exit(0),
         Err(e) => exit_with_error(&format!("fatal: {}", e)),
     }
 }
 
+/// Handles the 'checkout' command, switching branches or restoring working tree files.
 fn handle_checkout_command(target: &str) {
     match CheckoutCommand::execute(target) {
         Ok(_) => process::exit(0),
@@ -225,7 +227,7 @@ fn handle_checkout_command(target: &str) {
     }
 }
 
-// Add function to handle merge_tool command
+/// Handles the 'merge-tool' command, launching an external merge tool if configured.
 fn handle_merge_tool_command(tool: Option<&str>) {
     match MergeToolCommand::execute(tool) {
         Ok(_) => process::exit(0),
@@ -233,45 +235,31 @@ fn handle_merge_tool_command(tool: Option<&str>) {
     }
 }
 
-/// Handles merge continue operation
+/// Handles the 'merge --continue' operation, resuming a merge, cherry-pick, or revert after conflicts are resolved.
 fn handle_merge_continue_command() -> Result<(), Error> {
     println!("Checking for unresolved conflicts...");
-    
-    // Initialize repository components
     let root_path = Path::new(".");
     let git_path = root_path.join(".ash");
-    
     if !git_path.exists() {
         return Err(Error::Generic("Not an AsheraFlow repository: .ash directory not found".into()));
     }
-    
     let db_path = git_path.join("objects");
     let mut database = Database::new(db_path);
-    
-    // Check for the index file
     let index_path = git_path.join("index");
     if !index_path.exists() {
         return Err(Error::Generic("No index file found.".into()));
     }
-    
-    // Load the index
     let mut index = Index::new(index_path);
     match index.load() {
         Ok(_) => println!("Index loaded successfully"),
         Err(e) => return Err(Error::Generic(format!("Error loading index: {}", e))),
     }
-    
-    // Check for unresolved conflicts BEFORE creating CommitWriter
     if index.has_conflict() {
         return Err(Error::Generic(
             "Cannot continue due to unresolved conflicts. Fix conflicts and add the files.".into(),
         ));
     }
-    
-    // Create refs object
     let refs = Refs::new(&git_path);
-    
-    // Create CommitWriter
     let mut commit_writer = CommitWriter::new(
         root_path,
         git_path.clone(),
@@ -279,8 +267,6 @@ fn handle_merge_continue_command() -> Result<(), Error> {
         &mut index,
         &refs
     );
-    
-    // If all conflicts are resolved, check for pending operation type and resume it
     if commit_writer.pending_commit.in_progress(PendingCommitType::Merge) {
         return commit_writer.resume_merge(PendingCommitType::Merge, get_editor_command());
     } else if commit_writer.pending_commit.in_progress(PendingCommitType::CherryPick) {
@@ -294,6 +280,7 @@ fn handle_merge_continue_command() -> Result<(), Error> {
     }
 }
 
+/// Handles the 'rm' command, removing files from the working tree and/or index.
 fn handle_rm_command(files: &[String], cached: bool, force: bool, recursive: bool) {
     match RmCommand::execute(files, cached, force, recursive) {
         Ok(_) => process::exit(0),
@@ -301,6 +288,7 @@ fn handle_rm_command(files: &[String], cached: bool, force: bool, recursive: boo
     }
 }
 
+/// Handles the 'reset' command, resetting current HEAD to the specified state.
 fn handle_reset_command(files: &[String], soft: bool, mixed: bool, hard: bool, force: bool, reuse_message: Option<&str>) {
     match ResetCommand::execute(files, soft, mixed, hard, force, reuse_message) {
         Ok(_) => process::exit(0),
@@ -308,6 +296,7 @@ fn handle_reset_command(files: &[String], soft: bool, mixed: bool, hard: bool, f
     }
 }
 
+/// Handles the 'cherry-pick' command, applying changes from specific commits.
 fn handle_cherry_pick_command(commits: &[String], continue_op: bool, abort: bool, quit: bool, mainline: Option<u32>) {
     match CherryPickCommand::execute(commits, continue_op, abort, quit, mainline) {
         Ok(_) => process::exit(0),
@@ -315,6 +304,7 @@ fn handle_cherry_pick_command(commits: &[String], continue_op: bool, abort: bool
     }
 }
 
+/// Handles the 'revert' command, reverting changes from specific commits.
 fn handle_revert_command(commits: &[String], continue_op: bool, abort: bool, quit: bool, mainline: Option<u32>) {
     match RevertCommand::execute(commits, continue_op, abort, quit, mainline) {
         Ok(_) => process::exit(0),
@@ -322,26 +312,21 @@ fn handle_revert_command(commits: &[String], continue_op: bool, abort: bool, qui
     }
 }
 
+/// Utility function to print an error message and exit the process with code 1.
 fn exit_with_error(message: &str) -> ! {
-    eprintln!("{}", message); // Afișează eroarea pe stderr
-    // Poți adăuga logica de afișare a mesajului de ajutor aici dacă dorești
-    // if message.contains("Usage:") || ... {
-    //     eprintln!("\n{}", CliParser::format_help());
-    // }
-    process::exit(1); // Ieșim cu cod de eroare (1)
+    eprintln!("{}", message);
+    process::exit(1);
 }
 
-// --- Păstrează funcția handle_merge_command originală ---
+/// Handles the 'merge' command, merging changes from another branch into the current branch.
 fn handle_merge_command(branch: &str, message: Option<&str>) {
     match MergeCommand::execute(branch, message) {
         Ok(_) => process::exit(0),
         Err(e) => {
-            // Pentru erori specifice de merge, dorim să afișăm un mesaj mai clar
             if e.to_string().contains("Already up to date") {
                 println!("Already up to date.");
                 process::exit(0);
             } else if e.to_string().contains("fix conflicts") {
-                // Dacă există conflicte, dorim să afișăm un mesaj de eroare mai clar
                 println!("{}", e);
                 println!("Conflicts detected. Fix conflicts and then run 'ash merge --continue'");
                 process::exit(1);
@@ -352,33 +337,24 @@ fn handle_merge_command(branch: &str, message: Option<&str>) {
     }
 }
 
-// Funcție pentru a gestiona merge abort
+/// Handles the 'merge --abort' operation, aborting an in-progress merge and resetting to the original state.
 fn handle_merge_abort_command() {
-    // Inițializare repository
     let mut repo = match Repository::new(".") {
         Ok(r) => r,
         Err(e) => exit_with_error(&format!("fatal: {}", e)),
     };
-    
-    // Verificăm dacă există un merge în desfășurare
     let git_path = Path::new(".").join(".ash");
     let merge_head_path = git_path.join("MERGE_HEAD");
     if !merge_head_path.exists() {
         exit_with_error("fatal: There is no merge to abort");
     }
-    
-    // Ștergem fișierele specifice merge-ului
     let _ = std::fs::remove_file(merge_head_path);
     let _ = std::fs::remove_file(git_path.join("MERGE_MSG"));
-    
-    // Citim HEAD-ul original
     let orig_head_path = git_path.join(ORIG_HEAD);
     let orig_head = match std::fs::read_to_string(&orig_head_path) {
         Ok(content) => content.trim().to_string(),
         Err(e) => exit_with_error(&format!("fatal: Failed to read ORIG_HEAD: {}", e)),
     };
-    
-    // Folosim ResetCommand pentru a face un hard reset la starea originală
     match ResetCommand::execute(&[orig_head], false, false, true, true, None) {
         Ok(_) => {
             println!("Merge aborted");
@@ -388,7 +364,7 @@ fn handle_merge_abort_command() {
     }
 }
 
-// Sprint command handlers
+/// Handles the 'sprint start' command, starting a new sprint with the given name and duration.
 fn handle_sprint_start_command(name: &str, duration: u32) {
     match SprintStartCommand::execute(name, duration) {
         Ok(_) => process::exit(0),
@@ -396,6 +372,7 @@ fn handle_sprint_start_command(name: &str, duration: u32) {
     }
 }
 
+/// Handles the 'sprint info' command, displaying information about the current sprint.
 fn handle_sprint_info_command() {
     match SprintInfoCommand::execute() {
         Ok(_) => process::exit(0),
@@ -403,6 +380,7 @@ fn handle_sprint_info_command() {
     }
 }
 
+/// Handles the 'sprint commitmap' command, showing commit mapping for a sprint.
 fn handle_sprint_commitmap_command(sprint_name: Option<&str>) {
     match SprintCommitMapCommand::execute(sprint_name) {
         Ok(_) => process::exit(0),
@@ -410,7 +388,7 @@ fn handle_sprint_commitmap_command(sprint_name: Option<&str>) {
     }
 }
 
-// Add other sprint command handlers
+/// Handles the 'sprint burndown' command, displaying the burndown chart for a sprint.
 fn handle_sprint_burndown_command(sprint_name: Option<&str>) {
     match SprintBurndownCommand::execute(sprint_name) {
         Ok(_) => process::exit(0),
@@ -418,6 +396,7 @@ fn handle_sprint_burndown_command(sprint_name: Option<&str>) {
     }
 }
 
+/// Handles the 'sprint velocity' command, showing sprint velocity statistics.
 fn handle_sprint_velocity_command() {
     match SprintVelocityCommand::execute() {
         Ok(_) => process::exit(0),
@@ -425,6 +404,7 @@ fn handle_sprint_velocity_command() {
     }
 }
 
+/// Handles the 'sprint advance' command, advancing a sprint to new dates.
 fn handle_sprint_advance_command(name: &str, start_date: &str, end_date: &str) {
     match SprintAdvanceCommand::execute(name, start_date, end_date) {
         Ok(_) => process::exit(0),
@@ -432,6 +412,7 @@ fn handle_sprint_advance_command(name: &str, start_date: &str, end_date: &str) {
     }
 }
 
+/// Handles the 'sprint view' command, displaying a summary of the current sprint.
 fn handle_sprint_view_command() {
     match SprintViewCommand::execute() {
         Ok(_) => process::exit(0),
@@ -439,7 +420,7 @@ fn handle_sprint_view_command() {
     }
 }
 
-// Task command handlers
+/// Handles the 'task create' command, creating a new task with the given details.
 fn handle_task_create_command(id: &str, description: &str, story_points: Option<u32>) {
     match TaskCreateCommand::execute(id, description, story_points) {
         Ok(_) => process::exit(0),
@@ -447,6 +428,7 @@ fn handle_task_create_command(id: &str, description: &str, story_points: Option<
     }
 }
 
+/// Handles the 'task complete' command, marking a task as completed and optionally merging changes.
 fn handle_task_complete_command(id: &str, auto_merge: bool) {
     match TaskCompleteCommand::execute(id, auto_merge) {
         Ok(_) => process::exit(0),
@@ -454,6 +436,7 @@ fn handle_task_complete_command(id: &str, auto_merge: bool) {
     }
 }
 
+/// Handles the 'task status' command, displaying the status of a specific task.
 fn handle_task_status_command(id: &str) {
     match TaskStatusCommand::execute(id) {
         Ok(_) => process::exit(0),
@@ -461,12 +444,12 @@ fn handle_task_status_command(id: &str) {
     }
 }
 
+/// Handles the 'task list' command, listing all tasks in the repository.
 fn handle_task_list_command(args: &[String]) {
     let command = TaskListCommand {
         repo_path: String::from("."),
         args: args.to_vec(),
     };
-    
     match command.execute() {
         Ok(_) => process::exit(0),
         Err(e) => exit_with_error(&format!("fatal: {}", e)),

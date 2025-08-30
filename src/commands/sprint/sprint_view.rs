@@ -236,18 +236,18 @@ impl SprintViewCommand {
             let tasks_map = sprint_manager.get_sprint_tasks(&branch_name)?;
             let tasks: Vec<Task> = tasks_map.values().cloned().collect();
             
-            // Inițializăm datele de perioadă ca None
+            // Initialize period data as None
             let mut start_date_str = None;
             let mut end_date_str = None;
             
-            // Obțin datele despre perioadă din BranchMetadataManager
+            // Get period data from BranchMetadataManager
             if let Ok(Some(meta)) = branch_manager.get_sprint_metadata(&branch_name) {
-                // Formatăm data de început
+                // Format start date
                 let start_formatted = chrono::NaiveDateTime::from_timestamp_opt(meta.start_timestamp as i64, 0)
                     .map(|dt| dt.format("%Y-%m-%d").to_string());
                 start_date_str = start_formatted;
                 
-                // Calculăm și formatăm data de sfârșit
+                // Calculate and format end date
                 let end_timestamp = meta.end_timestamp();
                 let end_formatted = chrono::NaiveDateTime::from_timestamp_opt(end_timestamp as i64, 0)
                     .map(|dt| dt.format("%Y-%m-%d").to_string());

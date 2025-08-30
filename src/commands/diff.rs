@@ -1,4 +1,5 @@
-// src/commands/diff.rs - updated to use pager
+/// Implements the 'diff' command for AsheraFlow.
+/// Handles showing changes between commits, working tree, and index, with pager support.
 use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 use std::time::Instant;
@@ -14,17 +15,19 @@ use crate::core::diff::myers::{diff_lines, format_diff, is_binary_content};
 use crate::errors::error::Error;
 use crate::core::pager::Pager;
 
+/// Main struct for the diff command logic.
 pub struct DiffCommand;
 
 impl DiffCommand {
-    /// Execute diff command between index/HEAD and working tree
+    /// Executes the diff command between index/HEAD and working tree.
+    /// Supports path filtering and cached mode.
     pub fn execute(paths: &[String], cached: bool) -> Result<(), Error> {
         let start_time = Instant::now();
         
         let root_path = Path::new(".");
         let git_path = root_path.join(".ash");
         
-        // Verifică dacă directorul .ash există
+        // Check if .ash directory exists
         if !git_path.exists() {
             return Err(Error::Generic("fatal: not an ash repository (or any of the parent directories): .ash directory not found".into()));
         }
@@ -94,19 +97,19 @@ impl DiffCommand {
         cached: bool,
         pager: &mut Pager
     ) -> Result<(), Error> {
-        // Dacă flag-ul cached este setat, compară indexul cu HEAD
+        // If the cached flag is set, compare index with HEAD
         if cached {
             return Self::diff_index_vs_head(workspace, database, index, refs, pager);
         }
         
-        // În caz contrar, compară arborele de lucru cu indexul
+        // Otherwise, compare working tree with index
         let mut has_changes = false;
         
-        // Obține toate fișierele din index
+        // Get all files from index
         for entry in index.each_entry() {
             let path = Path::new(entry.get_path());
             
-            // Sări dacă fișierul nu există în workspace
+            // Skip if file doesn't exist in workspace
             if !workspace.path_exists(path)? {
                 has_changes = true;
                 let path_str = path.display().to_string();
@@ -115,11 +118,11 @@ impl DiffCommand {
                 pager.write(&format!("--- a/{}\n", Color::red(&path_str)))?;
                 pager.write(&format!("+++ {}\n", Color::red("/dev/null")))?;
                 
-                // Obține conținutul blob-ului din baza de date
+                // Get blob content from database
                 let blob_obj = database.load(entry.get_oid())?;
                 let content = blob_obj.to_bytes();
                 
-                // Verifică dacă conținutul este binar
+                // Check if content is binary
                 if is_binary_content(&content) {
                     pager.write(&format!("Binary file a/{} has been deleted\n", path_str))?;
                     continue;
@@ -127,7 +130,7 @@ impl DiffCommand {
                 
                 let lines = diff::split_lines(&String::from_utf8_lossy(&content));
                 
-                // Arată diff-ul de ștergere
+                // Show deletion diff
                 for line in &lines {
                     pager.write(&format!("{}\n", Color::red(&format!("-{}", line))))?;
                 }
@@ -135,33 +138,33 @@ impl DiffCommand {
                 continue;
             }
             
-            // Citește conținutul fișierului
+            // Read file content
             let file_content = workspace.read_file(path)?;
             
-            // Calculează hash-ul pentru conținutul fișierului
+            // Calculate hash for file content
             let file_hash = database.hash_file_data(&file_content);
             
-            // Dacă hash-ul se potrivește, nu există nicio modificare
+            // If hash matches, there are no changes
             if file_hash == entry.get_oid() {
                 continue;
             }
             
             has_changes = true;
             
-            // Tipărește antetul diff-ului
+            // Print diff header
             let path_str = path.display().to_string();
             pager.write(&format!("diff --ash a/{} b/{}\n", Color::cyan(&path_str), Color::cyan(&path_str)))?;
             
-            // Verifică dacă fișierul este binar
+            // Check if file is binary
             if is_binary_content(&file_content) {
                 pager.write(&format!("Binary files a/{} and b/{} differ\n", path_str, path_str))?;
                 continue;
             }
             
-            // Obține diff-ul între index și copia de lucru
+            // Get diff between index and working copy
             let raw_diff_output = diff::diff_with_database(workspace, database, path, entry.get_oid(), 3)?;
             
-            // Adaugă culori la ieșirea diff-ului
+            // Add colors to diff output
             let colored_diff = Self::colorize_diff_output(&raw_diff_output);
             pager.write(&colored_diff)?;
         }
@@ -173,29 +176,29 @@ impl DiffCommand {
         Ok(())
     }
 
-    /// Metodă helper pentru colorarea ieșirii diff-ului
+    /// Helper method for coloring diff output
     fn colorize_diff_output(diff: &str) -> String {
         let mut result = String::new();
         
         for line in diff.lines() {
             if line.starts_with("Binary files") {
-                // Mesaje despre fișiere binare
+                // Binary file messages
                 result.push_str(&Color::yellow(line));
                 result.push('\n');
             } else if line.starts_with("@@") && line.contains("@@") {
-                // Antet de hunk
+                // Hunk header
                 result.push_str(&Color::cyan(line));
                 result.push('\n');
             } else if line.starts_with('+') {
-                // Linie adăugată
+                // Added line
                 result.push_str(&Color::green(line));
                 result.push('\n');
             } else if line.starts_with('-') {
-                // Linie eliminată
+                // Deleted line
                 result.push_str(&Color::red(line));
                 result.push('\n');
             } else {
-                // Linie de context
+                // Context line
                 result.push_str(line);
                 result.push('\n');
             }
@@ -204,29 +207,29 @@ impl DiffCommand {
         result
     }
 
-    /// Colectează toate fișierele dintr-un commit
+    /// Collects all files from a commit
     fn collect_files_from_commit(
         database: &mut Database,
         commit: &Commit,
         files: &mut HashMap<String, String>
     ) -> Result<(), Error> {
-        // Obține OID-ul arborelui din commit
+        // Get tree OID from commit
         let tree_oid = commit.get_tree();
         
-        // Colectează fișierele din arbore
+        // Collect files from tree
         Self::collect_files_from_tree(database, tree_oid, PathBuf::new(), files)?;
         
         Ok(())
     }
 
-    // Implementare îmbunătățită pentru a trata recursiv traversarea arborilor
+    // Improved implementation to handle recursive tree traversal
     fn collect_files_from_tree(
         database: &mut Database,
         tree_oid: &str,
         prefix: PathBuf,
         files: &mut HashMap<String, String>
     ) -> Result<(), Error> {
-        // Încarcă obiectul
+        // Load the object
         let obj = match database.load(tree_oid) {
             Ok(obj) => obj,
             Err(e) => {
@@ -235,9 +238,9 @@ impl DiffCommand {
             }
         };
         
-        // Verifică dacă obiectul este un arbore
+        // Check if the object is a tree
         if let Some(tree) = obj.as_any().downcast_ref::<Tree>() {
-            // Procesează fiecare intrare din arbore
+            // Process each entry in the tree
             for (name, entry) in tree.get_entries() {
                 let entry_path = if prefix.as_os_str().is_empty() {
                     PathBuf::from(name)
@@ -249,20 +252,20 @@ impl DiffCommand {
                 
                 match entry {
                     TreeEntry::Blob(oid, mode) => {
-                        // Dacă aceasta este o intrare de director deghizată ca blob
+                        // If this is a directory entry masquerading as a blob
                         if *mode == TREE_MODE || mode.is_directory() {
-                            // Procesează recursiv acest director
+                            // Process this directory recursively
                             if let Err(e) = Self::collect_files_from_tree(database, oid, entry_path, files) {
                                 println!("Warning: Error traversing directory '{}': {}", entry_path_str, e);
                             }
                         } else {
-                            // Fișier normal
+                            // Regular file
                             files.insert(entry_path_str, oid.clone());
                         }
                     },
                     TreeEntry::Tree(subtree) => {
                         if let Some(subtree_oid) = subtree.get_oid() {
-                            // Procesează recursiv acest director
+                            // Process this directory recursively
                             if let Err(e) = Self::collect_files_from_tree(database, subtree_oid, entry_path, files) {
                                 println!("Warning: Error traversing subtree '{}': {}", entry_path_str, e);
                             }
@@ -274,12 +277,12 @@ impl DiffCommand {
             return Ok(());
         }
         
-        // Dacă obiectul este un blob, încearcă să-l parsezi ca arbore
+        // If the object is a blob, try to parse it as a tree
         if obj.get_type() == "blob" {
-            // Încearcă să parsezi blob-ul ca arbore (aceasta tratează directoare stocate ca blob-uri)
+            // Try to parse the blob as a tree (this handles directories stored as blobs)
             let blob_data = obj.to_bytes();
             if let Ok(parsed_tree) = Tree::parse(&blob_data) {
-                // Procesează fiecare intrare din arborele parsat
+                // Process each entry in the parsed tree
                 for (name, entry) in parsed_tree.get_entries() {
                     let entry_path = if prefix.as_os_str().is_empty() {
                         PathBuf::from(name)
@@ -292,18 +295,18 @@ impl DiffCommand {
                     match entry {
                         TreeEntry::Blob(oid, mode) => {
                             if *mode == TREE_MODE || mode.is_directory() {
-                                // Procesează recursiv acest director
+                                // Process this directory recursively
                                 if let Err(e) = Self::collect_files_from_tree(database, oid, entry_path, files) {
                                     println!("Warning: Error traversing directory '{}': {}", entry_path_str, e);
                                 }
                             } else {
-                                // Fișier normal
+                                // Regular file
                                 files.insert(entry_path_str, oid.clone());
                             }
                         },
                         TreeEntry::Tree(subtree) => {
                             if let Some(subtree_oid) = subtree.get_oid() {
-                                // Procesează recursiv acest director
+                                // Process this directory recursively
                                 if let Err(e) = Self::collect_files_from_tree(database, subtree_oid, entry_path, files) {
                                     println!("Warning: Error traversing subtree '{}': {}", entry_path_str, e);
                                 }

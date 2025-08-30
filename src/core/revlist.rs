@@ -34,7 +34,7 @@ pub struct RevList<'a> {
     diffs: HashMap<(Option<String>, String), HashMap<PathBuf, (Option<String>, Option<String>)>>,
 }
 
-/// Flags that can be associated with commits during traversal
+/// Flags that can be associated with commits during traversal.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 enum Flag {
     Seen,        // Commit has been seen
@@ -44,7 +44,7 @@ enum Flag {
 }
 
 impl<'a> RevList<'a> {
-    /// Create a new RevList with the given revisions
+    /// Creates a new RevList with the given revisions.
     pub fn new(database: &'a mut Database, refs: &Refs, revisions: &[String], walk: bool) -> Result<Self, Error> {
         let mut revlist = RevList {
             database,

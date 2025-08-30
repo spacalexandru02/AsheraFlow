@@ -1,4 +1,4 @@
-// src/utils/pager.rs
+/// Handles output paging for terminal commands in AsheraFlow, using system pagers like less or more.
 use std::env;
 use std::io::{self, Write};
 use std::process::{Command, Stdio};
@@ -13,7 +13,7 @@ pub struct Pager {
 }
 
 impl Pager {
-    /// Creates a new pager, detecting the available command in the system
+    /// Creates a new Pager, detecting the available command in the system.
     pub fn new() -> Self {
         // Verify if we should use a pager at all (terminal output vs pipe)
         let force_pager = env::var("ASH_FORCE_PAGER").map(|v| v == "1").unwrap_or(false);

@@ -2,6 +2,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+/// Represents errors that can occur when handling lockfiles in AsheraFlow.
 #[derive(Debug)]
 pub enum LockError {
     MissingParent(String),
@@ -10,6 +11,7 @@ pub enum LockError {
     LockDenied(String),
 }
 
+/// Handles file locking for safe concurrent access in AsheraFlow.
 #[derive(Debug)]
 pub struct Lockfile {
     file_path: PathBuf,
@@ -18,6 +20,7 @@ pub struct Lockfile {
 }
 
 impl Lockfile {
+    /// Creates a new Lockfile instance for the given file path.
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
         let file_path = path.as_ref().to_path_buf();
         let lock_path = file_path.with_extension("lock");
@@ -28,6 +31,7 @@ impl Lockfile {
         }
     }
 
+    /// Attempts to acquire a lock for updating the file.
     pub fn hold_for_update(&mut self) -> Result<bool, LockError> {
         if self.lock.is_some() {
             return Ok(true);

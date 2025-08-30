@@ -6,7 +6,7 @@ use crate::core::index::index::Index;
 use crate::core::database::database::Database;
 use crate::core::color::Color;
 
-// Enum pentru statusul verificărilor de ștergere
+/// Enum representing the status of file removal checks.
 #[derive(Debug)]
 enum RemovalStatus {
     Safe,
@@ -15,9 +15,13 @@ enum RemovalStatus {
     Unstaged,
 }
 
+/// Implements the 'rm' command for AsheraFlow.
+/// Handles removing files from the working tree and/or index.
 pub struct RmCommand;
 
 impl RmCommand {
+    /// Executes the rm command, removing the specified files or directories.
+    /// Returns an error if repository is not initialized or arguments are invalid.
     pub fn execute(paths: &[String], cached: bool, force: bool, recursive: bool) -> Result<(), Error> {
         let workspace = Workspace::new(Path::new("."));
         let git_path = workspace.root_path.join(".ash");
@@ -35,7 +39,7 @@ impl RmCommand {
         let head_oid = match workspace.read_head() {
             Ok(head) => head,
             Err(_) => {
-                // Release the lock if we can't get HEAD - pentru moment, ignorăm eroarea
+                // Release the lock if we can't get HEAD - for now, ignore the error
                 //index.release_lock()?;
                 return Err(Error::Generic("Failed to read HEAD".to_string()));
             }
@@ -55,7 +59,7 @@ impl RmCommand {
                     expanded_paths.append(&mut paths);
                 }
                 Err(e) => {
-                    // Release the lock on error - pentru moment, ignorăm eroarea
+                    // Release the lock on error - for now, ignore the error
                     //index.release_lock()?;
                     return Err(e);
                 }
@@ -74,7 +78,7 @@ impl RmCommand {
                     }
                 }
                 Err(e) => {
-                    // Release the lock on error - pentru moment, ignorăm eroarea
+                    // Release the lock on error - for now, ignore the error
                     //index.release_lock()?;
                     return Err(e);
                 }
@@ -87,7 +91,7 @@ impl RmCommand {
             Self::print_errors(&uncommitted, "changes staged in the index");
             Self::print_errors(&unstaged, "local modifications");
             
-            // Release the lock - pentru moment, ignorăm eroarea
+            // Release the lock - for now, ignore the error
             //index.release_lock()?;
             return Err(Error::Generic("Cannot remove due to uncommitted changes".to_string()));
         }
@@ -104,7 +108,7 @@ impl RmCommand {
         Ok(())
     }
     
-    // Expand a path (handle directories if -r is specified)
+    /// Expands a path, handling directories if recursive is specified.
     fn expand_path(index: &Index, path_str: &str, recursive: bool) -> Result<Vec<PathBuf>, Error> {
         let path = PathBuf::from(path_str);
         
@@ -128,7 +132,7 @@ impl RmCommand {
         }
     }
     
-    // Plan the removal of a file, checking for conflicts
+    /// Plans the removal of a file, checking for conflicts and staged/unstaged changes.
     fn plan_removal(
         workspace: &Workspace, 
         database: &mut Database, 
@@ -152,14 +156,14 @@ impl RmCommand {
                     )));
                 }
             },
-            Err(_) => {} // Ignorăm erorile dacă fișierul nu există
+            Err(_) => {} // Ignore errors if the file doesn't exist
         }
         
         // Get the item from HEAD
         let item = Self::load_tree_entry(database, head_oid, path)?;
         
         // Get the item from index
-        // Simplificăm cu get_entry direct din Index
+        // Simplify with get_entry directly from Index
         let entry = index.get_entry(&path.to_string_lossy());
         
         // Get the workspace stat
@@ -187,7 +191,7 @@ impl RmCommand {
         Ok(RemovalStatus::Safe)
     }
     
-    // Remove a file from index and workspace
+    /// Removes a file from index and workspace, unless --cached is used.
     fn remove_file(
         workspace: &Workspace, 
         index: &mut Index, 
@@ -205,7 +209,7 @@ impl RmCommand {
         Ok(())
     }
     
-    // Print errors for a specific error type
+    /// Prints errors for a specific error type during file removal.
     fn print_errors(paths: &[PathBuf], message: &str) {
         if paths.is_empty() {
             return;
@@ -224,24 +228,24 @@ impl RmCommand {
         }
     }
     
-    // Helper to load a tree entry from a commit - implementare simplificată
+    /// Helper to load a tree entry from a commit. Simplified implementation.
     fn load_tree_entry(database: &mut Database, oid: &str, _path: &Path) -> Result<Option<Box<dyn crate::core::database::database::GitObject>>, Error> {
-        // Pentru moment, doar verificăm că commit-ul există, fără a căuta obiectul specific
+        // For now, just verify that the commit exists, without looking for the specific object
         match database.load(oid) {
-            Ok(_) => Ok(None), // Returnăm None pentru orice cale
+            Ok(_) => Ok(None), // Return None for any path
             Err(e) => Err(e),
         }
     }
     
-    // Helper to compare tree entry to index entry - implementare simplificată
+    /// Helper to compare tree entry to index entry. Simplified implementation.
     fn compare_tree_to_index(_tree_entry: Option<&Box<dyn crate::core::database::database::GitObject>>, _index_entry: Option<&crate::core::index::entry::Entry>) -> Option<String> {
-        // Pentru moment, presupunem că nu sunt diferențe
+        // For now, assume there are no differences
         None
     }
     
-    // Helper to compare index entry to workspace - implementare simplificată
+    /// Helper to compare index entry to workspace. Simplified implementation.
     fn compare_index_to_workspace(_index_entry: Option<&crate::core::index::entry::Entry>, _stat: Option<&std::fs::Metadata>) -> Result<Option<String>, Error> {
-        // Pentru moment, presupunem că nu sunt diferențe
+        // For now, assume there are no differences
         Ok(None)
     }
 } 

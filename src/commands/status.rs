@@ -1,9 +1,9 @@
-// src/commands/status.rs - With tree structure traversal debugging
+/// Implements the 'status' command for AsheraFlow.
+/// Handles displaying the current state of the working directory and index, including tree traversal.
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
-
 use crate::core::color::Color;
 use crate::core::database::database::Database;
 use crate::core::database::blob::Blob;
@@ -12,14 +12,13 @@ use crate::core::database::tree::{Tree, TreeEntry};
 use crate::core::database::commit::Commit;
 use crate::core::file_mode::FileMode;
 use crate::core::index::entry::Entry;
-
 use crate::core::index::index::Index;
 use crate::core::refs::Refs;
 use crate::core::workspace::Workspace;
 use crate::errors::error::Error;
 use crate::core::database::tree::TREE_MODE;
 
-// Enum for change types
+/// Enum representing the types of changes detected by the status command.
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 enum ChangeType {
     WorkspaceModified,
@@ -29,6 +28,7 @@ enum ChangeType {
     IndexDeleted,
 }
 
+/// Main struct for the status command logic.
 pub struct StatusCommand;
 
 impl StatusCommand {

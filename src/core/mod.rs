@@ -1,3 +1,5 @@
+/// Main module for AsheraFlow core functionality.
+/// Re-exports all submodules for repository, workspace, database, and utilities.
 pub mod repository;
 pub mod workspace;
 pub mod database;

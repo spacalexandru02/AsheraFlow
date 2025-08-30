@@ -14,24 +14,29 @@ use crate::core::editor::Editor;
 use crate::core::repository::pending_commit::{PendingCommit, PendingCommitType};
 use crate::errors::error::Error;
 
-pub const COMMIT_NOTES: &str = "Please enter the commit message for your changes. Lines starting with
-'#' will be ignored, and an empty message aborts the commit.";
+ /// Message displayed when prompting for a commit message.
+ pub const COMMIT_NOTES: &str = "Please enter the commit message for your changes. Lines starting with
+ '#' will be ignored, and an empty message aborts the commit.";
 
-pub const MERGE_NOTES: &str = "It looks like you may be committing a merge.
-If this is not correct, please remove the file
-\t.ash/MERGE_HEAD
-and try again.";
+ /// Message displayed when committing a merge operation.
+ pub const MERGE_NOTES: &str = "It looks like you may be committing a merge.
+ If this is not correct, please remove the file
+ 	.ash/MERGE_HEAD
+ and try again.";
 
-pub const CHERRY_PICK_NOTES: &str = "It looks like you may be committing a cherry-pick.
-If this is not correct, please remove the file
-\t.ash/CHERRY_PICK_HEAD
-and try again.";
+ /// Message displayed when committing a cherry-pick operation.
+ pub const CHERRY_PICK_NOTES: &str = "It looks like you may be committing a cherry-pick.
+ If this is not correct, please remove the file
+ 	.ash/CHERRY_PICK_HEAD
+ and try again.";
 
-pub const CONFLICT_MESSAGE: &str = "hint: Fix them up in the work tree, and then use 'ash add <file>'
-hint: as appropriate to mark resolution and make a commit.
-fatal: Exiting because of an unresolved conflict.";
+ /// Message displayed when unresolved conflicts are detected during commit operations.
+ pub const CONFLICT_MESSAGE: &str = "hint: Fix them up in the work tree, and then use 'ash add <file>'
+ hint: as appropriate to mark resolution and make a commit.
+ fatal: Exiting because of an unresolved conflict.";
 
-pub struct CommitWriter<'a> {
+ /// Handles writing commits, including merge and cherry-pick operations.
+ pub struct CommitWriter<'a> {
     root_path: &'a Path,
     git_path: PathBuf,
     pub database: &'a mut Database,
@@ -41,6 +46,7 @@ pub struct CommitWriter<'a> {
 }
 
 impl<'a> CommitWriter<'a> {
+    /// Creates a new CommitWriter instance for managing commit operations.
     pub fn new(
         root_path: &'a Path,
         git_path: PathBuf,

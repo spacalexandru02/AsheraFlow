@@ -6,8 +6,10 @@ use std::process::Command;
 
 use crate::errors::error::Error;
 
+/// Default editor used for commit messages and other editing operations.
 const DEFAULT_EDITOR: &str = "vi";
 
+/// Handles file editing operations for commit messages and notes in AsheraFlow.
 #[derive(Debug)]
 pub struct Editor {
     path: PathBuf,
@@ -17,6 +19,7 @@ pub struct Editor {
 }
 
 impl Editor {
+    /// Creates a new Editor instance for the given file path and command.
     pub fn new(path: PathBuf, command: Option<String>) -> Result<Self, Error> {
         let file = OpenOptions::new()
             .write(true)
@@ -33,6 +36,7 @@ impl Editor {
         })
     }
 
+    /// Edits a file using the specified command and callback function.
     pub fn edit<F>(path: PathBuf, command: Option<String>, f: F) -> Result<Option<String>, Error>
     where
         F: FnOnce(&mut Editor) -> Result<(), Error>,
@@ -42,6 +46,7 @@ impl Editor {
         editor.edit_file()
     }
 
+    /// Writes a string to the file being edited.
     pub fn write(&mut self, string: &str) -> Result<(), Error> {
         if self.closed {
             return Ok(());
@@ -54,6 +59,7 @@ impl Editor {
         Ok(())
     }
 
+    /// Writes a note (comment) to the file being edited.
     pub fn note(&mut self, string: &str) -> Result<(), Error> {
         if self.closed {
             return Ok(());

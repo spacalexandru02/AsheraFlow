@@ -1,4 +1,5 @@
-// src/commands/add.rs - With improved directory handling
+/// Implements the 'add' command for AsheraFlow.
+/// Handles staging files and directories for commit, including improved directory handling.
 use std::path::{Path, PathBuf};
 use std::collections::{HashSet, HashMap};
 use std::time::Instant;
@@ -12,9 +13,12 @@ use crate::core::refs::Refs;
 use crate::errors::error::Error;
 use std::fs;
 
+/// Main struct for the add command logic.
 pub struct AddCommand;
 
 impl AddCommand {
+    /// Executes the add command, staging the specified paths.
+    /// Returns an error if no paths are provided or if repository is not initialized.
     pub fn execute(paths: &[String]) -> Result<(), Error> {
         let start_time = Instant::now();
         
@@ -305,7 +309,7 @@ impl AddCommand {
                     ));
                 }
                 
-                // Dacă nu am determinat niciun fișier, folosim added_count
+                // If we haven't determined any files, use added_count
                 if message.is_empty() && added_count > 0 {
                     message = format!("{} file{}", 
                                      added_count,

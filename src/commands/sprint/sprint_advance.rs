@@ -6,9 +6,12 @@ use crate::commands::branch::BranchCommand;
 use crate::commands::checkout::CheckoutCommand;
 use crate::core::branch_metadata::{SprintMetadata, BranchMetadataManager};
 
+/// Handles advanced sprint creation with custom start and end dates in AsheraFlow.
 pub struct SprintAdvanceCommand;
 
 impl SprintAdvanceCommand {
+    /// Creates a new sprint with a custom start and end date.
+    /// Validates date formats, checks for overlapping sprints, and manages sprint branch creation.
     pub fn execute(name: &str, start_date: &str, end_date: &str) -> Result<(), Error> {
         println!("Creating advanced sprint: {} (from {} to {})", name, start_date, end_date);
         

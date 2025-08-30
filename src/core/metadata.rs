@@ -1,15 +1,13 @@
-// Place this in an appropriate file (e.g., src/core/metadata.rs or inline where needed)
-
+/// Provides default metadata and extension traits for file metadata operations in AsheraFlow.
 use std::fs::Metadata;
 use std::time::SystemTime;
 
-// Extension trait to add default() to Metadata
+/// Extension trait to add default() to Metadata.
 pub trait MetadataExt {
     fn default() -> Self;
 }
 
-// We can't implement Default directly on Metadata because it's a foreign type,
-// but we can create a new struct that wraps it and implement conversions
+/// Wrapper struct for default file metadata values.
 #[derive(Debug, Clone)]
 pub struct DefaultMetadata {
     size: u64,
@@ -20,6 +18,7 @@ pub struct DefaultMetadata {
 }
 
 impl DefaultMetadata {
+    /// Creates a new DefaultMetadata instance with default values.
     pub fn new() -> Self {
         DefaultMetadata {
             size: 0,
@@ -30,9 +29,8 @@ impl DefaultMetadata {
         }
     }
     
+    /// Placeholder for converting DefaultMetadata to std::fs::Metadata (not implemented).
     pub fn to_metadata(&self) -> std::io::Result<Metadata> {
-        // This is a placeholder - we can't actually create a Metadata directly
-        // Instead, we'll use this in our code where a Metadata is needed
         unimplemented!("Cannot convert DefaultMetadata to Metadata directly")
     }
 }
@@ -43,7 +41,7 @@ impl Default for DefaultMetadata {
     }
 }
 
-// Helper function to get default metadata for index operations
+/// Helper function to get default metadata for index operations.
 pub fn default_metadata() -> DefaultMetadata {
     DefaultMetadata::default()
 }

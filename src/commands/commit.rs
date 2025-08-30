@@ -4,7 +4,6 @@ use std::time::Instant;
 use regex::Regex;
 
 use crate::core::database::database::Database;
-use crate::core::database::commit::Commit as DatabaseCommit;
 use crate::core::index::index::Index;
 use crate::core::refs::Refs;
 use crate::core::repository::pending_commit::{PendingCommit, PendingCommitType};
@@ -12,9 +11,13 @@ use crate::commands::commit_writer::CommitWriter;
 use crate::errors::error::Error;
 use crate::core::commit_metadata::{CommitMetadataManager, TaskMetadata, TaskStatus};
 
+/// Implements the 'commit' command for AsheraFlow.
+/// Handles creating new commits, amending, and managing commit metadata.
 pub struct CommitCommand;
 
 impl CommitCommand {
+    /// Executes the commit command, creating or amending a commit with the provided message and options.
+    /// Returns an error if repository is not initialized or if no changes are staged.
     pub fn execute(message: &str, amend: bool, reuse_message: Option<&str>, edit: bool) -> Result<(), Error> {
         let start_time = Instant::now();
         

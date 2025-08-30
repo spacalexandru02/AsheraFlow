@@ -144,7 +144,7 @@ fn get_daily_progress(tasks: &HashMap<String, crate::core::sprint::sprint::Task>
                 .unwrap()
                 .date();
             
-            // Verifică dacă task-ul a fost completat în perioada sprint-ului
+            // Check if the task was completed during the sprint period
             if completed_date >= start_date && completed_date <= sprint_end_date {
                 let day_idx = (completed_date - start_date).num_days() as usize;
                 if day_idx <= total_days {
@@ -197,13 +197,13 @@ fn create_chart_data(total_points: u32,
     for d in 0..=total_days {
         let day = d as f64;
         
-        // Calcul zile lucrătoare până la ziua curentă
+        // Calculate working days up to current day
         let working_days_so_far = working_days.iter().filter(|&&wd| wd <= d).count();
         
-        // Calculăm punctele ideale rămase (scăzând progresul ideal)
+        // Calculate ideal remaining points (subtracting ideal progress)
         let ideal_remaining = total_points as f64 - (working_days_so_far as f64 * points_per_working_day);
         
-        // Adăugăm punctul în grafic
+        // Add the point to the chart
         ideal_progress.push((day, ideal_remaining.max(0.0)));
     }
     

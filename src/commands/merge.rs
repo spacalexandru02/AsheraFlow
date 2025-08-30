@@ -1,4 +1,5 @@
-// src/commands/merge.rs
+/// Implements the 'merge' command for AsheraFlow.
+/// Handles merging changes from another branch and resolving conflicts.
 use std::time::Instant;
 use std::env;
 use std::path::{Path, PathBuf};
@@ -8,7 +9,6 @@ use crate::core::merge::inputs::Inputs;
 use crate::core::merge::resolve::Resolve;
 use crate::core::refs::Refs;
 use crate::core::database::database::Database;
-use crate::core::database::database::GitObject;
 use crate::core::database::commit::Commit;
 use crate::core::database::author::Author;
 use crate::core::path_filter::PathFilter;
@@ -18,19 +18,12 @@ use crate::core::file_mode::FileMode;
 use crate::core::database::entry::DatabaseEntry;
 
 
-const MERGE_MSG: &str = "\
-Merge branch '%s'
-
-# Please enter a commit message to explain why this merge is necessary,
-# especially if it merges an updated upstream into a topic branch.
-#
-# Lines starting with '#' will be ignored, and an empty message aborts
-# the commit.
-";
-
+/// Main struct for the merge command logic.
 pub struct MergeCommand;
 
 impl MergeCommand {
+    /// Executes the merge command, merging changes from the specified revision.
+    /// Returns an error if repository is not initialized or conflicts exist.
     pub fn execute(revision: &str, message: Option<&str>) -> Result<(), Error> {
         let start_time = Instant::now();
 
@@ -315,13 +308,13 @@ impl MergeCommand {
         workspace: &Workspace,
         index: &mut crate::core::index::index::Index
     ) -> Result<(), Error> {
-        // 1. Colectează toate intrările din noul arbore
+        // 1. Collect all entries from the new tree
         let mut target_entries = HashMap::new();
         for (name, entry) in tree.get_entries() {
             target_entries.insert(name.clone(), entry.clone());
         }
         
-        // 2. Obține lista fișierelor existente din workspace pentru acest director
+        // 2. Get the list of existing files from workspace for this directory
         let mut current_files = HashSet::new();
         let full_dir_path = workspace.root_path.join(parent_path);
         if full_dir_path.exists() && full_dir_path.is_dir() {
@@ -329,7 +322,7 @@ impl MergeCommand {
                 for entry_result in entries {
                     if let Ok(entry) = entry_result {
                         let file_name = entry.file_name().to_string_lossy().to_string();
-                        // Ignoră fișierele ascunse
+                        // Ignore hidden files
                         if !file_name.starts_with('.') {
                             current_files.insert(file_name);
                         }
@@ -338,20 +331,20 @@ impl MergeCommand {
             }
         }
         
-        // 3. Acum procesăm toate intrările - adăugare/modificare
+        // 3. Now process all entries - addition/modification
         for (name, entry) in tree.get_entries() {
             let entry_path = parent_path.join(name);
             
             match entry {
                 TreeEntry::Blob(oid, mode) => {
-                    // E un fișier, scrie-l în workspace
+                    // It's a file, write it to workspace
                     println!("  -> Writing file in directory: {}", entry_path.display());
                     Self::update_workspace_file(database, workspace, index, &entry_path, oid, mode)?;
-                    // Elimină acest fișier din lista fișierelor existente (l-am procesat deja)
+                    // Remove this file from the list of existing files (already processed)
                     current_files.remove(name);
                 },
                 TreeEntry::Tree(subtree) => {
-                    // E un director, asigură-te că există și apoi procesează-l recursiv
+                    // It's a directory, make sure it exists and then process it recursively
                     println!("  -> Processing subdirectory: {}", entry_path.display());
                     workspace.make_directory(&entry_path)?;
                     
@@ -361,20 +354,20 @@ impl MergeCommand {
                             Self::process_tree_entries(subtree, &entry_path, database, workspace, index)?;
                         }
                     }
-                    // Și aici eliminăm directorul din lista fișierelor existente
+                    // And here we remove the directory from the list of existing files
                     current_files.remove(name);
                 }
             }
         }
         
-        // 4. Șterge fișierele care existau înainte dar nu mai există în noul arbore
+        // 4. Delete files that existed before but no longer exist in the new tree
         for old_name in current_files {
             let old_path = parent_path.join(&old_name);
             let path_str = old_path.to_string_lossy().to_string();
             
             println!("  -> Removing file not in target tree: {}", old_path.display());
             
-            // Verifică dacă e director sau fișier
+            // Check if it's a directory or file
             let full_path = workspace.root_path.join(&old_path);
             if full_path.is_dir() {
                 workspace.force_remove_directory(&old_path)?;
@@ -382,7 +375,7 @@ impl MergeCommand {
                 workspace.remove_file(&old_path)?;
             }
             
-            // Șterge din index
+            // Remove from index
             index.remove(&PathBuf::from(&path_str))?;
         }
         

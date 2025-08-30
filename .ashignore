@@ -1,7 +1,5 @@
-# Ignoră directorul .ash
 .ash/
 
-# Ignoră fișiere temporare
 *.tmp
 debug/
 target/

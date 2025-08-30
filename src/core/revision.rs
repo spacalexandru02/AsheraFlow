@@ -1,4 +1,4 @@
-// src/core/revision.rs
+/// Handles revision parsing and resolution for commit references in AsheraFlow.
 use std::collections::HashMap;
 use regex::Regex;
 use crate::errors::error::Error;
@@ -9,7 +9,7 @@ use crate::core::database::commit::Commit;
 pub const HEAD: &str = "HEAD";
 pub const COMMIT: &str = "commit";
 
-// Define the revision node types for AST representation
+/// Defines the revision node types for AST representation.
 #[derive(Debug, Clone)]
 enum RevisionNode {
     Ref(String),
@@ -19,13 +19,13 @@ enum RevisionNode {
     Exclude(Box<RevisionNode>),
 }
 
-// Structure to hold errors with hints
+/// Structure to hold errors with hints for revision parsing.
 pub struct HintedError {
     pub message: String,
     pub hint: Vec<String>,
 }
 
-// Main Revision class
+/// Main struct for revision parsing and resolution logic.
 pub struct Revision<'a> {
     repo: &'a mut Repository,  // Changed from database to repo
     expr: String,
@@ -34,6 +34,7 @@ pub struct Revision<'a> {
 }
 
 impl<'a> Revision<'a> {
+    /// Creates a new Revision instance for the given repository and expression.
     pub fn new(repo: &'a mut Repository, expression: &str) -> Self {
         let expr = expression.to_string();
         let query = Self::parse(&expr);

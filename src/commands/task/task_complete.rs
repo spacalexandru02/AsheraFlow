@@ -35,7 +35,7 @@ impl TaskCompleteCommand {
             return Err(Error::Generic("No sprints found. Start a sprint first with 'ash sprint start'.".into()));
         }
         
-        // Verifică dacă există o referință pentru sprint-ul task-ului
+        // Check if there's a reference for the task's sprint
         let repo = Repository::new(".")?;
         let sprint_ref = format!("refs/meta/tasksprint/{}", id);
         let original_sprint_branch = match repo.refs.read_ref(&sprint_ref) {
@@ -49,12 +49,12 @@ impl TaskCompleteCommand {
         let mut found_sprint: Option<Sprint> = None;
         let mut found_branch_name: Option<String> = None;
         
-        // Dacă avem branch-ul original, încercăm mai întâi acel sprint
+        // If we have the original branch, first try that sprint
         if let Some(sprint_branch) = &original_sprint_branch {
             
-            // Găsește metadatele pentru acest sprint
+            // Find metadata for this sprint
             for (branch_name, sprint_metadata) in &all_sprints {
-                // Comparăm cu și fără prefixul "sprint-"
+                // Compare with and without "sprint-" prefix
                 let branch_match = branch_name == sprint_branch || 
                                   format!("sprint-{}", branch_name) == *sprint_branch;
                 
@@ -89,7 +89,7 @@ impl TaskCompleteCommand {
             }
         }
         
-        // Dacă încă nu am găsit, căutăm în toate sprint-urile
+        // If we still haven't found it, search in all sprints
         if found_sprint.is_none() {
             for (branch_name, sprint_metadata) in &all_sprints {
                 if let Ok(tasks) = sprint_manager.get_sprint_tasks(branch_name) {
@@ -264,7 +264,7 @@ impl TaskCompleteCommand {
         // Construct branch names
         let task_branch_name = format!("{}-task-{}", branch_name, id);
         
-        // Verifică dacă avem o referință salvată pentru task branch
+        // Check if we have a saved reference for task branch
         let task_branch_ref = format!("refs/meta/taskbranch/{}", id);
         let task_branch = match repo.refs.read_ref(&task_branch_ref) {
             Ok(Some(branch)) => {
@@ -282,7 +282,7 @@ impl TaskCompleteCommand {
             _ => String::new(), // Detached HEAD state
         };
         
-        // Verifică dacă branch-ul curent este un branch de task și determină sprintul corect
+        // Check if the current branch is a task branch and determine the correct sprint
         let original_sprint_branch_from_current = if current_branch.contains("-task-") {
             let pattern = "sprint-sprint";
             if let Some(idx) = current_branch.find(pattern) {
@@ -300,8 +300,8 @@ impl TaskCompleteCommand {
             None
         };
         
-        // Dacă am extras un sprint din branch-ul curent și nu am găsit un sprint original din referință,
-        // utilizăm sprintul extras din branch-ul curent
+        // If we extracted a sprint from the current branch and didn't find an original sprint from reference,
+        // use the sprint extracted from the current branch
         if original_sprint_branch.is_none() && original_sprint_branch_from_current.is_some() {
         }
         

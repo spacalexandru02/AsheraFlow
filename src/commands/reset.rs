@@ -1,35 +1,34 @@
-// src/commands/reset.rs
+/// Implements the 'reset' command for AsheraFlow.
+/// Handles resetting HEAD and index to specified state or commit.
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::collections::HashMap;
 use std::fs;
-
 use crate::errors::error::Error;
-use crate::core::workspace::Workspace;
-use crate::core::index::index::Index;
-use crate::core::database::database::Database;
 use crate::core::revision::Revision;
 use crate::core::repository::repository::Repository;
-use crate::core::refs::Refs;
 use crate::core::database::tree::TreeEntry;
 use crate::core::database::commit::Commit;
-use crate::core::file_mode::FileMode;
 use crate::core::database::entry::DatabaseEntry;
 
-// Constanta pentru ORIG_HEAD
+/// Constant for the original HEAD reference used in reset operations.
 pub const ORIG_HEAD: &str = "ORIG_HEAD";
+/// Constant for the commit message file used in reset operations.
 pub const COMMIT_EDITMSG: &str = "COMMIT_EDITMSG";
 
-// Enum pentru modurile de reset
+/// Enum representing the reset modes: soft, mixed, or hard.
 enum Mode {
     Soft,
     Mixed,
     Hard,
 }
 
+/// Main struct for the reset command logic.
 pub struct ResetCommand;
 
 impl ResetCommand {
+    /// Executes the reset command, resetting HEAD and index as specified.
+    /// Returns an error if repository is not initialized or arguments are invalid.
     pub fn execute(paths: &[String], soft: bool, mixed: bool, hard: bool, force: bool, reuse_message: Option<&str>) -> Result<(), Error> {
         let start_time = Instant::now();
         println!("Reset started...");

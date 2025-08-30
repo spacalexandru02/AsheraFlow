@@ -1,4 +1,4 @@
-// src/core/refs.rs
+/// Handles reference management for branches, tags, and HEAD in AsheraFlow.
 use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -14,20 +14,21 @@ lazy_static::lazy_static! {
     static ref SYMREF_REGEX: Regex = Regex::new(r"^ref: (.+)$").unwrap();
 }
 
-// Reference types
+/// Represents a reference to a commit or another ref (symbolic or direct).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Reference {
     Direct(String),       // Direct reference to an OID
     Symbolic(String),     // Symbolic reference to another ref
 }
 
-// Custom errors
+/// Custom errors for reference management.
 #[derive(Debug)]
 pub enum RefError {
     InvalidBranch(String),
     LockFailed(String),
 }
 
+/// Main struct for reference management logic.
 pub struct Refs {
     pathname: PathBuf,
     refs_path: PathBuf,
@@ -35,6 +36,7 @@ pub struct Refs {
 }
 
 impl Refs {
+    /// Creates a new Refs instance for the given repository path.
     pub fn new<P: AsRef<Path>>(pathname: P) -> Self {
         let path = pathname.as_ref().to_path_buf();
         let refs_path = path.join("refs");
@@ -47,7 +49,7 @@ impl Refs {
         }
     }
 
-    // Read HEAD reference, following symbolic references
+    /// Reads the HEAD reference, following symbolic references.
     pub fn read_head(&self) -> Result<Option<String>, Error> {
         let head_path = self.pathname.join(HEAD);
         if !head_path.exists() {
@@ -57,7 +59,7 @@ impl Refs {
         self.read_symref(&head_path)
     }
 
-    // Set HEAD to point to a branch or commit
+    /// Sets HEAD to point to a branch or commit.
     pub fn set_head(&self, revision: &str, oid: &str) -> Result<(), Error> {
         let head_path = self.pathname.join(HEAD);
         let branch_path = self.heads_path.join(revision);
@@ -445,26 +447,26 @@ impl Refs {
     pub fn list_refs_with_prefix(&self, prefix: &str) -> Result<Vec<Reference>, Error> {
         let mut refs = Vec::new();
         
-        // Determinăm directorul bazat pe prefix
+        // Determine directory based on prefix
         let prefix_path = self.pathname.join(prefix);
         let prefix_dir = if prefix_path.is_dir() {
             prefix_path
         } else {
-            // Dacă prefixul nu este un director, încercăm să obținem directorul părinte
+            // If prefix is not a directory, try to get the parent directory
             if let Some(parent) = prefix_path.parent() {
                 parent.to_path_buf()
             } else {
-                // Dacă nu există un părinte, folosim rădăcina refs
+                // If there's no parent, use the refs root
                 self.refs_path.clone()
             }
         };
         
-        // Verificăm dacă directorul există
+        // Check if directory exists
         if !prefix_dir.exists() {
             return Ok(refs);
         }
         
-        // Citim referințele din director, recursiv
+        // Read references from directory, recursively
         self.read_refs_with_prefix(&prefix_dir, prefix, &mut refs)?;
         
         Ok(refs)
@@ -483,16 +485,16 @@ impl Refs {
                         let path = entry.path();
                         let path_str = path.to_string_lossy().to_string();
                         
-                        // Verificăm dacă începe cu prefixul dorit
+                        // Check if it starts with the desired prefix
                         if !path_str.contains(prefix) {
                             continue;
                         }
                         
                         if path.is_dir() {
-                            // Recursiv pentru directoare
+                            // Recursive for directories
                             self.read_refs_with_prefix(&path, prefix, refs)?;
                         } else {
-                            // Adăugăm referința dacă este un fișier
+                            // Add the reference if it's a file
                             if let Some(relative) = path.strip_prefix(&self.pathname).ok() {
                                 let relative_str = relative.to_string_lossy().to_string();
                                 if relative_str.starts_with(prefix) {

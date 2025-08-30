@@ -1,4 +1,5 @@
-// src/commands/log.rs with all fixes applied
+/// Implements the 'log' command for AsheraFlow.
+/// Handles displaying commit logs with formatting and filtering options.
 use std::time::Instant;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -12,9 +13,12 @@ use crate::core::path_filter::PathFilter;
 use crate::core::refs::{Refs, Reference};
 use crate::core::revision::Revision;
 
+/// Main struct for the log command logic.
 pub struct LogCommand;
 
 impl LogCommand {
+    /// Executes the log command, displaying commit logs with the specified options.
+    /// Returns an error if repository is not initialized or HEAD is missing.
     pub fn execute(revisions: &[String], options: &HashMap<String, String>) -> Result<(), Error> {
         let start_time = Instant::now();
         

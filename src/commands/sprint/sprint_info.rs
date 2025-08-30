@@ -8,9 +8,11 @@ use crate::core::branch_metadata::BranchMetadataManager;
 use crate::core::sprint::sprint::SprintManager;
 use crate::core::sprint::Sprint;
 
+/// Handles displaying information about the active sprint in AsheraFlow.
 pub struct SprintInfoCommand;
 
 impl SprintInfoCommand {
+    /// Displays details about the current active sprint, including dates, branch, tasks, and progress.
     pub fn execute() -> Result<(), Error> {
         // Initialize the repository path
         let root_path = Path::new(".");

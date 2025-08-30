@@ -6,9 +6,12 @@ use crate::commands::checkout::CheckoutCommand;
 use crate::core::branch_metadata::{SprintMetadata, BranchMetadataManager};
 use crate::core::sprint::sprint::SprintManager;
 
+/// Handles starting a new sprint with a specified duration in AsheraFlow.
 pub struct SprintStartCommand;
 
 impl SprintStartCommand {
+    /// Starts a new sprint, creates the sprint branch, and stores metadata.
+    /// Validates that no active sprint exists before starting a new one.
     pub fn execute(name: &str, duration: u32) -> Result<(), Error> {
         println!("Starting new sprint: {} (Duration: {} days)", name, duration);
         

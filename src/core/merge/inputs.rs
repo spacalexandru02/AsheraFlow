@@ -61,9 +61,9 @@ impl Inputs {
         self.base_oids == vec![self.left_oid.clone()]
     }
 
-    // Această funcție probabil ar trebui să folosească structura Revision dacă
-    // vrei să gestionezi sintaxe mai complexe gen "HEAD~1" etc.
-    // Am păstrat implementarea simplă de mai devreme pentru moment.
+    // This function probably should use the Revision structure if
+    // you want to handle more complex syntax like "HEAD~1" etc.
+    // I kept the simple implementation from earlier for now.
     fn resolve_rev(database: &mut Database, refs: &Refs, rev: &str) -> Result<String, Error> {
         // First check if it's a direct ref (like HEAD)
         if let Ok(Some(oid)) = refs.read_ref(rev) {
@@ -77,10 +77,10 @@ impl Inputs {
         }
 
         // Last, check if it's a valid object ID (full or abbreviated)
-        // Ar trebui să folosim Revision::resolve pentru a gestiona și OID-uri abreviate
-        // Dar pentru moment, verificăm doar existența ca OID complet.
+        // We should use Revision::resolve to handle abbreviated OIDs as well
+        // But for now, we only check existence as a complete OID.
         if database.exists(rev) {
-             // Ideal ar fi să verificăm dacă este un commit aici.
+             // Ideally we should check if it's a commit here.
              // let obj = database.load(rev)?;
              // if obj.get_type() == "commit" {
                  return Ok(rev.to_string());

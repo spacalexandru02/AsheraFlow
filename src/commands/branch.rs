@@ -6,11 +6,14 @@ use crate::core::color::Color;
 use crate::core::refs::Reference;
 use crate::core::database::commit::Commit;
 
+/// Implements the 'branch' command for AsheraFlow.
+/// Handles branch creation, deletion, and listing.
 pub struct BranchCommand;
 
 impl BranchCommand {
+    /// Executes the branch command, dispatching to create, delete, or list branches.
+    /// Uses environment variables for flags set by the CLI.
     pub fn execute(branch_name: &str, start_point: Option<&str>) -> Result<(), Error> {
-        let start_time = Instant::now();
         
         // Get flags from environment variables (set in main.rs)
         let verbose = std::env::var("ASH_BRANCH_VERBOSE").unwrap_or_default() == "1";
@@ -31,7 +34,8 @@ impl BranchCommand {
         Self::create_branch(branch_name, start_point, force)
     }
     
-    // List all branches in the repository
+    /// Lists all branches in the repository.
+    /// If verbose is true, displays additional information.
     fn list_branches(verbose: bool) -> Result<(), Error> {
         let start_time = Instant::now();
         let mut repo = Repository::new(".")?;

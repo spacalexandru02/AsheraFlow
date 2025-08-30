@@ -1,4 +1,4 @@
-// src/core/workspace.rs
+/// Handles workspace management, file listing, and ignore patterns for AsheraFlow repositories.
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::collections::{HashMap, HashSet};

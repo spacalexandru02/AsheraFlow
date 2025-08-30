@@ -7,6 +7,7 @@ use crate::core::database::database::Database;
 use crate::core::repository::repository::Repository;
 use crate::core::database::sprint_metadata_object::SprintMetadataObject;
 
+/// Stores metadata for a sprint, including name, start time, and duration.
 #[derive(Debug, Clone)]
 pub struct SprintMetadata {
     pub name: String, 
@@ -15,6 +16,7 @@ pub struct SprintMetadata {
 }
 
 impl SprintMetadata {
+    /// Creates a new SprintMetadata instance with the current timestamp.
     pub fn new(name: String, duration_days: u32) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -28,10 +30,12 @@ impl SprintMetadata {
         }
     }
 
+    /// Returns the end timestamp for the sprint.
     pub fn end_timestamp(&self) -> u64 {
         self.start_timestamp + (self.duration_days as u64 * 24 * 60 * 60)
     }
 
+    /// Checks if the sprint is currently active.
     pub fn is_active(&self) -> bool {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -41,6 +45,7 @@ impl SprintMetadata {
         now <= self.end_timestamp()
     }
 
+    /// Formats a timestamp as a human-readable date string.
     pub fn format_date(timestamp: u64) -> String {
         let dt = chrono::DateTime::from_timestamp(timestamp as i64, 0)
             .unwrap_or_else(|| chrono::DateTime::UNIX_EPOCH);
@@ -48,16 +53,17 @@ impl SprintMetadata {
         dt.format("%Y-%m-%d %H:%M").to_string()
     }
 
+    /// Converts sprint metadata to a branch name.
     pub fn to_branch_name(&self) -> String {
         format!("sprint-{}", self.name.replace(" ", "-").to_lowercase())
     }
 
-    // Encode sprint metadata into a branch description
+    /// Encodes sprint metadata into a branch description string.
     pub fn encode(&self) -> String {
         format!("SPRINT:{}:{}:{}", self.name, self.start_timestamp, self.duration_days)
     }
 
-    // Decode sprint metadata from a branch description
+    /// Decodes sprint metadata from a branch description string.
     pub fn decode(encoded: &str) -> Option<Self> {
         let parts: Vec<&str> = encoded.split(':').collect();
         if parts.len() >= 4 && parts[0] == "SPRINT" {
@@ -119,19 +125,19 @@ impl BranchMetadataManager {
 
     /// Store sprint metadata in the object database
     pub fn store_sprint_metadata(&self, branch_name: &str, metadata: &SprintMetadata) -> Result<(), Error> {
-        // Creăm un repository și avem acces la database
+        // Create a repository and get access to database
         let repo_str = self.repo_path.to_str().unwrap_or(".");
         let mut repo = Repository::new(repo_str)?;
         
-        // Convertim metadatele în reprezentare string și apoi în obiect
+        // Convert metadata to string representation and then to object
         let encoded = metadata.encode();
         let mut obj = SprintMetadataObject::new(metadata.clone());
         
-        // Stocăm obiectul în database
+        // Store the object in database
         let oid = repo.database.store(&mut obj)?;
         
-        // Actualizăm referința către metadate
-        // Folosim numele branch-ului așa cum este pentru consistență
+        // Update the reference to metadata
+        // Use the branch name as is for consistency
         let meta_ref = format!("refs/meta/{}", branch_name);
         repo.refs.update_ref(&meta_ref, &oid)?;
         
@@ -165,21 +171,21 @@ impl BranchMetadataManager {
 
     /// Retrieve sprint metadata from the object database
     pub fn get_sprint_metadata(&self, branch_name: &str) -> Result<Option<SprintMetadata>, Error> {
-        // Creăm un repository și avem acces la database
+        // Create a repository and get access to database
         let repo_str = self.repo_path.to_str().unwrap_or(".");
         let mut repo = Repository::new(repo_str)?;
         
-        // Folosim direct numele branch-ului fără modificări suplimentare 
-        // pentru a păstra consistența cu ce am stocat inițial
+        // Use the branch name directly without additional modifications
+        // to maintain consistency with what we initially stored
         let meta_ref = format!("refs/meta/{}", branch_name);
         
-        // Citim referința pentru metadate
+        // Read the reference for metadata
         let oid = match repo.refs.read_ref(&meta_ref)? {
             Some(oid) => {
                 oid
             },
             None => {
-                // Încercăm și cu formatul alternativ pentru compatibilitate
+                // Try also with the alternative format for compatibility
                 let alt_meta_ref = format!("refs/meta/sprint-{}", branch_name);
                 match repo.refs.read_ref(&alt_meta_ref)? {
                     Some(oid) => {
@@ -192,7 +198,7 @@ impl BranchMetadataManager {
             },
         };
         
-        // Încărcăm obiectul din database
+        // Load the object from database
         match repo.database.load(&oid) {
             Ok(obj) => {
                 if let Some(meta_obj) = obj.as_any().downcast_ref::<SprintMetadataObject>() {
@@ -209,15 +215,15 @@ impl BranchMetadataManager {
 
     /// Find the current active sprint
     pub fn find_active_sprint(&self) -> Result<Option<(String, SprintMetadata)>, Error> {
-        // Verificăm mai întâi branch-ul curent
+        // First check the current branch
         let current_branch = self.get_current_branch()?;
         
-        // Dacă branch-ul curent este un branch de sprint (format: sprint-*), verificăm mai întâi acest sprint
+        // If the current branch is a sprint branch (format: sprint-*), first check this sprint
         if current_branch.starts_with("sprint-") && !current_branch.contains("-task-") {
-            // Extragem numele sprintului din branch (fără prefixul "sprint-")
+            // Extract the sprint name from the branch (without the "sprint-" prefix)
             let sprint_name = current_branch.strip_prefix("sprint-").unwrap_or(&current_branch);
             
-            // Verificăm metadatele și dacă sprintul este activ
+            // Check metadata and if the sprint is active
             if let Ok(Some(metadata)) = self.get_sprint_metadata(sprint_name) {
                 if metadata.is_active() {
                     return Ok(Some((sprint_name.to_string(), metadata)));
@@ -225,15 +231,15 @@ impl BranchMetadataManager {
             }
         }
         
-        // Dacă branch-ul curent nu a furnizat un sprint activ, căutăm prin toate referințele
+        // If the current branch didn't provide an active sprint, search through all references
         
-        // Inițializăm repository și database pentru verificări suplimentare
+        // Initialize repository and database for additional checks
         let repo_str = self.repo_path.to_str().unwrap_or(".");
         let mut repo = Repository::new(repo_str)?;
         let db_path = self.repo_path.join(".ash").join("objects");
         let mut database = Database::new(db_path);
         
-        // Verificăm referințele din repository
+        // Check references from repository
         let git_path = self.repo_path.join(".ash");
         
         // Check all refs to find sprint metadata
@@ -316,13 +322,13 @@ impl BranchMetadataManager {
 
     // Get all sprints
     pub fn get_all_sprints(&self) -> Result<Vec<(String, SprintMetadata)>, Error> {
-        // Creăm un repository și avem acces la database
+        // Create a repository and get access to database
         let repo_str = self.repo_path.to_str().unwrap_or(".");
         let repo = Repository::new(repo_str)?;
         
         let mut results = Vec::new();
         
-        // Obținem toate referințele meta/sprint-*
+        // Get all meta/sprint-* references
         let refs = repo.refs.list_refs_with_prefix("refs/meta/sprint-")?;
             
         for reference in refs {
