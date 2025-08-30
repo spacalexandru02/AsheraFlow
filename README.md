@@ -47,7 +47,7 @@ Steps:
 
 Clone the repository:
 
-git clone [https://github.com/your-username/AsheraFlow.git](https://github.com/your-username/AsheraFlow.git)
+git clone ...
 cd AsheraFlow
 
 Build the project:
